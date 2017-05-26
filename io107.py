@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 # *-* coding: utf-8 -*-
 # pylint: disable=C0103, C0301
+""" 
+Reads and write 107 format used by TRACZILLA
+For both python 2 and python 3
+It can read and write both normal and gzipped files. The fname is always the 
+name of the file without .gz suffix
+@authors Ann'Sophie Tissier and Bernard Legras (legras@lmd;ens.fr)
+@licence CeCILL-C
+"""
 from __future__ import absolute_import, division, print_function
 from __future__ import unicode_literals
 import os

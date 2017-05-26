@@ -1,12 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Opens a FLEXPART type grib file from ECMWF and reads temperature field.
-The    
+Opens a FLEXPART type grib file from ECMWF and reads meteorological fields.
+Requires pygrib, loaded from conda-forge
+For both python 2 and python 3 under anaconda
+ACHTUNG: in some installations of python 3, error at loading stage because
+of libZ not found. Remedy: load netCDF4 in the calling program even if not used.
 
+Functions: Open a file, read the data, make charts, interpolate in time
+The ECMWF class is used to read a file
+The ECMWF_pure allows to define a template object without reading a file.
+It can be used to modify data. It is produced as an output of the interpolation. 
+  
 Created on Mon Apr 24 02:43:04 2017
 
-@author: Bernard
+@author: Bernard Legras (legras@lmd.ens.fr)
+@licence: CeCILL-C
 """
 from __future__ import division, print_function
 #from __future__ import unicode_literals
