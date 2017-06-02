@@ -29,6 +29,9 @@ Look in the test-geosat directory for examples of usages
 @author: Bernard Legras
 """
 
+from __future__ import absolute_import, division, print_function
+from __future__ import unicode_literals
+
 from netCDF4 import Dataset
 import numpy as np
 #import tables
@@ -208,7 +211,8 @@ class MSG(GeoSat):
         '''
         Reads the infrared windows and stores a masked array in self
         '''
-        self.var['IR0'] = np.ma.array(self.ncid.variables['IR_108'][:],mask=mask_sat['msg'])
+        self.var['IR0'] = np.ma.array(self.ncid.variables['IR_108'][:])
+        self.var['IR0'].__setmask__(mask_sat['msg'])
         self.var['IR0']._sharedmask=False
         return
     
@@ -216,7 +220,8 @@ class MSG(GeoSat):
         '''
         Reads a general variable and stores a masked array in self
         '''
-        self.var[field] = np.ma.array(self.ncid.variables[field][:],mask=mask_sat['msg'])
+        self.var[field] = np.ma.array(self.ncid.variables[field][:])
+        self.var[field].__setmask__(mask_sat['msg'])
         self.var[field]._sharedmask=False
         return
         
