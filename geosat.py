@@ -430,7 +430,7 @@ class GridField(object):
         # Initializes var disctionary
         self.var={}
     
-    def chart(self,field,clim=[190.,300.],txt='',subgrid=None):
+    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None):
         # test existence of key field
         if field not in self.var.keys():
             print ('undefined field')
@@ -466,7 +466,7 @@ class GridField(object):
             plotted_field = self.var[field][geogrid.corner[0]:geogrid.corner[0]+geogrid.box_binx,
                                             geogrid.corner[1]:geogrid.corner[1]+geogrid.box_biny]
         iax = plt.imshow(plotted_field, interpolation='nearest', extent=geogrid.box_range.flatten(),
-                     clim=clim, origin='lower', aspect=1.)
+                     cmap=cmap,clim=clim, origin='lower', aspect=1.)
         cax = fig.add_axes([0.91, 0.15, 0.03, 0.7])
         plt.colorbar(iax, cax=cax)
         plt.title(txt)
@@ -490,7 +490,21 @@ class GridField(object):
             patched.var[vv] = np.empty(shape=(len(self.geogrid.ycent),len(self.geogrid.xcent)))
             patched.var[vv][:,:patching_x] = self.var[vv][:,:patching_x]
             patched.var[vv][:,patching_x:] = other.var[vv][:,patching_x:]
+            patched.var[vv] = np.ma.array(patched.var[vv])
+            mm = np.empty(shape=(len(self.geogrid.ycent),len(self.geogrid.xcent)),dtype=np.bool)
+            mm[:,:patching_x] = self.var[vv].mask[:,:patching_x]
+            mm[:,patching_x:] = other.var[vv].mask[:,patching_x:]
+            patched.var[vv].__setmask__(mm)
         return patched
+    
+    def _filt(self,var,threshold,sign='equal'):
+        if sign == 'equal':
+            np.ma.masked_where(self.var[var] == threshold,self.var[var],copy=False)
+        elif sign == 'less':
+            np.ma.masked_where(self.var[var] < threshold,self.var[var],copy=False)
+        elif sign == 'more':
+             np.ma.masked_where(self.var[var] > threshold,self.var[var],copy=False)
+            
         
 #%%   
 class SatGrid(GridField):    
