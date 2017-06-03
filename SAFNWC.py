@@ -11,38 +11,41 @@ S. Bucci - Created on Tue Apr 11 17:21:26 CET 2017
 '''
 import tables
 import numpy as np
-from datetime import datetime
+#from datetime import datetime
 #path='/net/grapelli/limbo/data/sats/'
 #path='/home/sbucci/Data'
-from geosat import *
+#from geosat import *
 import geosat
 import os
-import sza_correc
-import matplotlib.colors as mcl
-import pprint
-import pylab
+#import matplotlib.colors as mcl
+#import pprint
+#import pylab
 import matplotlib.pyplot as plt
 import re
-class SAFNWC(GeoSat):
+class SAFNWC(geosat.GeoSat):
     
    def __init__(self,date,sat,typ):
+     
         '''
         filename : name of the SAFNWC file
         '''
         if sat=='himawari':
             nam='hima08'
             let='J'      
-            masksat=mask_sat['himawari']
+            geosat.read_mask_himawari()
+            masksat=geosat.mask_sat['himawari']
             
         elif sat=='msg3':
             nam='MSG3'
             let='M'
-            masksat=mask_sat['msg']
+            geosat.read_mask_MSG()        
+            masksat=geosat.mask_sat['msg']
    
         elif sat=='msg1':
             nam='MSG1'
             let='I'
-            masksat=mask_sat['msg']
+            geosat.read_mask_MSG()        
+            masksat=geosat.mask_sat['msg']
    
         filename='SAFNWC_'+nam+'_'+typ+date.strftime("%Y%m%d%H%M")+'_globe'+let+'______.h5'
         print(filename)
@@ -51,7 +54,7 @@ class SAFNWC(GeoSat):
         except AttributeError:
                 # AAA, ZZZ not found in the original string
             self.time = '' # apply your error handling
-        fullname = os.path.join(sats_dir,sat,'SAFNWC',date.strftime("%Y"),
+        fullname = os.path.join(geosat.root_dir,sat,'SAFNWC',date.strftime("%Y"),
                             date.strftime("%Y_%m_%d"),filename)     
         try: 
             self.h5 = tables.open_file(fullname, mode='r')
@@ -133,14 +136,17 @@ class SAFNWC(GeoSat):
         if 'CTTH_EFFECT' not in self.var.keys():
             self._CTTH_EFFECT(self)
         return self
+    
+   def _merge(self,other):
+       for var in other.var.keys():
+           self.var[var] = other.var[var]
+       for atr in other.attr.keys():
+           self.attr[atr] = other.attr[atr]
         
-     
 class SAFNWC_CMa(SAFNWC):
     '''
     Class to read SAF NWC Cloud mask products
     '''
-    read_mask_himawari()
-    read_mask_MSG()
     
     def __init__(self,date,sat):
         typ='CMa__'  
@@ -158,7 +164,8 @@ class SAFNWC_CMa(SAFNWC):
         self.attr['CMa']={}
         data = self.h5.get_node(self.swathnode, 'CMa')
         data = data.read()
-        self.var['CMa'] = np.ma.array(data,mask=self.mask)
+        self.var['CMa'] = np.ma.array(data)
+        self.var['CMa'].__setmask__(self.mask)
         self.var['CMa']._sharedmask=False
         self.attr['CMa']['units']=('0: Non processed','1: Cloud free','2: Cloud contaminated','3: Cloud filled','4: Snow/Ice contaminated','5: Undefined')
         data = self.h5.get_node(self.swathnode, '01-PALETTE')
@@ -232,7 +239,8 @@ class SAFNWC_CMa(SAFNWC):
     def _CMa_DUST(self):
         self.attr['CMa_DUST']={}
         data = self.h5.get_node(self.swathnode, 'CMa_DUST')
-        self.var['CMa_DUST']=np.ma.array(data.read(),mask=self.mask)
+        self.var['CMa_DUST']=np.ma.array(data.read())
+        self.var['CMa_DUST'].__setmask__(self.mask)
         self.var['CMa_DUST']._sharedmask=False
         self.attr['CMa_DUST']['units']=('0: Non processed','1: Dust','2: Non dust','3: Undefined (separability problems)')
         data = self.h5.get_node(self.swathnode, '02-PALETTE')
@@ -242,7 +250,8 @@ class SAFNWC_CMa(SAFNWC):
     def _CMa_VOLCANIC(self):
         self.attr['CMa_VOLCANIC']={}
         data = self.h5.get_node(self.swathnode, 'CMa_VOLCANIC')
-        self.var['CMa_VOLCANIC']=np.ma.array(data.read(),mask=self.mask)
+        self.var['CMa_VOLCANIC']=np.ma.array(data.read())
+        self.var['CMa_VOLCANIC'].__setmask__(self.mask)
         self.var['CMa_VOLCANIC']._sharedmask=False
         self.attr['CMa_VOLCANIC']['units']=('0: Non processed','1: Volcanic plume','2: Non volcanic plume','3: Undefined (separability problems)')
         data = self.h5.get_node(self.swathnode, '03-PALETTE')
@@ -269,8 +278,9 @@ class SAFNWC_CT(SAFNWC):
         '''
         self.attr['CT']={}
         data = self.h5.get_node(self.swathnode, 'CT')
-        self.var['CT']=np.ma.array(data.read(),mask=self.mask)
-        self.var['CT']._sharedmask=False
+        self.var['CT']=np.ma.array(data.read())
+        self.var['CT'].__setmask__(self.mask)
+        #self.var['CT']._sharedmask=False
 #        self.var['CT']=np.ma.array(ct,mask=m)
 #        self.var['CT']._sharedmask=False
         self.attr['CT']['units']=('0: Non processed','1: Cloud free land','2: Cloud free sea','3: land+snow','4: sea+snow','5: very low cumuliform',\
@@ -311,7 +321,8 @@ class SAFNWC_CT(SAFNWC):
     def _CT_PHASE(self):
         self.attr['CT_PHASE']={}
         data = self.h5.get_node(self.swathnode, 'CT_PHASE')
-        self.var['CT_PHASE']=np.ma.array(data.read(),mask=self.mask)
+        self.var['CT_PHASE']=np.ma.array(data.read())
+        self.var['CT_PHASE'].__setmask__(self.mask)
         self.var['CT_PHASE']._sharedmask=False
         self.attr['CT_PHASE']['units']=('0: Non processed or no cloud','1: water cloud','2: ice cloud','3: undefined')
         data = self.h5.get_node(self.swathnode, '02-PALETTE')
@@ -333,20 +344,19 @@ class SAFNWC_CTTH(SAFNWC):
                 
     def _CTTH_PRESS(self):
         self.attr['CTTH_PRESS']={}
-        self.var['CTTH_PRESS_RAW']={}
         data = self.h5.get_node(self.swathnode, 'CTTH_PRESS')
         var= data.read()
-        var=var&0x3F
-        self.var['CTTH_PRESS_RAW']=np.ma.array(var,mask=self.mask)
-        self.var['CTTH_PRESS_RAW']._sharedmask=False
-        gain=25. #hPa/count
-        intercept=-250. #hPa
-        var=gain*var+intercept
-        self.var['CTTH_PRESS']=np.ma.array(var,mask=self.mask)
+        var=(var&0x3FF).astype(int)
+        gain=25 #hPa/count
+        intercept=-250 #hPa
+        self.var['CTTH_PRESS']=np.ma.array(gain*var+intercept)
+        self.var['CTTH_PRESS'].__setmask__(self.mask)
         self.var['CTTH_PRESS']._sharedmask=False
         self.attr['CTTH_PRESS']['units']='hPa'
         data = self.h5.get_node(self.swathnode, '01-PALETTE')
         self.attr['CTTH_PRESS']['PALETTE']=data.read()
+        self.attr['CTTH_PRESS']['gain'] = gain
+        self.attr['CTTH_PRESS']['intercept'] = intercept
 
         return
 
@@ -383,44 +393,51 @@ class SAFNWC_CTTH(SAFNWC):
         self.attr['CTTH_TEMPER']={}
         data = self.h5.get_node(self.swathnode, 'CTTH_TEMPER')
         var= data.read()
-        var=var&0xFF            
-        gain=1. #K/count
-        intercept=150. #K
-        self.var['CTTH_TEMPER']=np.ma.array(gain*var+intercept,mask=self.mask)
+        var=(var&0xFF).astype(int) 
+        gain=1 #K/count
+        intercept=150 #K
+        self.var['CTTH_TEMPER']=np.ma.array(gain*var+intercept)
+        self.var['CTTH_TEMPER'].__setmask__(self.mask)
         self.var['CTTH_TEMPER']._sharedmask=False
         self.attr['CTTH_TEMPER']['units']='K'
         data = self.h5.get_node(self.swathnode, '03-PALETTE')
         self.attr['CTTH_TEMPER']['PALETTE']=data.read()
+        self.attr['CTTH_TEMPER']['gain'] = gain
+        self.attr['CTTH_TEMPER']['intercept'] = intercept
         return 
         
     def _CTTH_HEIGHT(self):
         self.attr['CTTH_HEIGHT']={}
         data = self.h5.get_node(self.swathnode, 'CTTH_HEIGHT')
         var = data.read()
-        var=var&0x7F
-        gain=200. #m/count
-        intercept=-2000. #m
-        self.var['CTTH_HEIGHT']=np.ma.array(gain*var+intercept,mask=self.mask)
+        var=(var&0x7F).astype(int)
+        gain=200 #m/count
+        intercept=-2000 #m
+        self.var['CTTH_HEIGHT']=np.ma.array(gain*var+intercept)
+        self.var['CTTH_HEIGHT'].__setmask__(self.mask)
         self.var['CTTH_HEIGHT']._sharedmask=False
         self.attr['CTTH_HEIGHT']['units']='m'
         data = self.h5.get_node(self.swathnode, '02-PALETTE')
-        self.attr['CTTH_HEIGHT']['PALETTE']=data.read()
-
+        self.attr['CTTH_HEIGHT']['PALETTE']=data.read()       
+        self.attr['CTTH_HEIGHT']['gain'] = gain
+        self.attr['CTTH_HEIGHT']['intercept'] = intercept
         return 
         
     def _CTTH_EFFECT(self):
         self.attr['CTTH_EFFECT']={}
         data = self.h5.get_node(self.swathnode, 'CTTH_EFFECT')
         var = data.read()
-        var=var&0x1F
-        gain=5. #%/count
-        intercept=-50. #%
-        self.var['CTTH_EFFECT']=np.ma.array(gain*var+intercept,mask=self.mask)
+        var=(var&0x1F).astype(int)
+        gain=5 #%/count
+        intercept=-50 #%
+        self.var['CTTH_EFFECT']=np.ma.array(gain*var+intercept)
+        self.var['CTTH_EFFECT'].__setmask__(self.mask)
         self.var['CTTH_EFFECT']._sharedmask=False
         self.attr['CTTH_EFFECT']['units']='%'
         data = self.h5.get_node(self.swathnode, '04-PALETTE')
         self.attr['CTTH_EFFECT']['PALETTE']=data.read()
-
+        self.attr['CTTH_EFFECT']['gain'] = gain
+        self.attr['CTTH_EFFECT']['intercept'] = intercept
         return
         
    
