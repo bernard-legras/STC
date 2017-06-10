@@ -99,7 +99,6 @@ def sza_model():
     model['seas_day'] = np.array([57.5,104.5,148.5,206.5,268.5,326.5,395,422.5])-1
     return model
 
-
 def zenith_angle(lon, lat, sublon, sublat):
     """ Calculate the zenith angle from vectors of lat and lon and the position
     of the satellite. All inputs and output in degrees. This code works whatever
