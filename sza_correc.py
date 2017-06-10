@@ -23,11 +23,26 @@ from __future__ import unicode_literals
 from struct import unpack
 import numpy as np
 import os
+import socket
 from datetime import datetime, timedelta
 
 # input dir where the Joyce coefficients are stored
-#INPUT_dir = 'C:\\cygwin64\\home\\bernard\\sandbox\\sats\\sza-corr'
-INPUT_dir = '/home/stratocl/TRAJ/pylib/INPUT'
+# todo : repliace by environment variables
+if socket.gethostname() == 'graphium':
+    INPUT_dir = 'C:\\cygwin64\\home\\bernard\\data\\STC\\pylib\\INPUT'
+elif 'ciclad' in socket.gethostname():
+    INPUT_dir = '/home/legras/TRAJ/pylib'
+elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
+    INPUT_dir = '/home/stratocl/TRAJ/pylib/INPUT'
+elif socket.gethostname() == 'grapelli':
+    INPUT_dir = '/limbo/data/STC/pylib/INPUT'
+elif socket.gethostname() == 'zappa':
+    INPUT_dir = '/net/grapelli/limbo/data/STC/pylib/INPUT'
+elif socket.gethostname() == 'gort':
+    INPUT_dir = '/dkol/data/STC/pylib/INPUT'
+else:
+     print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
+
 za_bin = 64
 bt_bin = 170
 # number of bins in latitude
@@ -179,11 +194,11 @@ def szacorr(date, TB, lon, lat, sublon, sublat,freeze=False):
             vza = np.ma.array(vza, mask=TB.mask, fill_value=FillValue)
         # 2nd: normal behaviour for masked arrays     
         else:   
-            #TB.mask[zeta>sza_max] = True
+            TB.mask[zeta>sza_max] = True
             vza = np.ma.array(vza, mask=TB.mask, fill_value=FillValue)
             vza.mask[zeta>sza_max] = True
     return vza, zeta
-    
+  
 if __name__ == '__main__':
     """ Tests for comparison with the Fortran version """
     date0=datetime(year=2013,month=1,day=1,hour=0)
