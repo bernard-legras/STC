@@ -43,10 +43,12 @@ from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 import sza_correc
 
+# Defines data directories
+# To be replaced by environment variables 
 if socket.gethostname() == 'graphium':
-    sats_dir = 'C:\\cygwin64\\home\\Bernard\\data\\sats'
-    root_dir = 'C:\\cygwin64\\home\\Bernard\\data\\sats'
-    gridsat = 'C:\\cygwin64\\home\\Bernard\\data\\sats'
+    sats_dir = 'C:\\cygwin64\\home\\Bernard\\data\\STC\\sats'
+    root_dir = 'C:\\cygwin64\\home\\Bernard\\data\\STC\\sats'
+    gridsat = 'C:\\cygwin64\\home\\Bernard\\data\\STC\\sats'
 elif 'ciclad' in socket.gethostname():
     sats_dir = '/data/legras/sats'
     root_dir = '/bdd/STRATOCLIM/data'
@@ -56,18 +58,18 @@ elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostna
     root_dir = '/bdd/STRATOCLIM/data'
     gridsat = 'undefined'
 elif socket.gethostname() == 'grapelli':
-    sats_dir = '/limbo/data/sats'
-    root_dir = '/limbo/data/sats'
-    gridsat =  '/limbo/data/sats'
+    sats_dir = '/limbo/data/STC/sats'
+    root_dir = '/limbo/data/STC/sats'
+    gridsat =  '/limbo/data/STC/sats'
 elif socket.gethostname() == 'zappa':
     # to be adjusted
-     sats_dir = '/net/grapelli/limbo/data/sats'
-     root_dir = '/net/grapelli/limbo/data/sats'
-     gridsat =  '/net/grapelli/limbo/data/sats'
+     sats_dir = '/net/grapelli/limbo/data/STC/sats'
+     root_dir = '/net/grapelli/limbo/data/STC/sats'
+     gridsat =  '/net/grapelli/limbo/data/STC/sats'
 elif socket.gethostname() == 'gort':
-     sats_dir = '/dkol/data/sats'
-     root_dir = '/dkol/data/sats'
-     gridsat =  '/dkol/data/sats'     
+     sats_dir = '/dkol/data/STC/sats'
+     root_dir = '/dkol/data/STC/sats'
+     gridsat =  '/dkol/data/STC/sats'     
 else:
      print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
 
@@ -97,6 +99,7 @@ class PureSat(object):
     '''
     def __init__(self,sat):
         self.var={}
+        self.fill_value={}
         self.sat = sat
         
     def show(self,field,clim=[190.,300.],txt=''):
@@ -131,7 +134,7 @@ class PureSat(object):
         
         if sat not in lonlat_sat.keys():
             read_lonlat(sat)
-        # generates repeated lon and lat     
+            
         sza,_ = sza_correc.szacorr(self.date,self.var['IR0'].flatten(),
                     lonlat_sat[sat]['lon'].flatten(),lonlat_sat[sat]['lat'].flatten(),
                     self.sublon,self.sublat)
@@ -147,7 +150,10 @@ class GeoSat(PureSat):
         '''
         filename : name of the geostationay file
         '''
-        self.ncid = Dataset(filename, mode='r')
+        try:
+            self.ncid = Dataset(filename, mode='r')
+        except:
+            print('NOT FOUND '+filename)
         
         # loads the mask if needed
         if ('hima' in filename) & ('himawari' not in mask_sat.keys()):
@@ -214,6 +220,11 @@ class MSG(GeoSat):
         self.var['IR0'] = np.ma.array(self.ncid.variables['IR_108'][:])
         self.var['IR0'].__setmask__(mask_sat['msg'])
         self.var['IR0']._sharedmask=False
+        try: 
+            self.fill_value['IR0'] = self.ncid.variables['IR_108'][:].fill_value
+            print('damaged image')               
+        except:
+            self.fill_value['IR0'] = None                                         
         return
     
     def _get_var(self,field):
@@ -223,6 +234,10 @@ class MSG(GeoSat):
         self.var[field] = np.ma.array(self.ncid.variables[field][:])
         self.var[field].__setmask__(mask_sat['msg'])
         self.var[field]._sharedmask=False
+        try: 
+            self.fill_value[field] = self.ncid.variables[field][:].fill_value
+        except:
+            self.fill_value[field] = None 
         return
         
 class MSG1(MSG):
@@ -256,12 +271,14 @@ class Himawari(GeoSat):
         self.var['IR0'] = self.ncid.variables['IR_104'][:] 
         self.var['IR0'].__setmask__(mask_sat['himawari'])
         self.var['IR0']._sharedmask=False
+        self.fill_value['IR0'] = self.var['IR0'].fill_value
         return
     
     def _get_var(self,field):
         self.var[field] = self.ncid.variables[field][:] 
         self.var[field].__setmask__(mask_sat['himawari'])
         self.var[field]._sharedmask=False
+        self.fill_value[field] = self.var[field].fill_value      
         return
     
   
@@ -455,16 +472,19 @@ class GridField(object):
             spacey = 5.
         else:
             spacey = 10.
-        meridians = np.arange(geogrid.box_range[0, 0], geogrid.box_range[0, 1], spacex)
-        parallels = np.arange(geogrid.box_range[1, 0], geogrid.box_range[1, 1], spacey)
+        bound_lon = np.floor(geogrid.box_range[0, 0]/spacex)*spacex
+        bound_lat = np.floor(geogrid.box_range[1, 0]/spacey)*spacey
+        meridians = np.arange(bound_lon, geogrid.box_range[0, 1]+spacex, spacex)
+        parallels = np.arange(bound_lat, geogrid.box_range[1, 1]+spacey, spacey)
         m.drawmeridians(meridians, labels=[0, 0, 0, 1], fontsize=8)
         m.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=8)
         if subgrid==None:
             plotted_field = self.var[field]
         else:
             # extraction in subgrid
-            plotted_field = self.var[field][geogrid.corner[0]:geogrid.corner[0]+geogrid.box_binx,
-                                            geogrid.corner[1]:geogrid.corner[1]+geogrid.box_biny]
+            plotted_field = self.var[field][geogrid.corner[1]:geogrid.corner[1]+geogrid.box_biny,
+                                            geogrid.corner[0]:geogrid.corner[0]+geogrid.box_binx]
+            
         iax = plt.imshow(plotted_field, interpolation='nearest', extent=geogrid.box_range.flatten(),
                      cmap=cmap,clim=clim, origin='lower', aspect=1.)
         cax = fig.add_axes([0.91, 0.15, 0.03, 0.7])
@@ -499,11 +519,14 @@ class GridField(object):
     
     def _filt(self,var,threshold,sign='equal'):
         if sign == 'equal':
-            np.ma.masked_where(self.var[var] == threshold,self.var[var],copy=False)
+            #np.ma.masked_values(self.var[var], threshold, copy=False)
+            self.var[var][self.var[var] == threshold] = np.ma.masked
         elif sign == 'less':
-            np.ma.masked_where(self.var[var] < threshold,self.var[var],copy=False)
+            #np.ma.masked_less(self.var[var], threshold, copy=False)
+            self.var[var][self.var[var] < threshold] = np.ma.masked
         elif sign == 'more':
-             np.ma.masked_where(self.var[var] > threshold,self.var[var],copy=False)
+            #np.ma.masked_greater(self.var[var], threshold, copy=False)
+            self.var[var][self.var[var] > threshold] = np.ma.masked
             
         
 #%%   
@@ -537,7 +560,7 @@ class SatGrid(GridField):
                 print ('Must be done prior to creation of this object.' )
 
 #%%                
-    def _sat_togrid(self,field):
+    def _sat_togrid(self,field,clean=True):
         ''' Conversion to the grid using lookup table '''
         # check that the field has been read
         if field not in self.geosat.var.keys():
@@ -545,6 +568,9 @@ class SatGrid(GridField):
             return
         self.var[field] = np.ma.array(self.geosat.var[field].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx),
                        mask=lookup[self.cname]['mask'].reshape(self.geogrid.shapeyx))
+        self.fill_value = self.geosat.fill_value[field]
+        if clean & (self.fill_value != None):
+            self.var[field][self.var[field]==self.fill_value] = np.ma.masked
         return 
         
     def _sza_correc(self):
