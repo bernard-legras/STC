@@ -568,7 +568,10 @@ class SatGrid(GridField):
             return
         self.var[field] = np.ma.array(self.geosat.var[field].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx),
                        mask=lookup[self.cname]['mask'].reshape(self.geogrid.shapeyx))
-        self.fill_value = self.geosat.fill_value[field]
+        try:
+            self.fill_value = self.geosat.fill_value[field]
+        except:
+            self.fill_value = None
         if clean & (self.fill_value != None):
             self.var[field][self.var[field]==self.fill_value] = np.ma.masked
         return 
