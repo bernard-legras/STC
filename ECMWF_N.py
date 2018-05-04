@@ -247,9 +247,11 @@ class ECMWF_pure(object):
                     npmax = np.abs(self.var['P'][:,jys,ixs]-pmax).argmin()+1
                     npmin = max(npmin - 3,0)
                     npmax = min(npmax + 3,self.nlev)
-                    fint = PchipInterpolator(np.log(self.var['P'][npmin:npmax,jys,ixs]),
-                                         self.var[var][npmin:npmax,jys,ixs])
-                    new.var[var][:,jyt,ixt] = fint(np.log(p))
+                    # Better version than the linear interpolation but much too slow
+                    #fint = PchipInterpolator(np.log(self.var['P'][npmin:npmax,jys,ixs]),
+                    #                     self.var[var][npmin:npmax,jys,ixs])
+                    #new.var[var][:,jyt,ixt] = fint(np.log(p))
+                    new.var[var][:,jyt,ixt] = np.interp(np.log(p),np.log(self.var['P'][npmin:npmax,jys,ixs]),self.var[var][npmin:npmax,jys,ixs])
                     ixt += 1
                 jyt += 1
         return new
@@ -288,6 +290,19 @@ class ECMWF(ECMWF_pure):
             EN_expected = True
             DI_expected = True
             WT_expected = True
+            VD_expected = False
+        elif project=='FULL-EI':
+            if 'gort' == socket.gethostname():
+                self.rootdir = '/dkol/data/NIRgrid'
+            elif 'ciclad' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/NIRgrid'
+            else:
+                print('unknown hostname for this dataset')
+                return
+            SP_expected = False
+            EN_expected = True
+            DI_expected = True
+            WT_expected = False
             VD_expected = False
         else:
             print('Non implemented project')
@@ -334,8 +349,11 @@ class ECMWF(ECMWF_pure):
         try:
             self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
         except:
-            print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
-            return
+            try:
+                self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
+            except:
+                print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
+                return
         try:
             sp = self.grb.select(name='Surface pressure')[0]
             logp = False
@@ -371,10 +389,12 @@ class ECMWF(ECMWF_pure):
         self.nlat = sp['Nj']
         self.attr['lons'] = sp['distinctLongitudes']
         self.attr['lats'] = sp['distinctLatitudes']
-        self.attr['Lo1'] = sp['longitudeOfFirstGridPoint']/1000  # in degree
-        self.attr['Lo2'] = sp['longitudeOfLastGridPoint']/1000  # in degree
-        self.attr['La1'] = sp['latitudeOfFirstGridPoint']/1000  # in degree
-        self.attr['La2'] = sp['latitudeOfLastGridPoint']/1000 # in degree
+        # in ERA-Interim, it was necessary to divide by 1000
+        self.attr['Lo1'] = sp['longitudeOfFirstGridPoint']/1000000  # in degree
+        self.attr['Lo2'] = sp['longitudeOfLastGridPoint']/1000000  # in degree
+        # reversing last and first for latitudes
+        self.attr['La1'] = sp['latitudeOfLastGridPoint']/1000000  # in degree
+        self.attr['La2'] = sp['latitudeOfFirstGridPoint']/1000000 # in degree
         if sp['PVPresent']==1 :
             pv = sp['pv']
             self.attr['ai'] = pv[0:int(pv.size/2)]
@@ -403,7 +423,11 @@ class ECMWF(ECMWF_pure):
                 self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
                 self.DI_open = True
             except:
-                print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
+                try:
+                    self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y'),self.dname))
+                    self.DI_open = True 
+                except:
+                    print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
         if WT_expected:
             try:
                 self.wrb = pygrib.open(os.path.join(self.rootdir,date.strftime('WT-true/grib/%Y/%m'),self.wname))
