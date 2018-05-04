@@ -16,9 +16,9 @@ The barometric altitude can be signicantly smaller than the true altitude in the
 
 import numpy as np
 
-# barometric altitude in km
+# barometric altitude in km from p in Pa
 hbaro=lambda p: (1-(p/101325.)**0.1903)*(0.28825/0.0065)
-# ISA altitude from p in Pa
+# ISA altitude from p in hPa
 z1=lambda p: 44.3308*(1-0.267993*p**(0.190263))
 z2=lambda p: 11. + 6.34162 * np.log(226.32/p)
 z3=lambda p: 20. + 216.650 *(-1 + 1.12431*p**(-0.0292712))
