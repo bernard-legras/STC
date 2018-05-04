@@ -82,7 +82,6 @@ class SAFNWC_nc(geosat.GeoSat):
            self.attr[atr] = other.attr[atr]
 
 
-
 class SAFNWC_CT_nc(SAFNWC_nc):
     '''
     Class to read SAF NWC Cloud Type products
@@ -113,10 +112,6 @@ class SAFNWC_CT_nc(SAFNWC_nc):
         self.attr['CT']['PALETTE']=data
         return
 
- 
-        
-
-
 
 class SAFNWC_CTTH_nc(SAFNWC_nc):
     '''
@@ -133,7 +128,7 @@ class SAFNWC_CTTH_nc(SAFNWC_nc):
     def _CTTH_PRESS(self):
         self.attr['CTTH_PRESS']={}
         data = self.ncid.variables['ctth_pres'][:]
-        print("MAX press",np.amax(data))
+        #print("MAX press",np.amax(data))
         #gain=25 #hPa/count
         #intercept=-250 #hPa
         gain=10 #hPa/count

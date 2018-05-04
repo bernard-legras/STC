@@ -14,8 +14,8 @@ from os.path import basename, join
 import numpy as np
 import socket
 
-if socket.gethostname() == 'graphium':
-    STC_database = 'C:\\cygwin64\\home\\Bernard\\data\\STC\\STC-M55\\database'
+if socket.gethostname() == 'Graphium':
+    STC_database = 'C:\\cygwin64\\home\\berna\\data\\STC\\STC-M55\\database'
 elif 'ciclad' in socket.gethostname():
     STC_database ='tbd'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
@@ -169,7 +169,7 @@ class STCinst(STCdata):
         # detection of the date
         if date in self.STCdates.keys():
             self.flight = date
-            datett = self.STCdates(date)
+            datett = self.STCdates[date]
         else:
             if not isinstance(date,datetime):
                 print('date must be flight id or datetime')

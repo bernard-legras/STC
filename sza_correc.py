@@ -28,8 +28,8 @@ from datetime import datetime, timedelta
 
 # input dir where the Joyce coefficients are stored
 # todo : repliace by environment variables
-if socket.gethostname() == 'graphium':
-    INPUT_dir = 'C:\\cygwin64\\home\\bernard\\data\\STC\\pylib\\INPUT'
+if socket.gethostname() == 'Graphium':
+    INPUT_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\pylib\\INPUT'
 elif 'ciclad' in socket.gethostname():
     INPUT_dir = '/home/legras/TRAJ/pylib'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
@@ -40,6 +40,8 @@ elif socket.gethostname() == 'zappa':
     INPUT_dir = '/net/grapelli/limbo/data/STC/pylib/INPUT'
 elif socket.gethostname() == 'gort':
     INPUT_dir = '/dkol/data/STC/pylib/INPUT'
+elif 'icare' in socket.gethostname():
+    INPUT_dir = '/home/b.legras/pylib/INPUT'
 else:
      print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
 
