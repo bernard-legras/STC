@@ -328,7 +328,7 @@ class GeoGrid(object):
                 self.box_range = box
                 self.box_binx = bins[0]
                 self.box_biny = bins[1]
-        # grid properties    
+        # derived grid properties 
         self.xedge = np.arange(self.box_range[0,0], self.box_range[0,1]+0.001,
                    (self.box_range[0,1]-self.box_range[0,0])/self.box_binx)
         self.yedge = np.arange(self.box_range[1,0], self.box_range[1,1]+0.001,
@@ -369,7 +369,7 @@ class GeoGrid(object):
         other.corner = [lowlon,lowlat]
         return other
 
-    def _mkandsav_lookup(self,sat):
+    def _mkandsav_lookup(self,sat,BB=None,BBname=''):
         ''' Generates the lookup table for a pair sat and grid.
         Usage: first generate the grid object 
                gg = geosat.GeoGrid(gridtype) 
@@ -378,6 +378,10 @@ class GeoGrid(object):
                (it takes a while)
                gg._mkandsav_lookup(sat)
                sat can take values among himawari, msg1, msg3
+               BB is a bounding box in the following format [lat1,lat2,lon1,lon2]
+               lat1 and lat2 are the first and the last latitude retained
+               lon1 and lon2 are the first and the last longitude retained
+               BBname is a box name used to build the name of the output file
         '''                 
         # get the lon lat grid from the satellite
         try:
@@ -393,6 +397,15 @@ class GeoGrid(object):
             # add 41.5 degree to msg3 lon to get msg1 lon
             if sat == 'msg1':
                 lonlat['lon'] += 41.5
+            # extract the bounding box if required
+            if BB is not None:
+                try: 
+                    lonlat['lon'] = lonlat['lon'][BB[0]:BB[1]+1,BB[2]:BB[3]+1]
+                    lonlat['lat'] = lonlat['lat'][BB[0]:BB[1]+1,BB[2]:BB[3]+1]
+                    lonlat['BB'] = BB
+                except:
+                    print('ERROR WHILE BOUNDING THE LATITUDE AND LONGITUDE GRIDS, CHECK BB')
+                    return
             # Flatten the grid and select only the non masked pixels
             lonlat_c = np.asarray([lonlat['lon'].compressed(), lonlat['lat'].compressed()])
         except:
@@ -424,10 +437,12 @@ class GeoGrid(object):
         # Add lonlat mask to the dist as this is useful to process the data (highly compressible)
         #self.lookup_dict['in_mask'] = lonlat['lon'].mask
         # Store the lookup table and distances separately
+        if BBname is not '':
+            BBname = '_'+BBname
         pickle.dump(self.lookup_dict,gzip.open(os.path.join(root_dir,sat,
-              'lookup_'+sat+'_'+self.gridtype+'.pkl'),'wb',pickle.HIGHEST_PROTOCOL))
+              'lookup_'+sat+'_'+self.gridtype+BBname+'.pkl'),'wb',pickle.HIGHEST_PROTOCOL))
         pickle.dump(self.lookup_dist,gzip.open(os.path.join(root_dir,sat,
-              'lookup_dist_'+sat+'_'+self.gridtype+'.pkl'),'wb',pickle.HIGHEST_PROTOCOL))
+              'lookup_dist_'+sat+'_'+self.gridtype+BBname+'.pkl'),'wb',pickle.HIGHEST_PROTOCOL))
 
 #%%
 class GridField(object):
@@ -566,7 +581,8 @@ class SatGrid(GridField):
         return 
 
     def _sza_correc(self):
-        ''' Correction of the brightness temperature of the IR0 channel.
+        ''' Correction of the brightness temperature of the IR0 channel using
+        the correction described in Joyce (2000).
         '''
         print('entering sza_correction SatGrid version')
         if 'IR0' not in self.var.keys():
