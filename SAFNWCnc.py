@@ -5,11 +5,9 @@ import matplotlib.pyplot as plt
 import re
 from netCDF4 import Dataset
 
-
-
 class SAFNWC_nc(geosat.GeoSat):
     
-   def __init__(self,date,sat,typ):
+   def __init__(self,date,sat,typ,BBname=None):
      
         '''
         filename : name of the SAFNWC file
@@ -56,31 +54,26 @@ class SAFNWC_nc(geosat.GeoSat):
         '''
         self.ncid.close()
                   
-
    def CT(self):
         if 'CT' not in self.var.keys():
             self._CT()
         return self
          
-
    def CTTH_PRESS(self):
         if 'CTTH_PRESS' not in self.var.keys():
             self._CTTH_PRESS(self)
-        return self
-        
+        return self      
 
    def CTTH_TEMPER(self):
         if 'CTTH_TEMPER' not in self.var.keys():
             self._CTTH_TEMPER(self)
         return self
-
     
    def _merge(self,other):
        for var in other.var.keys():
            self.var[var] = other.var[var]
        for atr in other.attr.keys():
            self.attr[atr] = other.attr[atr]
-
 
 class SAFNWC_CT_nc(SAFNWC_nc):
     '''
@@ -93,8 +86,7 @@ class SAFNWC_CT_nc(SAFNWC_nc):
         self.var={}
         self.attr={}   
         self.sat=sat
-        
-        
+                
     def _CT(self):
         '''
         returns numpy array containing the Cloud Type product from SAF NWC file
@@ -111,7 +103,6 @@ class SAFNWC_CT_nc(SAFNWC_nc):
         data = self.ncid.variables['ct_pal'][:]
         self.attr['CT']['PALETTE']=data
         return
-
 
 class SAFNWC_CTTH_nc(SAFNWC_nc):
     '''
@@ -149,7 +140,6 @@ class SAFNWC_CTTH_nc(SAFNWC_nc):
 
         return
 
-
     def _CTTH_TEMPER(self):
         self.attr['CTTH_TEMPER']={}
         data = self.ncid.variables['ctth_tempe'][:]
@@ -170,9 +160,3 @@ class SAFNWC_CTTH_nc(SAFNWC_nc):
         self.attr['CTTH_TEMPER']['gain'] = gain
         self.attr['CTTH_TEMPER']['intercept'] = intercept
         return 
-        
- 
-        
- 
-           
-        
