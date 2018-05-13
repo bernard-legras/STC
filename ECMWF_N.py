@@ -280,7 +280,7 @@ class ECMWF(ECMWF_pure):
             VD_expected = False
         elif project=='STC':
             if 'gort' == socket.gethostname():
-                self.rootdir = '/dkol/dc6/samba/STC/STC'
+                self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
             elif 'ciclad' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
             else:
