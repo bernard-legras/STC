@@ -73,11 +73,11 @@ def main():
     if socket.gethostname() == 'graphium':
         pass
     elif 'ciclad' in socket.gethostname():
-        #root_dir = '/home/legras/STC/STC-M55'
+        root_dir = '/home/legras/STC/STC-M55'
         traj_dir = '/data/legras/flexout/STC/M55'
         out_dir = '/data/legras/STC'
     elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
-        #root_dir = '/home/legras/STC/STC-M55'
+        root_dir = '/home/legras/STC/STC-M55'
         traj_dir = '/bdd/STRATOCLIM/flexout/M55'
         out_dir = '/homedata/legras/STC'
     elif socket.gethostname() == 'grapelli':
@@ -102,6 +102,8 @@ def main():
     detr_offset = 1/(100*3600.)
     # defines the domain
     domain = np.array([[-10.,160.],[0.,50.]])
+    # Size of each packet of parcels
+    segl = 1000  
     
     # default values of parameters
     # date of the flight
@@ -146,7 +148,7 @@ def main():
         fsock = open(print_file,'w')
         sys.stdout=fsock
 
-    # initial time to read the sat files
+    # initial time to read the detrainment files
     # should be after the end of the flight
     # and a 12h or 0h boundary
     print('year',year,'month',month,'day',day)
@@ -154,12 +156,16 @@ def main():
     print('platform',platform)
     print('launch_number',launch_number)
     print('suffix',suffix)
+    
+    # Read the region mask
+    mm = pickle.load(gzip.open(os.path.join(root_dir,'STCmask2-era5.pkl')))
+    mask = mm['mask']
 
     # Directory of the backward trajectories
     ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix)
 
     # Output file
-    out_file = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.pkl')
+    #out_file = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.pkl')
     out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.hdf5')
 
     """ Initialization of the calculation """
@@ -195,9 +201,12 @@ def main():
     # Flag is copied from index
     prod0['flag_source'] = part0['flag']
     # Make a source array to accumulate the chi 
-    # Dimension is that of the ERA5 field (201,681)
+    # Dimension is that of the ERA5 field (201,681) at 0.25° resolution
+    # Both latitudes and longitudes are growing
     prod0['source'] = np.zeros(shape=(201,681),dtype='float')
     # truncate eventually to 32 bits at the output stage
+    # Source array that cumulates within regions as a function of time
+    prod0['pl'] = np.zeros(shape=(len(mm['regcode']),int(part0['numpart']/segl)),dtype='float') 
     
      # Ininitalize the erosion 
     prod0['chi'] = np.full(part0['numpart'],1.,dtype='float')
@@ -365,8 +374,10 @@ def main():
                 datpart['xi'],datpart['yi'],datpart['pi'],datpart['tempi'],hyb,
                 datpart['xf'],datpart['yf'], datrean.var['UDR'], datpart['idx_back'],\
                 prod0['flag_source'],part0['ir_start'], prod0['chi'],prod0['passed'],\
-                prod0['src']['x'],prod0['src']['y'],prod0['src']['p'],prod0['src']['t'],prod0['src']['age'],prod0['source'],\
-                datrean.attr['Lo1'],datrean.attr['La1'],datrean.attr['dlo'],datrean.attr['dla'],detr_offset)
+                prod0['src']['x'],prod0['src']['y'],prod0['src']['p'],prod0['src']['t'],\
+                prod0['src']['age'],prod0['source'],prod0['pl'],\
+                datrean.attr['Lo1'],datrean.attr['La1'],datrean.attr['dlo'],datrean.attr['dla'],\
+                detr_offset,segl,mask)
             nhits += n1
             #@@ test
             print('return from detrainer',nhits)
@@ -552,8 +563,8 @@ def radada(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ir_start):
 
 @jit(nopython=True,cache=True)
 def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,passed,\
-              xc,yc,pc,tc,age,source,\
-              Lo1,La1,dlo,dla,detr_offset):
+              xc,yc,pc,tc,age,source,pl,\
+              Lo1,La1,dlo,dla,detr_offset,segl,mask):
     nhits = [0,0,0,0,0,0]
     # loop on the kept parcels
     for i in range(len(xi)):
@@ -600,7 +611,10 @@ def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,pass
                 newchi = chi[i0] * math.exp(-3600*detr)
                 xm = int(0.5*(xig+xfg))
                 ym = int(0.5*(yig+yfg))
+                # Contribution to the source distribution
                 source[ym,xm] += chi[i0] - newchi
+                # Contribution to the 
+                pl[mask[ym,xm],i0 % segl] += chi[i0] - newchi
                 chi[i0] = newchi
                 if passed[i0] >1:
                     if passed[i0] == 10:
