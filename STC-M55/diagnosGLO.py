@@ -62,8 +62,8 @@ savefig=True
 
 def main():
 
-    if socket.gethostname() == 'graphium':
-        STC_out = 'C:\\cygwin64\\home\\Bernard\\data\\STC\\STC-BAL-out'
+    if socket.gethostname() == 'Graphium':
+        STC_out = 'C:\\cygwin64\\home\\berna\\data\\STC\\STC-BAL-out'
     elif 'ciclad' in socket.gethostname():
         STC_out ='tbd'
     elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
