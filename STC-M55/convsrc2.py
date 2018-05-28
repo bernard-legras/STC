@@ -613,8 +613,8 @@ def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,pass
                 ym = int(0.5*(yig+yfg))
                 # Contribution to the source distribution
                 source[ym,xm] += chi[i0] - newchi
-                # Contribution to the 
-                pl[mask[ym,xm],i0 % segl] += chi[i0] - newchi
+                # Contribution to the boxed source distribution
+                pl[mask[ym,xm],int(i0/segl)] += chi[i0] - newchi
                 chi[i0] = newchi
                 if passed[i0] >1:
                     if passed[i0] == 10:
