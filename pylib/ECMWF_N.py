@@ -283,6 +283,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
             elif 'ciclad' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
+            elif 'grapelli' in socket.gethostname():
+                self.rootdir = '/dsk2/ERA5/STC'
             else:
                 print('unknown hostname for this dataset')
                 return
