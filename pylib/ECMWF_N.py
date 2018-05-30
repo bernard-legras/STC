@@ -50,30 +50,39 @@ from __future__ import division, print_function
 #from __future__ import unicode_literals
 from datetime import datetime
 import numpy as np
+import math
 import pygrib
 import os
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 import socket
-from scipy.interpolate import PchipInterpolator, RegularGridInterpolator
+from scipy.interpolate import RegularGridInterpolator
+from mki2d import tohyb
+import constants as cst
 
 MISSING = -999
 # Physical constants
-R = 287.04 # or 287.053
-Cpd = 1005.7
-kappa = R/Cpd
-g = 9.80665
+# now in the package "constants"
+#R = 287.04 # or 287.053
+#Cpd = 1005.7
+#kappa = R/Cpd
+#g = 9.80665
 pref = 101325.
 p0 = 100000.
 
 def strictly_increasing(L):
     return all(x<y for x, y in zip(L, L[1:]))
 
+d = lambda x,y:(1/(x[2:,:,:]-x[:-2,:,:]))\
+                *((y[2:,:,:]-y[1:-1,:,:])*(x[1:-1,:,:]-x[:-2,:,:])/(x[2:,:,:]-x[1:-1,:,:])\
+                -(y[:-2,:,:]-y[1:-1,:,:])*(x[2:,:,:]-x[1:-1,:,:])/(x[1:-1,:,:]-x[:-2,:,:]))
+
 # template object produced by extraction and interpolation
 class ECMWF_pure(object):
     def __init__(self):
         self.var={}
         self.attr={}
+        self.d2d={}
         self.warning = []
 
     def chart(self,var,lev=0,txt='',log=False):
@@ -143,12 +152,21 @@ class ECMWF_pure(object):
         new.nlev = self.nlev
         new.attr['levtype'] = self.attr['levtype']
         new.date = self.date
+        new.attr['La1'] = self.attr['lats'][nlatmin]
+        new.attr['Lo1'] = self.attr['lons'][nlonmin]
+        new.attr['dla'] = self.attr['dla']
+        new.attr['dlo'] = self.attr['dlo']
         # extraction
         for var in self.var.keys():
             if len(self.var[var].shape) == 3:
                 new.var[var] = self.var[var][:,nlatmin:nlatmax,nlonmin:nlonmax]
             else:
                 new.var[var] = self.var[var][nlatmin:nlatmax,nlonmin:nlonmax]
+        try:
+            for var in self.d2d.keys():
+                new.d2d[var] = self.d2d[var][nlatmin:nlatmax,nlonmin:nlonmax]
+        except:
+            pass
         return new
     
     def getxy(self,var,lev,y,x):
@@ -187,6 +205,11 @@ class ECMWF_pure(object):
         data.nlev = self.nlev
         for var in self.var.keys():
             data.var[var] = cf1*self.var[var] + cf2*other.var[var]
+        try:
+            for var in self.d2d.keys():
+               data.d2d[var] = cf1*self.d2d[var] + cf2*other.d2d[var]
+        except:
+            pass
         return data
     
     def interpolP(self,p,varList='All',latRange=None,lonRange=None):
@@ -255,8 +278,258 @@ class ECMWF_pure(object):
                     ixt += 1
                 jyt += 1
         return new
-
-
+    
+    def interpol_part(self,p,x,y,varList='All'):
+        """ Interpolate the variables to the location of particles given by [p,y,x] using trilinear method."""  
+        if 'P' not in self.var.keys():
+            self._mkp()
+        if varList == 'All':
+            varList = list(self.var.keys())
+            varList.remove('SP')
+            varList.remove('P')
+        elif type(varList) == str:
+            varList = [varList,]
+        for var in varList:
+            if var not in self.var.keys():
+                print(var,' not defined')
+                return
+        # Defines output dictionary 
+        result = {}
+        # test whether fhyb already attached to the instance
+        if not hasattr(self,'fhyb'):
+            self.fhyb,void = tohyb()
+        # generate the 2D interpolator of the surface pressure
+        lsp = RegularGridInterpolator((self.attr['lats'],self.attr['lons']),-np.log(self.var['SP']))
+        lspi = lsp(np.transpose([y,x]))
+        # define -log sigma = -log(p) - -log(ps)
+        lsig = - np.log(p) - lspi
+        # find the non integer hybrib level with offset due to the truncation of levels
+        hyb = self.fhyb(np.transpose([lsig,lspi]))-self.attr['levs'][0]+1
+        lhyb = np.floor(hyb).astype(np.int64)
+        #@@ test the extreme values of sigma end ps
+        if np.min(lsig) < - np.log(0.95):
+            print('large sigma detected ',np.exp(-np.min(lsig)))
+        if np.max(lspi) > -np.log(45000):
+            print('small ps detected ',np.exp(-np.max(lspi)))
+        # Horizontal interpolation
+        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int64)
+        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int64)
+        px = ((x - self.attr['Lo1']) %  self.attr['dlo'])/self.attr['dlo']
+        py = ((y - self.attr['La1']) %  self.attr['dla'])/self.attr['dla']
+        for var in varList:
+            vhigh = (1-px)*(1-py)*self.var[var][lhyb,jy,ix] + (1-px)*py*self.var[var][lhyb,jy+1,ix] \
+                  + px*(1-py)*self.var[var][lhyb,jy,ix+1] + px*py*self.var[var][lhyb,jy+1,ix+1]
+            vlow  = (1-px)*(1-py)*self.var[var][lhyb+1,jy,ix] + (1-px)*py*self.var[var][lhyb+1,jy+1,ix] \
+                  + px*(1-py)*self.var[var][lhyb+1,jy,ix+1] + px*py*self.var[var][lhyb+1,jy+1,ix+1]
+            hc = hyb % 1
+            result[var] = (1-hc)*vhigh + hc*vlow
+            del hc; del vhigh; del vlow
+        return result  
+           
+    def _CPT(self):
+        """ Calculate the cold point tropopause """
+        if not set(['T','P']).issubset(self.var.keys()):
+            print('T or P undefined')
+            return
+        # TODO: find a way to avoid the big loop
+        self.d2d['pcold'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['Tcold'] = np.empty(shape=(self.nlat,self.nlon))
+        # Calculate the cold point in the discrete profile
+        # TO DO: make a smoother version with vertical interpolation
+        nc = np.argmin(self.var['T'],axis=0)
+        for jy in range(self.nlat):
+            for ix in range(self.nlon):
+                self.d2d['pcold'][jy,ix] = self.var['P'][nc[jy,ix],jy,ix]
+                self.d2d['Tcold'][jy,ix] = self.var['T'][nc[jy,ix],jy,ix]
+        return
+    
+    def _lzrh(self):
+        """ Calculate the clear sky and all sky lzrh. Translated from LzrnN.m """
+        if not set(['P','ASSWR','ASLWR','CSSWR']).issubset(self.var.keys()):
+            print('P or heating rate missing')
+            return
+        # Restrict the column (top at 60 hPa) 
+        ntop1 = 60 - self.attr['levs'][0]
+        nbot1 = self.attr['levs'][-1] - 30
+        self.d2d['plzrh'] = np.ma.empty(shape=(self.nlat,self.nlon))
+        self.d2d['ptlzrh'] = np.ma.empty(shape=(self.nlat,self.nlon))
+        self.d2d['aslzrh'] = np.ma.empty(shape=(self.nlat,self.nlon))
+        uniq = np.empty(shape=(self.nlat,self.nlon))
+        for jy in range(self.nlat):
+            for ix in range(self.nlon):
+                # Clear sky heating in the column
+                cst = self.var['CSSWR'][ntop1:nbot1,jy,ix] + self.var['CSLWR'][ntop1:nbot1,jy,ix]
+                # Define location of positive heating
+                lp = (cst>0).astype(np.int64)
+                # Find position of vertical crossings of zero heating
+                pos = np.where(lp[1:]-lp[:-1]==-1)[0]
+                # Number of crossings
+                uniq[jy,ix] = len(pos)
+                # Select column with at least one crossing and make sure there is heating 
+                # in the strato below 66 hpa level to eliminate tropopause folds in the subtropics
+                if len(pos)==0 | np.max(cst[:11]<0):
+                    self.d2d['plzrh'][jy,ix] = np.ma.masked
+                    self.d2d['ptlzrh'][jy,ix] = np.ma.masked
+                    self.d2d['aslzrh'][jy,ix] = np.ma.masked
+                    break
+                # Calculate pressure at each crossing
+                pzk = []
+                px = []
+                for k in range(len(pos)):
+                    id = pos[k]
+                    #@@ Temporary test
+                    if cst[id]*cst[id+1]>0 | cst[id]<0:
+                        print('ERROR: localization')
+                        return
+                    px.append(cst[id]/(cst[id]-cst[id+1]))
+                    pzk.append(math.exp(px[k]*math.log(self.var['P'][id+1,jy,ix])+(1-px[k])*math.log(self.var['P'][id,jy,ix])))
+                # Now we test the best continuity for pressure
+                # Collect neighbour values of the LZRH pressure already calculated
+                # and find intersections in the current column which is closest to these values
+                
+                if len(pos)==1: 
+                    k=1
+                else:
+                    if jy>0 & ix>0:
+                        if ix<self.nlon-1:
+                            pzt = list(self.d2d['plzrh'][jy-1,ix-1:ix+2])
+                            pzt.append(self.d2d['plzrh'][jy,ix-1])
+                        else:
+                            pzt = list(self.d2d['plzrh'][jy-1,ix-1:ix+1])
+                            pzt.append(self.d2d['plzrh'][jy,ix-1])
+                    elif jy==0 & ix>0:
+                        pzt = [self.d2d['plzrh'][jy,ix-1],]
+                    elif jy>0 & ix==0:
+                        pzt = list(self.d2d['plzrh'][jy-1,ix:ix+2])
+                    else:
+                
+                        pzt = []
+                    if len(pzt)>0:
+                        avpzt = sum(pzt)/len(pzt)
+                        k = np.argmin((np.array(pzk)-avpzt)**2)
+                        # This patch corrects some rare artefacts near the tropopause
+                        # (empirical)
+                        if pzk[k] < 9500:
+                            idx = np.sort((np.array(pzk)-avpzt)**2)
+                            if pzk[idx[1]>12000]:
+                                k=idx[1]
+                    else:
+                        k=1
+                self.d2d['plzrh'][jy,ix] = pzk[k]
+                # Calculate potential temperature ans all sky heating at the LZRH
+                tz = px[k]*self.var['T'][pos[k]+1,jy,ix] + (1-px[k])*self.var['T'][pos[k],jy,ix]
+                self.d2d['ptlzrh'][jy,ix] = tz * (p0/pzk[k])**cst.kappa
+                self.d2d['aslzrh'][jy,ix] = px[k]*self.var['ASSWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASSWR'][pos[k],jy,ix] \
+                                          + px[k]*self.var['ASLWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASLWR'][pos[k],jy,ix]
+        return            
+    
+    def _wmo_tropo(self):
+        """ Calculate the WMO tropopause """
+        if not set(['T','P']).issubset(self.var.keys()):
+            print('T or P undefined')
+            return
+        self.pwmo = np.ma.empty(shape=(self.nlat,self.nlon))
+        self.Twmo = np.ma.empty(shape=(self.nlat,self.nlon))
+        logp = np.log(self.var['P'])
+        # dz from the hydrostatic formula dp/dz = - rho g = - p/T g /R 
+        # dz = dz/dp p dlogp = - 1/T R/g dlogp (units m)
+        # dz is shifted b one index position / T, p
+        # dz[i] is the positive logp thickness between levels i and i+1, that is 
+        # above level i+1
+        dz = cst.R/cst.g * self.var['T'][1:,:,:] * (logp[1:,:,:]-logp[:-1,:,:])
+        # calculate dT/dz = - 1/p dT/dlogp rho g = - g/R 1/T dT/dlogp 
+        # dTdz[i] is the vertical derivative at level [i+1]
+        dTdz = - cst.g/cst.R * d(logp,self.var['T'])
+           
+        for jy in range(self.nlat):
+            for ix in range(self.nlon):
+                # calculate where slope is larger than 2K/km
+                # skipping the last 30 elements of the profile near the ground
+                # recall data are stored from top to bottom
+                slope = list(np.where(dTdz[:-30,jy,ix] > -0.002)[0])
+                Deltaz = 0.
+                found = False
+                # explore slope to find the first case where the slope is maintained
+                # over two km
+                while not found:
+                    try:
+                        # get last slope (bottom)
+                        tropo_test = slope.pop()
+                    except IndexError:
+                        # if all slopes have been processed without finding a suitable tropopause, mask this entr
+                        self.pwmo[jy,ix] = np.ma.masked
+                        self.Twmo[jy,ix] = np.ma.masked
+                        found = True
+                        break
+                    # first interval above
+                    Deltaz = 0
+                    lev = tropo_test+1
+                    # performs search
+                    search = True
+                    while Deltaz < 2000:
+                        lev -= 1
+                        # mean slope over the considered layer
+                        slope_test = - cst.g/cst.R * 1/self.var['T'][tropo_test+1,jy,ix] \
+                            * (self.var['T'][lev,jy,ix]-self.var['T'][tropo_test+1,jy,ix]) \
+                             /(logp[lev,jy,ix]-logp[tropo_test+1,jy,ix])
+                        if slope_test > -0.002:
+                            Deltaz +=  dz[lev,jy,ix]
+                        else:
+                            search = False
+                            break
+                    if search: 
+                        found = True
+                        self.pwmo[jy,ix] = self.var['P'][tropo_test+1,jy,ix]
+                        self.Twmo[jy,ix] = self.var['T'][tropo_test+1,jy,ix]
+        return
+       
+    def interpol_track(self,p,x,y,varList='All'):
+        """ Interpolate the distance to the cold point and to the LZRH ."""  
+        if 'P' not in self.var.keys():
+            self._mkp()
+        if varList == 'All':
+            varList = list(self.var.keys())
+            varList.remove('SP')
+            varList.remove('P')
+        elif type(varList) == str:
+            varList = [varList,]
+        for var in varList:
+            if var not in self.var.keys():
+                print(var,' not defined')
+                return
+        # Defines output dictionary 
+        result = {}
+        # test whether fhyb already attached to the instance
+        if not hasattr(self,'fhyb'):
+            self.fhyb,void = tohyb()
+        # generate the 2D interpolator of the surface pressure
+        lsp = RegularGridInterpolator((self.attr['lats'],self.attr['lons']),-np.log(self.var['SP']))
+        lspi = lsp(np.transpose([y,x]))
+        # define -log sigma = -log(p) - -log(ps)
+        lsig = - np.log(p) - lspi
+        # find the non integer hybrib level
+        hyb = self.fhyb(np.transpose([lsig,lspi]))-self.attr['levs'][0]
+        lhyb = np.floor(hyb).astype(np.int64)
+        #@@ test the extreme values of sigma end ps
+        if np.min(lsig) < - np.log(0.95):
+            print('large sigma detected ',np.exp(-np.min(lsig)))
+        if np.max(lspi) > -np.log(45000):
+            print('small ps detected ',np.exp(-np.max(lspi)))
+        # Horizontal interpolation
+        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int64)
+        jy = np.floor((y-self.attr['la1'])/self.attr['dla']).astype(np.int64)
+        px = ((x - self.attr['Lo1']) %  self.attr['dlo'])/self.attr['dlo']
+        py = ((y - self.attr['La1']) %  self.attr['dla'])/self.attr['dla']
+        for var in varList:
+            vhigh = (1-px)*(1-py)*self.var[var][lhyb,jy,ix] + (1-px)*py*self.var[var][lhyb,jy+1,ix] \
+                  + px*(1-py)*self.var[var][lhyb,jy,ix+1] + px*py*self.var[var][lhyb,jy+1,ix+1]
+            vlow  = (1-px)*(1-py)*self.var[var][lhyb+1,jy,ix] + (1-px)*py*self.var[var][lhyb+1,jy+1,ix] \
+                  + px*(1-py)*self.var[var][lhyb+1,jy,ix+1] + px*py*self.var[var][lhyb+1,jy+1,ix+1]
+            hc = hyb % 1
+            result[var] = (1-hc)*vhigh + hc*vlow
+            del hc; del vhigh; del vlow
+        return result  
+                        
 # standard class to read data
 class ECMWF(ECMWF_pure):
     # to do: raise exception in case of an error
@@ -397,6 +670,11 @@ class ECMWF(ECMWF_pure):
         # reversing last and first for latitudes
         self.attr['La1'] = sp['latitudeOfLastGridPoint']/1000000  # in degree
         self.attr['La2'] = sp['latitudeOfFirstGridPoint']/1000000 # in degree
+        # longitude and latitude interval
+        self.attr['dlo'] = (self.attr['lons'][-1] - self.attr['lons'][0]) / (self.nlon-1)
+        self.attr['dla'] = (self.attr['lats'][-1] - self.attr['lats'][0]) / (self.nlat-1) 
+        if self.attr['Lo1']>self.attr['Lo2']:
+            self.attr['Lo1'] = self.attr['Lo1']-360.
         if sp['PVPresent']==1 :
             pv = sp['pv']
             self.attr['ai'] = pv[0:int(pv.size/2)]
@@ -415,7 +693,7 @@ class ECMWF(ECMWF_pure):
         #  Reverting lat order
         self.attr['lats'] = self.attr['lats'][::-1]
         self.var['SP']   = self.var['SP'][::-1,:]
-
+        self.attr['dla'] = -  self.attr['dla']
         # Opening of the other files
         self.DI_open = False
         self.WT_open = False
@@ -553,22 +831,22 @@ class ECMWF(ECMWF_pure):
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
-        self.var['PT'] = self.var['T'] * (p0/self.var['P'])**kappa
+        self.var['PT'] = self.var['T'] * (p0/self.var['P'])**cst.kappa
 
     def _mkrho(self):
         # Calculate the dry density
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
-        self.var['RHO'] = (1/R) * self.var['P'] / self.var['T']
+        self.var['RHO'] = (1/cst.R) * self.var['P'] / self.var['T']
 
     def _mkrhoq(self):
-        # Calculate the dry density
+        # Calculate the moist density
         if not set(['T','P','Q']).issubset(self.var.keys()):
             print('T, P or Q undefined')
             return
         pcor = 230.617*self.var['Q']*np.exp(17.5043*self.var['Q']/(241.2+self.var['Q']))
-        self.var['RHO'] = (1/R) * (self.var['P'] - pcor) / self.var['T']
+        self.var['RHO'] = (1/cst.R) * (self.var['P'] - pcor) / self.var['T']
 
     def _checkThetProfile(self):
         # Check that the potential temperature is always increasing with height
@@ -579,8 +857,8 @@ class ECMWF(ECMWF_pure):
         for lev in range(ddd.shape[0]):
             if np.min(ddd[lev,:,:]) < 0:
                 print('min level of inversion: ',lev)
-                return lev
-
+                return lev    
+            
 if __name__ == '__main__':
     date = datetime(2017,8,11,12)
     dat = ECMWF('STC',date)
