@@ -484,7 +484,7 @@ class ECMWF_pure(object):
         return
        
     def interpol_track(self,p,x,y,varList='All'):
-        """ Interpolate the distance to the cold point and to the LZRH ."""  
+        """ Calculate the distance to the cold point and to the LZRH ."""  
         if 'P' not in self.var.keys():
             self._mkp()
         if varList == 'All':
@@ -508,7 +508,7 @@ class ECMWF_pure(object):
         # define -log sigma = -log(p) - -log(ps)
         lsig = - np.log(p) - lspi
         # find the non integer hybrib level
-        hyb = self.fhyb(np.transpose([lsig,lspi]))-self.attr['levs'][0]
+        hyb = self.fhyb(np.transpose([lsig,lspi]))-self.attr['levs'][0]+1
         lhyb = np.floor(hyb).astype(np.int64)
         #@@ test the extreme values of sigma end ps
         if np.min(lsig) < - np.log(0.95):
