@@ -343,8 +343,9 @@ def main():
             #@@ test
 #            print('sigma ',np.exp(-np.max(lsig)),np.exp(-np.min(lsig)))
             #@@ end test
-            # get the hybrid level, the rank of the first retained level is substracted to have hyb starting from 0 
-            hyb = np.floor(fhyb(np.transpose([lsig,datpart['lspi']]))+0.5).astype(np.int64)-datrean.attr['levs'][0]
+            # get the hybrid level, the rank of the first retained level is substracted to have hyb starting from 0
+            # +1 because the levels are counted from 1, not 0 and +0.5 because we get the closest neighbour
+            hyb = np.floor(fhyb(np.transpose([lsig,datpart['lspi']]))+1.5).astype(np.int64)-datrean.attr['levs'][0]
             #@@ test the extreme values of sigma end ps
             if np.min(lsig) < - np.log(0.95):
                 print('large sigma detected ',np.exp(-np.min(lsig)))
