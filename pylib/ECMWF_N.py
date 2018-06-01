@@ -59,7 +59,6 @@ import socket
 from scipy.interpolate import RegularGridInterpolator
 from mki2d import tohyb
 import constants as cst
-from numba import jit
 
 MISSING = -999
 # Physical constants
