@@ -59,6 +59,7 @@ import socket
 from scipy.interpolate import RegularGridInterpolator
 from mki2d import tohyb
 import constants as cst
+from numba import jit
 
 MISSING = -999
 # Physical constants
@@ -278,7 +279,7 @@ class ECMWF_pure(object):
                     ixt += 1
                 jyt += 1
         return new
-    
+
     def interpol_part(self,p,x,y,varList='All'):
         """ Interpolate the variables to the location of particles given by [p,y,x] using trilinear method."""  
         if 'P' not in self.var.keys():
@@ -306,14 +307,20 @@ class ECMWF_pure(object):
         # find the non integer hybrib level with offset due to the truncation of levels
         hyb = self.fhyb(np.transpose([lsig,lspi]))-self.attr['levs'][0]+1
         lhyb = np.floor(hyb).astype(np.int64)
+        # flag non valid parcels outside the domain (see discussion in convsrc2)
+        # notive that hyb == 100 not flagged as invalid, but clipped below
+        non_valid = np.where(hyb>100)[0]
+        # clip lhyb to remove out of bounds problems due to non valid parcels
+        lhyb = np.clip(lhyb,0,99)
         #@@ test the extreme values of sigma end ps
         if np.min(lsig) < - np.log(0.95):
             print('large sigma detected ',np.exp(-np.min(lsig)))
         if np.max(lspi) > -np.log(45000):
             print('small ps detected ',np.exp(-np.max(lspi)))
         # Horizontal interpolation
-        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int64)
-        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int64)
+        # clipping to avoid boundary effects for parcels just on the edges (especially on the eastern edge)
+        ix = np.clip(np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int64),0,self.nlon-2)
+        jy = np.clip(np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int64),0,self.nlat-2)
         px = ((x - self.attr['Lo1']) %  self.attr['dlo'])/self.attr['dlo']
         py = ((y - self.attr['La1']) %  self.attr['dla'])/self.attr['dla']
         for var in varList:
@@ -321,9 +328,9 @@ class ECMWF_pure(object):
                   + px*(1-py)*self.var[var][lhyb,jy,ix+1] + px*py*self.var[var][lhyb,jy+1,ix+1]
             vlow  = (1-px)*(1-py)*self.var[var][lhyb+1,jy,ix] + (1-px)*py*self.var[var][lhyb+1,jy+1,ix] \
                   + px*(1-py)*self.var[var][lhyb+1,jy,ix+1] + px*py*self.var[var][lhyb+1,jy+1,ix+1]
-            hc = hyb % 1
+            hc = hyb - lhyb
             result[var] = (1-hc)*vhigh + hc*vlow
-            del hc; del vhigh; del vlow
+            result[var][non_valid] = MISSING
         return result  
            
     def _CPT(self):
