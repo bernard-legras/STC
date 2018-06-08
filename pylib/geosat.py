@@ -291,6 +291,9 @@ class GeoGrid(object):
         if gridtype == "FullAMA":
             self.box_range = np.array([[-10.,160.], [0.,50.]])
             self.box_binx = 1700; self.box_biny = 500
+        elif gridtype == "FullAMA_SAFBox":
+            self.box_range = np.array([[-10.,160.], [0.,50.]])
+            self.box_binx = 1700; self.box_biny = 500       
         elif gridtype == "HimFull":
             self.box_range = np.array([[60.,220.],[-80.,80.]])
             self.box_binx = 4000; self.box_biny = 4000;
@@ -468,7 +471,7 @@ class GridField(object):
             geogrid = self.geogrid
         else:
             geogrid = subgrid
-        if geogrid.gridtype == 'FullAMA':
+        if 'FullAMA' in geogrid.gridtype:
             fig = plt.figure(figsize=[10, 6])
         else:
             fig = plt.figure()  
@@ -561,7 +564,7 @@ class SatGrid(GridField):
                            
             except:
                 print ('Lookup table for this grid and sat does not exist yet.')
-                print ('Must be done prior to creation of this object.' )
+                print ('Must be done prior to creation of this object.' )     
 
 #%%
     def _sat_togrid(self,field,clean=True):
