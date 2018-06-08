@@ -384,7 +384,7 @@ class ECMWF_pure(object):
                 for k in range(len(pos)):
                     id = pos[k]
                     #@@ Temporary test
-                    if cst[id]*cst[id+1]>0 | cst[id]<0:
+                    if (cst[id]*cst[id+1]>0) | (cst[id]<0):
                         print('ERROR: localization')
                         return
                     px.append(cst[id]/(cst[id]-cst[id+1]))
@@ -417,7 +417,7 @@ class ECMWF_pure(object):
                         # (empirical)
                         if pzk[k] < 9500:
                             idx = np.sort((np.array(pzk)-avpzt)**2)
-                            if pzk[idx[1]>12000]:
+                            if pzk[idx[1]]>12000:
                                 k=idx[1]
                     else:
                         k=1
