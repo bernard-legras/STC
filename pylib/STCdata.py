@@ -220,3 +220,8 @@ class STCinst(STCdata):
             self.var[iv][np.isnan(self.var[iv])] = self.vmiss[iv]
             self.varmk[self.vname[iv]] = np.ma.masked_equal(self.var[iv],self.vmiss[iv])
             self.varmk[self.vname[iv]] *= self.vscale[iv]
+        # Finally rename the keys to match vnames
+        i = 0
+        for var in self.vname:
+            self.var[var] = self.var.pop(i)
+            i += 1
