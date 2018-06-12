@@ -68,7 +68,7 @@ MISSING = -999
 #kappa = R/Cpd
 #g = 9.80665
 pref = 101325.
-p0 = 100000.
+#p0 = 100000.
 
 def strictly_increasing(L):
     return all(x<y for x, y in zip(L, L[1:]))
@@ -86,8 +86,16 @@ class ECMWF_pure(object):
         self.warning = []
 
     def chart(self,var,lev=0,txt='',log=False):
+        """ Chart for data fields """
         # test existence of key field
-        if var not in self.var.keys():
+        if var in self.var.keys():
+            if len(self.var[var].shape) == 3:
+                buf = self.var[var][lev,:,:]
+            else:
+                buf = self.var['var']
+        elif var in self.d2d.keys():
+            buf = self.d2d[var]
+        else:
             print ('undefined field')
             return
 
@@ -363,10 +371,11 @@ class ECMWF_pure(object):
         uniq = np.empty(shape=(self.nlat,self.nlon))
         for jy in range(self.nlat):
             for ix in range(self.nlon):
+                print(jy,ix)
                 # Clear sky heating in the column
-                cst = self.var['CSSWR'][ntop1:nbot1,jy,ix] + self.var['CSLWR'][ntop1:nbot1,jy,ix]
+                csh = self.var['CSSWR'][ntop1:nbot1,jy,ix] + self.var['CSLWR'][ntop1:nbot1,jy,ix]
                 # Define location of positive heating
-                lp = (cst>0).astype(np.int64)
+                lp = (csh>0).astype(np.int64)
                 # Find position of vertical crossings of zero heating
                 pos = np.where(lp[1:]-lp[:-1]==-1)[0]
                 # Number of crossings
@@ -377,17 +386,18 @@ class ECMWF_pure(object):
                     self.d2d['plzrh'][jy,ix] = np.ma.masked
                     self.d2d['ptlzrh'][jy,ix] = np.ma.masked
                     self.d2d['aslzrh'][jy,ix] = np.ma.masked
-                    break
+                    continue
                 # Calculate pressure at each crossing
                 pzk = []
                 px = []
                 for k in range(len(pos)):
                     id = pos[k]
                     #@@ Temporary test
-                    if (cst[id]*cst[id+1]>0) | (cst[id]<0):
+                    if (cst[id]*csh[id+1]>0) | (csh[id]<0):
                         print('ERROR: localization')
                         return
-                    px.append(cst[id]/(cst[id]-cst[id+1]))
+                    px.append(csh[id]/(csh[id]-csh[id+1]))
+                    # Interopolate to get intersection
                     pzk.append(math.exp(px[k]*math.log(self.var['P'][id+1,jy,ix])+(1-px[k])*math.log(self.var['P'][id,jy,ix])))
                 # Now we test the best continuity for pressure
                 # Collect neighbour values of the LZRH pressure already calculated
@@ -407,8 +417,7 @@ class ECMWF_pure(object):
                         pzt = [self.d2d['plzrh'][jy,ix-1],]
                     elif jy>0 & ix==0:
                         pzt = list(self.d2d['plzrh'][jy-1,ix:ix+2])
-                    else:
-                
+                    else:              
                         pzt = []
                     if len(pzt)>0:
                         avpzt = sum(pzt)/len(pzt)
@@ -416,15 +425,19 @@ class ECMWF_pure(object):
                         # This patch corrects some rare artefacts near the tropopause
                         # (empirical)
                         if pzk[k] < 9500:
+                            print(jy,ix,len(pzk),avpzt,len(pzt),pzt,type(pzt))
                             idx = np.sort((np.array(pzk)-avpzt)**2)
-                            if pzk[idx[1]]>12000:
-                                k=idx[1]
+                            if pzk[idx[0]]>12000:
+                                k=idx[0]
                     else:
                         k=1
                 self.d2d['plzrh'][jy,ix] = pzk[k]
-                # Calculate potential temperature ans all sky heating at the LZRH
+                # test
+                if jy==166 & ix==0:
+                    print(k,pzk[k])
+                # Calculate potential temperature and all sky heating at the LZRH
                 tz = px[k]*self.var['T'][pos[k]+1,jy,ix] + (1-px[k])*self.var['T'][pos[k],jy,ix]
-                self.d2d['ptlzrh'][jy,ix] = tz * (p0/pzk[k])**cst.kappa
+                self.d2d['ptlzrh'][jy,ix] = tz * (cst.p0/pzk[k])**cst.kappa
                 self.d2d['aslzrh'][jy,ix] = px[k]*self.var['ASSWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASSWR'][pos[k],jy,ix] \
                                           + px[k]*self.var['ASLWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASLWR'][pos[k],jy,ix]
         return            
@@ -837,7 +850,7 @@ class ECMWF(ECMWF_pure):
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
-        self.var['PT'] = self.var['T'] * (p0/self.var['P'])**cst.kappa
+        self.var['PT'] = self.var['T'] * (cst.p0/self.var['P'])**cst.kappa
 
     def _mkrho(self):
         # Calculate the dry density
@@ -866,12 +879,12 @@ class ECMWF(ECMWF_pure):
                 return lev    
             
 if __name__ == '__main__':
-    date = datetime(2017,8,11,12)
+    date = datetime(2017,8,11,18)
     dat = ECMWF('STC',date)
     dat._get_T()
     dat._get_U()
     dat._get_var('ASLWR')
-    dat._get_var('CC')
+    #dat._get_var('CC')
     dat._mkp()
     dat._mkthet()
     dat._checkThetProfile()
