@@ -36,7 +36,7 @@ elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostna
     INPUT_dir = '/home/stratocl/TRAJ/pylib/INPUT'
 elif socket.gethostname() == 'grapelli':
     INPUT_dir = '/limbo/data/STC/pylib/INPUT'
-elif socket.gethostname() == 'zappa':
+elif socket.gethostname() in ['zappa','couperin','coltrane','puccini']:
     INPUT_dir = '/net/grapelli/limbo/data/STC/pylib/INPUT'
 elif socket.gethostname() == 'gort':
     INPUT_dir = '/dkol/data/STC/pylib/INPUT'

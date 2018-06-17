@@ -61,15 +61,14 @@ elif socket.gethostname() == 'grapelli':
     sats_dir = '/limbo/data/STC/sats'
     root_dir = '/limbo/data/STC/sats'
     gridsat =  '/limbo/data/STC/sats'
-elif socket.gethostname() == 'zappa':
-    # to be adjusted
-     sats_dir = '/net/grapelli/limbo/data/STC/sats'
-     root_dir = '/net/grapelli/limbo/data/STC/sats'
-     gridsat =  '/net/grapelli/limbo/data/STC/sats'
+elif socket.gethostname() in ['couperin','zappa','coltrane','puccini']:
+    sats_dir = '/net/grapelli/limbo/data/STC/sats'
+    root_dir = '/net/grapelli/limbo/data/STC/sats'
+    gridsat =  '/net/grapelli/limbo/data/STC/sats'
 elif socket.gethostname() == 'gort':
-     sats_dir = '/dkol/data/STC/sats'
-     root_dir = '/dkol/data/STC/sats'
-     gridsat =  '/dkol/data/STC/sats'  
+    sats_dir = '/dkol/data/STC/sats'
+    root_dir = '/dkol/data/STC/sats'
+    gridsat =  '/dkol/data/STC/sats'  
 elif 'icare' in socket.gethostname():
     sats_dir = '/home/b.legras/SAFNWC'
     root_dir = '/home/b.legras/sats'
