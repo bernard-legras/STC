@@ -19,7 +19,7 @@ output:
     time slots that discretize both UTC and local time. The routine fails and
     returns error code otherwise.
 
-    The linear interpolatio is such that the sum over all times and the varaiance 
+    The linear interpolatio is such that the sum over all times
     are preserved at any longitude
 
     MU can have any number of dimensions before longitude and time      
@@ -51,18 +51,19 @@ def UT2locTime(MU,lambda0,N=None):
     # Set m0 (with offset to avoid truncation errors)
     m0 = int(lambda0*N/360+0.0001)
     # Define nstar
-    nstar = - m0 - J*np.arange(M) %N
+    nstar = (- m0 - J*np.arange(M))%N
+    print(nstar)
     # Initialize ML
     ML = np.empty(shape=dims)
     # Loops on p and s=q-p
     for p in range(M):
         for s in range(M):
             # Define range of longitude indexes for this segment
-            nn = nstar[s] + range(J) %N
+            nn = (nstar[s] - np.arange(J))%N
             # Select part of the segment within the domain
             sel = nn<Nl
             if len(sel)>0:
                 nns = nn[sel]
                 js = np.arange(J)[sel]
-                ML[...,nns,p] = (1-js/J)*MU[...,nns,p+s %M] + js/J*MU[...,nns,p+s+1 %M]
+                ML[...,nns,p] = (1-js/J)*MU[...,nns,(p+s)%M] + js/J*MU[...,nns,(p+s+1)%M]
     return ML
