@@ -1,0 +1,4 @@
+Tools of the EU StratoClim and ANR TTL-Xing projects 
+Manipulation of netcdf geostationary satellites images and grib files from ECMWF.
+Finding convective sources from Lagrangian trajectories.
+Utilities to manipulate Lagrangian trajectories input and output files.
