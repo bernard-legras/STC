@@ -577,6 +577,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
             elif 'grapelli' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/STC'
+            elif socket.gethostname() in ['coltrane','zappa','couperin','puccini']:
+                self.rootdir = '/net/grapelli/dsk2/ERA5/STC'
             else:
                 print('unknown hostname for this dataset')
                 return
