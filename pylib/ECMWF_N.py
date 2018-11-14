@@ -53,12 +53,17 @@ import numpy as np
 import math
 import pygrib
 import os
-from mpl_toolkits.basemap import Basemap
+#from mpl_toolkits.basemap import Basemap
+from cartopy import feature
+#from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import socket
 from scipy.interpolate import RegularGridInterpolator
 from mki2d import tohyb
 import constants as cst
+import gzip,pickle
+from numba import jit
 
 MISSING = -999
 # Physical constants
@@ -67,12 +72,13 @@ MISSING = -999
 #Cpd = 1005.7
 #kappa = R/Cpd
 #g = 9.80665
-pref = 101325.
+#pref = 101325.
 #p0 = 100000.
 
 def strictly_increasing(L):
     return all(x<y for x, y in zip(L, L[1:]))
 
+# Second order estimate of the first derivative dy/dx for non uniform spacing of x  
 d = lambda x,y:(1/(x[2:,:,:]-x[:-2,:,:]))\
                 *((y[2:,:,:]-y[1:-1,:,:])*(x[1:-1,:,:]-x[:-2,:,:])/(x[2:,:,:]-x[1:-1,:,:])\
                 -(y[:-2,:,:]-y[1:-1,:,:])*(x[2:,:,:]-x[1:-1,:,:])/(x[1:-1,:,:]-x[:-2,:,:]))
@@ -85,7 +91,7 @@ class ECMWF_pure(object):
         self.d2d={}
         self.warning = []
 
-    def chart(self,var,lev=0,txt='',log=False):
+    def show(self,var,lev=0,txt=None,log=False):
         """ Chart for data fields """
         # test existence of key field
         if var in self.var.keys():
@@ -98,44 +104,58 @@ class ECMWF_pure(object):
         else:
             print ('undefined field')
             return
+        fs=15
+        # it is unclear how the trick with cm_lon works in imshow but it does
+        # the web says that it is tricky to plot data accross dateline with cartopy
+        # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
+        cm_lon =0
+        # guess that we want to plot accross dateline 
+        if self.attr['lons'][-1] > 180: cm_lon=180
+        proj = ccrs.PlateCarree(central_longitude=cm_lon)
+        fig = plt.figure(figsize=[11,4])
+        fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
+        ax = plt.axes(projection = proj)
+        iax = ax.imshow(buf, transform=proj, interpolation='nearest',
+                    extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
+                            self.attr['lats'][0], self.attr['lats'][-1]],
+                    origin='lower', aspect=1.,cmap='jet')
+        ax.add_feature(feature.NaturalEarthFeature(
+            category='cultural',
+            name='admin_1_states_provinces_lines',
+            scale='50m',
+            facecolor='none'))
+        ax.coastlines('50m')
+        #ax.add_feature(feature.BORDERS)
+        # The grid adjusts automatically with the following lines
+        # If crossing the dateline, superimposition of labels there
+        # can be suppressed by specifying xlocs
+        xlocs = None
+        if cm_lon == 180: xlocs = [0,60,120,180,-120,-60]
+        gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
+                      linewidth=2, color='gray', alpha=0.5, linestyle='--')
+        gl.xlabels_top = False
+        gl.ylabels_right = False
+        #gl.xformatter = LONGITUDE_FORMATTER
+        #gl.yformatter = LATITUDE_FORMATTER
+        gl.xlabel_style = {'size': fs}
+        gl.ylabel_style = {'size': fs}
+        #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
+        
+        if txt is None:
+            plt.title(var,fontsize=fs)
+        else:
+            plt.title(txt,fontsize=fs)
+        # plot adjusted colorbar
+        axpos = ax.get_position()
+        pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
+        pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
+        cbar=fig.colorbar(iax,cax=pos_cax)
+        cbar.ax.tick_params(labelsize=fs)
 
-        fig=plt.figure(figsize=[11,4])
-        m = Basemap(projection='cyl', llcrnrlat=self.attr['lats'][0],
-                    urcrnrlat=self.attr['lats'][-1],
-                    llcrnrlon=self.attr['lons'][0],
-                    urcrnrlon=self.attr['lons'][-1], resolution='c')
-        m.drawcoastlines(color='k')
-        m.drawcountries(color='k')
-        if self.attr['lons'][-1] - self.attr['lons'][0] <= 50.:
-            spacex = 5.
-        else:
-            spacex = 10.
-        if self.attr['lats'][-1] - self.attr['lats'][0] <= 50.:
-            spacey = 5.
-        else:
-            spacey = 10.
-        meridians = np.arange(self.attr['lons'][0], self.attr['lons'][-1], spacex)
-        parallels = np.arange(self.attr['lats'][0], self.attr['lats'][-1], spacey)
-        m.drawmeridians(meridians, labels=[0, 0, 0, 1], fontsize=8)
-        m.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=8)        
-        if len(self.var[var].shape) == 3:
-            buf = self.var[var][lev,:,:]
-        else:
-            buf = self.var['var']
-        if log:
-            buf = np.ma.masked_less_equal(buf,0)
-            buf = np.log(buf)                   
-        iax = plt.imshow(buf, interpolation='nearest',
-                     extent=[self.attr['lons'][0], self.attr['lons'][-1],
-                             self.attr['lats'][0], self.attr['lats'][-1]],
-                     origin='lower', aspect=1.,cmap='jet')
-        cax = fig.add_axes([0.91, 0.15, 0.03, 0.7])
-        fig.colorbar(iax, cax=cax)
-        plt.title(txt)
         plt.show()
         return None
 
-    def extract(self,latRange=None,lonRange=None):
+    def extract(self,latRange=None,lonRange=None,varss=None,vard=None):
         """ extract all variables on a reduced grid """
         # first determine the boundaries of the domain
         new = ECMWF_pure()
@@ -165,17 +185,51 @@ class ECMWF_pure(object):
         new.attr['dla'] = self.attr['dla']
         new.attr['dlo'] = self.attr['dlo']
         # extraction
-        for var in self.var.keys():
+        if varss is None:
+            list_vars = []
+        elif varss == 'All':
+            list_vars = self.var.keys()
+        else:
+            list_vars = varss
+        for var in list_vars:
             if len(self.var[var].shape) == 3:
                 new.var[var] = self.var[var][:,nlatmin:nlatmax,nlonmin:nlonmax]
             else:
                 new.var[var] = self.var[var][nlatmin:nlatmax,nlonmin:nlonmax]
-        try:
-            for var in self.d2d.keys():
-                new.d2d[var] = self.d2d[var][nlatmin:nlatmax,nlonmin:nlonmax]
-        except:
-            pass
+        if vard is None:
+            list_vars = []
+        elif vard == 'All':
+            list_vars = self.d2d.keys()
+        else:
+            list_vars = vard
+        for var in list_vars:
+            new.d2d[var] = self.d2d[var][nlatmin:nlatmax,nlonmin:nlonmax]
         return new
+    
+    def zonal(self,vars=None,vard=None):
+        """ Calculate the zonal averages of the variables contained in self"""
+        new = ECMWF_pure()
+        new.attr['lats'] = self.attr['lats']
+        new.nlat = len(new.attr['lats'])
+        new.nlev = self.nlev
+        if vars is None:
+            list_vars = []
+        elif vars == 'All':
+            list_vars = self.var.keys()
+        else:
+            list_vars = vars
+        for var in list_vars:
+            lx = len(self.var[var].shape)-1
+            new.var[var] = np.mean(self.var[var],axis=lx)
+        if vard is None:
+            list_vars = []
+        elif vard == 'All':
+            list_vars = self.d2d.keys()
+        else:
+            list_vars = vard
+        for var in list_vars:
+            new.d2d[var] = np.mean(self.d2d[var],axis=1)
+        return new    
     
     def getxy(self,var,lev,y,x):
         """ get the interpolated value of var in x, y on the level lev """
@@ -345,20 +399,30 @@ class ECMWF_pure(object):
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
+        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43]}
         # TODO: find a way to avoid the big loop
         self.d2d['pcold'] = np.empty(shape=(self.nlat,self.nlon))
         self.d2d['Tcold'] = np.empty(shape=(self.nlat,self.nlon))
+        if 'Z' in self.var.keys():
+            self.d2d['zcold'] = np.empty(shape=(self.nlat,self.nlon))
         # Calculate the cold point in the discrete profile
         # TO DO: make a smoother version with vertical interpolation
-        nc = np.argmin(self.var['T'],axis=0)
+        nc = np.argmin(self.var['T'][levbnd[self.project][0]:levbnd[self.project][1],...],axis=0)\
+           + levbnd[self.project][0]
         for jy in range(self.nlat):
             for ix in range(self.nlon):
                 self.d2d['pcold'][jy,ix] = self.var['P'][nc[jy,ix],jy,ix]
                 self.d2d['Tcold'][jy,ix] = self.var['T'][nc[jy,ix],jy,ix]
+        if  'Z' in self.var.keys():
+            for jy in range(self.nlat):
+                for ix in range(self.nlon):
+                    self.d2d['zcold'][jy,ix] = self.var['Z'][nc[jy,ix],jy,ix]
         return
     
     def _lzrh(self):
-        """ Calculate the clear sky and all sky lzrh. Translated from LzrnN.m """
+        """ Calculate the clear sky and all sky lzrh. Translated from LzrnN.m 
+        Not yet validated. Use with cautione.
+        """
         if not set(['P','ASSWR','ASLWR','CSSWR']).issubset(self.var.keys()):
             print('P or heating rate missing')
             return
@@ -442,13 +506,24 @@ class ECMWF_pure(object):
                                           + px[k]*self.var['ASLWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASLWR'][pos[k],jy,ix]
         return            
     
-    def _wmo_tropo(self):
-        """ Calculate the WMO tropopause """
+    @jit
+    def _WMO(self,highlatOffset=False):
+        """ Calculate the WMO tropopause 
+        When highlatoffset is true the 2K/km criterion is replaced by a 3K/km 
+        at high latitudes latitudes above 60S or 60N """
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
-        self.pwmo = np.ma.empty(shape=(self.nlat,self.nlon))
-        self.Twmo = np.ma.empty(shape=(self.nlat,self.nlon))
+        self.d2d['pwmo'] = np.ma.empty(shape=(self.nlat,self.nlon))
+        self.d2d['Twmo'] = np.ma.empty(shape=(self.nlat,self.nlon))
+        if 'Z' in self.var.keys():
+            self.d2d['zwmo'] = np.empty(shape=(self.nlat,self.nlon))
+            zwmo = True
+        else:
+            zwmo = False
+        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43]}
+        highbnd = levbnd[self.project][0]
+        lowbnd =  levbnd[self.project][1]
         logp = np.log(self.var['P'])
         # dz from the hydrostatic formula dp/dz = - rho g = - p/T g /R 
         # dz = dz/dp p dlogp = - 1/T R/g dlogp (units m)
@@ -458,49 +533,59 @@ class ECMWF_pure(object):
         dz = cst.R/cst.g * self.var['T'][1:,:,:] * (logp[1:,:,:]-logp[:-1,:,:])
         # calculate dT/dz = - 1/p dT/dlogp rho g = - g/R 1/T dT/dlogp 
         # dTdz[i] is the vertical derivative at level [i+1]
-        dTdz = - cst.g/cst.R * d(logp,self.var['T'])
-           
-        for jy in range(self.nlat):
+        #lapse = - cst.g/cst.R * (1/self.var['T'][highbnd+1:lowbnd-1,...]) * \
+        #               (self.var['T'][highbnd:lowbnd-2,...] - self.var['T'][highbnd+2:lowbnd,...]) / \
+        #               (logp[highbnd:lowbnd-2,...]-logp[highbnd+2:lowbnd,...])
+        lapse = - cst.g/cst.R * (1/self.var['T'][highbnd+1:lowbnd,...]) * \
+                       (self.var['T'][highbnd:lowbnd-1,...] - self.var['T'][highbnd+1:lowbnd,...]) / \
+                       (logp[highbnd:lowbnd-1,...]-logp[highbnd+1:lowbnd,...])
+        
+        for jy in range(self.nlat):                       
+            # standard wmo criterion
+            offset = - 0.002
+            thicktrop = 2000
+            # adaptation of the WMO offset at high latitude
+            if highlatOffset & (abs(self.attr['lats'][jy]) > 60): offset = -0.003
             for ix in range(self.nlon):
-                # calculate where slope is larger than 2K/km
-                # skipping the last 30 elements of the profile near the ground
-                # recall data are stored from top to bottom
-                slope = list(np.where(dTdz[:-30,jy,ix] > -0.002)[0])
+                # location of lapse rate exceeding the threshod 
+                slope = list(np.where(lapse[:,jy,ix] > offset)[0])
                 Deltaz = 0.
                 found = False
                 # explore slope to find the first case where the slope is maintained
                 # over two km
+                # This is required to avoid shallow inversion layers to be confused with
+                # the tropopause
                 while not found:
-                    try:
-                        # get last slope (bottom)
-                        tropo_test = slope.pop()
-                    except IndexError:
-                        # if all slopes have been processed without finding a suitable tropopause, mask this entr
-                        self.pwmo[jy,ix] = np.ma.masked
-                        self.Twmo[jy,ix] = np.ma.masked
+                    if len(slope)>0: # should be done with try but forbidden with numba
+                        # candidate tropopause
+                        test = slope.pop()
+                    else:
+                        # if all slopes have been processed without finding a suitable tropopause, mask loc
+                        self.d2d['pwmo'][jy,ix] = np.ma.masked
+                        self.d2d['Twmo'][jy,ix] = np.ma.masked
+                        if zwmo: self.d2d['zwmo'][jy,ix] = np.ma.masked
                         found = True
                         break
-                    # first interval above
-                    Deltaz = 0
-                    lev = tropo_test+1
-                    # performs search
+                    # location of the basis of the interval 
+                    # +1 to account for the shift of leapfrogging
+                    lev0 = test+1+highbnd
+                    lev = lev0-1
+                    Deltaz = dz[lev,jy,ix]
+                    # performs search above the candidate tropopause
                     search = True
-                    while Deltaz < 2000:
+                    while Deltaz < thicktrop:
                         lev -= 1
+                        Deltaz += dz[lev,jy,ix]
                         # mean slope over the considered layer
-                        slope_test = - cst.g/cst.R * 1/self.var['T'][tropo_test+1,jy,ix] \
-                            * (self.var['T'][lev,jy,ix]-self.var['T'][tropo_test+1,jy,ix]) \
-                             /(logp[lev,jy,ix]-logp[tropo_test+1,jy,ix])
-                        if slope_test > -0.002:
-                            Deltaz +=  dz[lev,jy,ix]
-                        else:
+                        if (self.var['T'][lev,jy,ix]-self.var['T'][lev0,jy,ix])/Deltaz < offset: 
                             search = False
                             break
                     if search: 
                         found = True
-                        self.pwmo[jy,ix] = self.var['P'][tropo_test+1,jy,ix]
-                        self.Twmo[jy,ix] = self.var['T'][tropo_test+1,jy,ix]
-        return
+                        self.d2d['pwmo'][jy,ix] = self.var['P'][lev0,jy,ix]
+                        self.d2d['Twmo'][jy,ix] = self.var['T'][lev0,jy,ix]
+                        if zwmo: self.d2d['zwmo'][jy,ix] = self.var['Z'][lev0,jy,ix]      
+        return 
        
     def interpol_track(self,p,x,y,varList='All'):
         """ Calculate the distance to the cold point and to the LZRH ."""  
@@ -600,6 +685,19 @@ class ECMWF(ECMWF_pure):
             DI_expected = True
             WT_expected = False
             VD_expected = False
+        elif project=='FULL-EA':
+            if 'gort' == socket.gethostname():
+                self.rootdir = '/dkol/data/ERA5'
+            elif 'ciclad' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/ERA5'
+            else:
+                print('unknown hostname for this dataset')
+                return
+            SP_expected = False
+            EN_expected = True
+            DI_expected = False
+            WT_expected = False
+            VD_expected = False
         else:
             print('Non implemented project')
             return
@@ -608,7 +706,10 @@ class ECMWF(ECMWF_pure):
             self.fname = 'SP'+date.strftime('%y%m%d%H')
             path1 = 'SP-true/grib'
         if EN_expected:
-            self.fname = 'EN'+date.strftime('%y%m%d%H')
+            if project=='FULL-EA':
+                self.fname = date.strftime('ERA5EN%Y%m%d.grb')
+            else:    
+                self.fname = date.strftime('EN%y%m%d%H')           
             path1 = 'EN-true/grib'
             self.ENvar = {'U':['u','U component of wind','m s**-1'],
                      'V':['v','V component of wind','m s**-1'],
@@ -650,32 +751,27 @@ class ECMWF(ECMWF_pure):
             except:
                 print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
                 return
+        # Define searched valid date and time
+        validityDate = int(self.date.strftime('%Y%m%d'))
+        validityTime = int(self.date.strftime('%H%M'))
         try:
-            sp = self.grb.select(name='Surface pressure')[0]
+            sp = self.grb.select(name='Surface pressure',validityTime=validityTime)[0]
             logp = False
         except:
             try:
-                sp = self.grb.select(name='Logarithm of surface pressure')[0]
+                sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
                 logp = True
             except:
                 print('no surface pressure in '+self.fname)
                 self.grb.close()
                 return
-        # Check time matching  (made from validity date and time)
-        vd = sp['validityDate']
-        vt = sp['validityTime']
-        day = vd % 100
-        vd //=100
-        month = vd % 100
-        vd //=100
-        minute = vt % 100
-        vt //=100
-        dateread = datetime(year=vd,month=month,day=day,hour=vt,minute=minute)
-        if dateread != self.date:
+        # Check date matching (should be)
+        if sp['validityDate'] != validityDate:
             print('WARNING: dates do not match')
-            print('called date    '+self.date.strftime('%Y-%m-%d %H:%M'))
-            print('date from file '+dateread.strftime('%Y-%m-%d %H:%M'))
-            # self.grb.close()
+            print('called date    ',self.date.strftime('%Y%m%d %H%M'))
+            print('date from file ',sp['validityDate'],sp['validityTime'])
+            self.grb.close()
+            return
         # Get general info from this message
         self.attr['Date'] = sp['dataDate']
         self.attr['Time'] = sp['dataTime']
@@ -771,13 +867,13 @@ class ECMWF(ECMWF_pure):
             return
         try:
             if var in self.ENvar.keys():
-                TT = self.grb.select(shortName=self.ENvar[var][0])
+                TT = self.grb.select(shortName=self.ENvar[var][0],validityTime=self.attr['valTime'])
             elif var in self.DIvar.keys() and self.DI_open:
-                TT = self.drb.select(shortName=self.DIvar[var][0])
+                TT = self.drb.select(shortName=self.DIvar[var][0],validityTime=self.attr['valTime'])
             elif var in self.WTvar.keys() and self.WT_open:
-                TT = self.wrb.select(shortName=self.WTvar[var][0])
+                TT = self.wrb.select(shortName=self.WTvar[var][0],validityTime=self.attr['valTime'])
             elif var in self.VDvar.keys() and self.VD_open:
-                TT = self.vrb.select(shortName=self.VDvar[var][0])
+                TT = self.vrb.select(shortName=self.VDvar[var][0],validityTime=self.attr['valTime'])
             elif var in self.DIvar.keys() and not self.DI_open:
                 print('DI file is not open for '+var)
             elif var in self.WTvar.keys() and not self.WT_open:
@@ -815,7 +911,7 @@ class ECMWF(ECMWF_pure):
                 except:
                     pass
                 self.attr['levs'][i] = lev
-                self.attr['plev'][i] = self.attr['am'][lev-1] + self.attr['bm'][lev-1]*pref
+                self.attr['plev'][i] = self.attr['am'][lev-1] + self.attr['bm'][lev-1]*cst.pref
 
 #       # Check the vertical ordering of the file
         if readlev:
@@ -878,7 +974,29 @@ class ECMWF(ECMWF_pure):
         for lev in range(ddd.shape[0]):
             if np.min(ddd[lev,:,:]) < 0:
                 print('min level of inversion: ',lev)
-                return lev    
+                return lev
+            
+    def _mkz(self):
+        """ Calculate the geopotential without taking moiture into account """
+        if not set(['T','P']).issubset(self.var.keys()):
+            print('T or P undefined')
+            return
+        try:
+            with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'.pkl')) as f:
+                Z0 = pickle.load(f)
+        except:
+            print('Cannot read ground geopotential')
+        self.var['Z0'] = Z0.var['Z0']
+        self.var['Z'] =  np.empty(shape=self.var['T'].shape)
+        uu = - np.log(self.var['P'])
+        uusp = -np.log(self.var['SP'])
+        self.var['Z'][self.nlev-1,:,:] = self.var['Z0'] \
+               + (cst.R/cst.g) * self.var['T'][self.nlev-1,:,:] \
+               * (uu[self.nlev-1,:,:]-uusp)
+        for i in range(self.nlev-2,-1,-1):
+             self.var['Z'][i,:,:] = self.var['Z'][i+1,:,:] + 0.5*(cst.R/cst.g) \
+                    * (self.var['T'][i,:,:] + self.var['T'][i+1,:,:])\
+                    * (uu[i,:,:]-uu[i+1,:,:])
             
 if __name__ == '__main__':
     date = datetime(2017,8,11,18)
