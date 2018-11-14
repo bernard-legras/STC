@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Mar 30 14:54:26 2018
-Physical constants
+Physical constants and reference values
 
 @author: Bernard Legras
 """
@@ -11,3 +11,4 @@ Cp = 1005.7
 kappa = R/Cp
 g = 9.81
 p0 = 100000.
+pref = 101325.
