@@ -25,6 +25,11 @@ output:
     MU can have any number of dimensions before longitude and time      
     
     see notes in h2/manus/Methods/LocalTimeInterp-v3.pdf
+
+    Notice that the transformation is the same for UVWT data at times
+    p*24h/Nl or for accumulation data at times (p+1/2)*24h/Nl. It is 
+    only necessary to know that the local time is sampled over the 24h
+    cycle in the same way as the incoming UTC. 
     
 Created on Sun Jun 17 02:30:48 2018
 
