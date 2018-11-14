@@ -48,7 +48,7 @@ class SAFNWC(geosat.GeoSat):
             masksat=geosat.mask_sat['msg']
    
         filename='SAFNWC_'+nam+'_'+typ+date.strftime("%Y%m%d%H%M")+'_globe'+let+'______.h5'
-        print(filename)
+        #print(filename)
         try:
             self.time = re.search(typ+'(.+?)'+'_globe',filename).group(1)
         except AttributeError:
