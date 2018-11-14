@@ -63,6 +63,7 @@ def main():
     parser.add_argument("-n","--launch_number",type=int,help="balloon launch number within a day")
     parser.add_argument("-s","--suffix",type=str,help="suffix for special cases")
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
+    parser.add_argument("-c","--clean0",type=bool,help="clean part_000")
 
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -88,7 +89,7 @@ def main():
     """ Parameters """
     # to do (perhaps) : some parameters might be parsed from command line
     # step and max output time
-    step = 6
+    step = 1
     hmax = 732
     dstep = timedelta (hours=step)
     # time width of the parcel slice
@@ -107,6 +108,7 @@ def main():
     suffix =''
     launch_number=''
     quiet = False
+    clean0 = False
     args = parser.parse_args()
     if args.year is not None:
         year=args.year
@@ -127,6 +129,8 @@ def main():
             quiet=True
         else:
             quiet=False
+    if args.clean0 is not None:
+        clean0 = args.clean0
 
     # Update the out_dir with the platform
     out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT')
@@ -201,6 +205,10 @@ def main():
 
     # read the part_000 file
     partStep[0] = readpart107(0,ftraj,quiet=True)
+    # cleaning is necessary for runs starting in the fake restart mode
+    # otherwise all parcels are thought to exit at the first step
+    if clean0:
+        partStep[0]['idx_back']=[]
 
     # number of hists and exits
     nhits = 0
