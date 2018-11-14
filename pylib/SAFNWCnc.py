@@ -4,15 +4,27 @@ import os
 import re
 from netCDF4 import Dataset
 
-class SAFNWC(geosat.GeoSat):
+class SAFNWC(geosat.PureSat):
     
-   def __init__(self,date,sat,typ,BBname=None):
+    def __init__(self,date,sat,typ,BBname=None):
      
         '''
         filename : name of the SAFNWC file
         '''
+        self.date = date
+        geosat.PureSat.__init__(self,sat)
+        # switch the rootdir if SAFBox
+        if BBname == 'SAFBox':
+            safnwc = 'safnwc-SAFBox'
+            root_dir = geosat.alt_root_dir
+        else:
+            safnwc = 'safnwc'
+            root_dir = geosat.root_dir
+            
         if sat=='himawari':
             nam='HIMA08'
+            if BBname == 'SAFBox':
+                nam='HIMAWARI08'
             region='globeJ'      
             geosat.read_mask_himawari()
             masksat=geosat.mask_sat['himawari']
@@ -40,98 +52,57 @@ class SAFNWC(geosat.GeoSat):
         except AttributeError:
                 # AAA, ZZZ not found in the original string
             self.time = '' # apply your error handling
-        safnwc = 'safnwc'
-        if BBname == 'SAFBox':
-            safnwc = 'safnwc-SAFBox'
-        fullname = os.path.join(geosat.root_dir,sat,safnwc,'netcdf',date.strftime("%Y"),
+                         
+        fullname = os.path.join(root_dir,sat,safnwc,'netcdf',date.strftime("%Y"),
                             date.strftime("%Y_%m_%d"),filename)
-        print (fullname)
+        #print (fullname)
         try: 
             self.ncid = Dataset(fullname, mode='r')
         except AttributeError:
             print('No file ',filename)
             return
-        self.swathnode = '/'
         # The mask must be truncated when BB is not None
         self.mask=masksat
         if BBname == 'SAFBox':
             BB = {'msg1':[[341,307],[1857,3351]],'himawari':[[475,445],[2751,3794]]} [sat]
             self.mask = masksat[BB[0][0]:BB[1][0]+1,BB[0][1]:BB[1][1]+1]
+        self.nx = self.ncid.dimensions['nx'].size
+        self.ny = self.ncid.dimensions['ny'].size
                 
-   def close(self):
+    def close(self):
         '''
         close an opened object.
         '''
         self.ncid.close()
-                  
-   def CMa(self):
-        if 'CMa' not in self.var.keys():
-            self._CMa()
-            del self.mask
-        return self
-          
-   def CMa_QUALITY(self):
-        if 'CMa_QUALITY' not in self.var.keys():
-            self._CMa_QUALITY()
-        return self
-   
-   def CMa_TEST(self):
-        if 'CMa_TEST' not in self.var.keys():
-            self._CMa_TEST()
-        return self
-    
-   def CMa_DUST(self):
-        if 'CMa_DUST' not in self.var.keys():
-            self._CMa_DUST()
-        return self
-    
-   def CMa_VOLCANIC(self):
-        if 'CMa_VOLCANIC' not in self.var.keys():
-            self._CMa_VOLCANIC()
-        return self
-
-   def CT(self):
-        if 'CT' not in self.var.keys():
-            self._CT()
-        return self
-         
-   def CT_QUALITY(self):
-        if 'CT_QUALITY' not in self.var.keys():
-            self._CT_QUALITY()
-        return self
-
-   def CT_PHASE(self):
-        if 'CT_PHASE' not in self.var.keys():
-            self._CT_PHASE()
-        return self
-
-   def CTTH_PRESS(self):
-        if 'CTTH_PRESS' not in self.var.keys():
-            self._CTTH_PRESS(self)
-        return self
         
-
-   def CTTH_TEMPER(self):
-        if 'CTTH_TEMPER' not in self.var.keys():
-            self._CTTH_TEMPER(self)
-        return self
-
-   def CTTH_QUALITY(self):
-        if 'CTTH_QUALITY' not in self.var.keys():
-            self._CTTH_QUALITY()
-        return self
-
-   def CTTH_HEIGHT(self):
-        if 'CTTH_HEIGHT' not in self.var.keys():
-            self._CTTH_HEIGHT(self)
-        return self
-
-   def CTTH_EFFECT(self):
-        if 'CTTH_EFFECT' not in self.var.keys():
-            self._CTTH_EFFECT(self)
-        return self
+    def _get_var(self,var):
+        if var not in self.ncid.variables.keys():
+            print('variable ',var,' is not available')
+            return
+        self.var[var] = np.ma.array(data=self.ncid.variables[var][:])
+        self.var[var].__setmask__(self.mask)
+        self.var[var]._sharedmask=False
+        # This masking is used for the transformation to the latxlon grid
+        # Therefore masking the filled pixels must be done at later stage
+        self.attr[var] = {}
+        self.attr[var]['FillValue'] = self.ncid.variables[var]._FillValue
+        # Indicate that filled value have not been masked
+        self.attr[var]['MaskedFill'] = False
+        try:
+            self.attr[var]['gain'] = self.ncid.variables[var].scale_factor
+            self.attr[var]['intercept'] = self.ncid.variables[var].add_offset
+        except:
+            pass
+        try:
+            self.attr[var]['units'] = self.ncid.variables[var].units
+        except:
+            self.attr[var]['units'] = None
+        try:
+            self.attr[var]['PALETTE'] = self.ncid.variables[var+'_pal'][:]
+        except:
+            pass
     
-   def _merge(self,other):
+    def _merge(self,other):
        for var in other.var.keys():
            self.var[var] = other.var[var]
        for atr in other.attr.keys():
@@ -150,32 +121,25 @@ class SAFNWC_CMa(SAFNWC):
         self.attr={}   
         self.sat=sat
         
-
     def _CMa(self):
         '''
         returns numpy array containing the product from SAF NWC file
         '''
         self.attr['CMa']={}
-        data = self.h5.get_node(self.swathnode, 'CMa')
-        data = data.read()
-        self.var['CMa'] = np.ma.array(data)
+        self.var['CMa'] = np.ma.array(self.ncid.variables['cma'][:])
         self.var['CMa'].__setmask__(self.mask)
         self.var['CMa']._sharedmask=False
         self.attr['CMa']['units']=('0: Non processed','1: Cloud free','2: Cloud contaminated','3: Cloud filled','4: Snow/Ice contaminated','5: Undefined')
-        data = self.h5.get_node(self.swathnode, '01-PALETTE')
-        self.attr['CMa']['PALETTE']=data.read()
-        
+        self.attr['CMa']['PALETTE'] = self.ncid.variables['cma_pal'][:]      
         return #self.var['CMa']
         
-    
     def _CMa_QUALITY(self):
         '''
         returns numpy array containing the quality information on the product from SAF NWC file
         '''
         self.attr['CMa_QUALITY']={}
-        data = self.h5.get_node(self.swathnode, 'CMa_QUALITY')
-        var=data.read()
-        q=np.zeros((6,len(var),len(var)))
+        var = self.ncid.variables['cma_quality'][:]
+        q=np.zeros((6,self.ny,self.nx))
         q[0,:,:]=var&0x7
         q[1,:,:]=var&0x18 >>3 
         q[2,:,:]=var&0x60 >>5
@@ -199,9 +163,8 @@ class SAFNWC_CMa(SAFNWC):
         
     def _CMa_TEST(self):
         self.attr['CMa_TEST']={}
-        data = self.h5.get_node(self.swathnode, 'CMa_TEST')
-        var = data.read()
-        t=np.zeros((16,len(var),len(var)))
+        var = self.ncid.variables['cma_test'][:]
+        t=np.zeros((16,self.ny,self.nx))
         t[0,:,:]=var&0x1
         t[1,:,:]=var&(0x2)>>1
         t[2,:,:]=var&(0x4)>>2
@@ -232,27 +195,23 @@ class SAFNWC_CMa(SAFNWC):
                 
     def _CMa_DUST(self):
         self.attr['CMa_DUST']={}
-        data = self.h5.get_node(self.swathnode, 'CMa_DUST')
+        data = self.ncid.variables['cma_dust'][:]
         self.var['CMa_DUST']=np.ma.array(data.read())
         self.var['CMa_DUST'].__setmask__(self.mask)
         self.var['CMa_DUST']._sharedmask=False
         self.attr['CMa_DUST']['units']=('0: Non processed','1: Dust','2: Non dust','3: Undefined (separability problems)')
-        data = self.h5.get_node(self.swathnode, '02-PALETTE')
-        self.attr['CMa_DUST']['PALETTE']=data.read()
+        self.attr['CMa_DUST']['PALETTE'] = self.ncid.variables['cma_dust-pal'][:]
         
         return 
     def _CMa_VOLCANIC(self):
         self.attr['CMa_VOLCANIC']={}
-        data = self.h5.get_node(self.swathnode, 'CMa_VOLCANIC')
-        self.var['CMa_VOLCANIC']=np.ma.array(data.read())
+        self.var['CMa_VOLCANIC'] = np.ma.array(self.ncid.variables['cma_volcanic'][:])
         self.var['CMa_VOLCANIC'].__setmask__(self.mask)
         self.var['CMa_VOLCANIC']._sharedmask=False
         self.attr['CMa_VOLCANIC']['units']=('0: Non processed','1: Volcanic plume','2: Non volcanic plume','3: Undefined (separability problems)')
-        data = self.h5.get_node(self.swathnode, '03-PALETTE')
-        self.attr['CMa_VOLCANIC']['PALETTE']=data.read()
+        self.attr['CMa_VOLCANIC']['PALETTE'] = self.ncid.variables['cma_volcanic_pal'][:]
         return 
         
-
 
 class SAFNWC_CT(SAFNWC):
     '''
@@ -287,9 +246,8 @@ class SAFNWC_CT(SAFNWC):
 
     def _CT_QUALITY(self):
         self.attr['CT_QUALITY']={}
-        data = self.h5.get_node(self.swathnode, 'CT_QUALITY')
-        var = data.read()
-        q=np.zeros((5,len(var),len(var)))
+        var = self.ncid.variables['CT_QUALITY']
+        q=np.zeros((5,self.ny,self.nx))
         q[0,:,:]=var&0x7
         q[1,:,:]=(var&0x18)>>3
         q[2,:,:]=(var&0x60)>>5
@@ -309,18 +267,13 @@ class SAFNWC_CT(SAFNWC):
                      ('0: Not performed','1: Performed'))
         return
      
-   
-
     def _CT_PHASE(self):
         self.attr['CT_PHASE']={}
-        data = self.h5.get_node(self.swathnode, 'CT_PHASE')
-        self.var['CT_PHASE']=np.ma.array(data.read())
+        self.var['CT_PHASE']=np.ma.array(self.ncid.variables['ct_phase'][:])
         self.var['CT_PHASE'].__setmask__(self.mask)
         self.var['CT_PHASE']._sharedmask=False
         self.attr['CT_PHASE']['units']=('0: Non processed or no cloud','1: water cloud','2: ice cloud','3: undefined')
-        data = self.h5.get_node(self.swathnode, '02-PALETTE')
-        self.attr['CT_PHASE']['PALETTE']=data.read()
-        
+        self.attr['CT_PHASE']['PALETTE'] = self.ncid.variables['ct_phase_pal']        
 
 class SAFNWC_CTTH(SAFNWC):
     '''
@@ -336,56 +289,39 @@ class SAFNWC_CTTH(SAFNWC):
         self.sat=sat
                 
     def _CTTH_PRESS(self):
+        ''' Reads CTTH pressure 
+            Beware that the pressure values are converted to hPa so that the Fillvalue
+            63350 is now outside the range of eligible values '''
         self.attr['CTTH_PRESS']={}
-        data = self.ncid.variables['ctth_pres'][:]
-        print("MAX press",np.amax(data))
-        #gain=25 #hPa/count
-        #intercept=-250 #hPa
-        gain=10 #hPa/count
-        intercept=0 #hPa
-        fillvalue=65535.
-        #self.var['CTTH_PRESS']=np.ma.array(gain*var+intercept)
-        #self.var['CTTH_PRESS']=np.ma.array(gain*data+intercept)
-        self.var['CTTH_PRESS']=np.ma.array(data/100)
+        self.var['CTTH_PRESS'] = np.ma.array(data = self.ncid.variables['ctth_pres'][:]/100)
+        # mask is replaced by the standard sat mask in order to allow sat_togrid conversion   
         self.var['CTTH_PRESS'].__setmask__(self.mask)
         self.var['CTTH_PRESS']._sharedmask=False
         self.attr['CTTH_PRESS']['units']='hPa'
-
-        data = self.ncid.variables['ctth_pres_pal'][:]        
-        self.attr['CTTH_PRESS']['PALETTE']=data
-        self.attr['CTTH_PRESS']['gain'] = gain
-        self.attr['CTTH_PRESS']['intercept'] = intercept
-        self.attr['CTTH_PRESS']['FillValue']=fillvalue
-
+        self.attr['CTTH_PRESS']['PALETTE'] = self.ncid.variables['ctth_pres_pal'][:]
+        self.attr['CTTH_PRESS']['gain'] = self.ncid.variables['ctth_pres'].scale_factor
+        self.attr['CTTH_PRESS']['intercept'] = self.ncid.variables['ctth_pres'].add_offset
+        self.attr['CTTH_PRESS']['FillValue'] = self.ncid.variables['ctth_pres']._FillValue
+        self.attr['CTTH_PRESS']['MaskedFill'] = False
         return
-
 
     def _CTTH_TEMPER(self):
         self.attr['CTTH_TEMPER']={}
-        data = self.ncid.variables['ctth_tempe'][:]
-        print("MAX temp",np.amax(data))
-        #gain=1 #K/count
-        #intercept=150 #K
-        gain=0.01 #K/count
-        intercept=130 #K
-        fillvalue=65535.
-        self.var['CTTH_TEMPER']=np.ma.array(data)
+        self.var['CTTH_TEMPER'] = np.ma.array(self.ncid.variables['ctth_tempe'][:])
         self.var['CTTH_TEMPER'].__setmask__(self.mask)
         self.var['CTTH_TEMPER']._sharedmask=False
-        self.attr['CTTH_TEMPER']['units']='K'
-        data = self.ncid.variables['ctth_tempe_pal'][:]
-
-        self.attr['CTTH_TEMPER']['PALETTE']=data
-        self.attr['CTTH_TEMPER']['gain'] = gain
-        self.attr['CTTH_TEMPER']['intercept'] = intercept
-        self.attr['CTTH_TEMPER']['FillValue']=fillvalue
+        self.attr['CTTH_TEMPER']['units'] = self.ncid.variables['ctth_tempe'].units
+        self.attr['CTTH_TEMPER']['PALETTE'] = self.ncid.variables['ctth_tempe_pal'][:]
+        self.attr['CTTH_TEMPER']['gain'] = self.ncid.variables['ctth_tempe'].scale_factor
+        self.attr['CTTH_TEMPER']['intercept'] = self.ncid.variables['ctth_tempe'].add_offset
+        self.attr['CTTH_TEMPER']['FillValue'] = self.ncid.variables['ctth_tempe']._FillValue
+        self.attr['CTTH_TEMPER']['MaskedFill'] = False
         return 
         
     def _CTTH_QUALITY(self):
         self.attr['CTTH_QUALITY']={}
-        data = self.h5.get_node(self.swathnode, 'CTTH_QUALITY')
-        var=data.read()
-        q=np.empty([6,len(var),len(var)],dtype=np.uint8)
+        var = self.ncid.variables['ctth_quality'][:]
+        q=np.empty([6,self.ny,self.nx],dtype=np.uint8)
         q[0,:,:]=var&0x3
         q[1,:,:]=(var&0x4)>>2 
         q[2,:,:]=(var&0x38)>>3
@@ -410,50 +346,28 @@ class SAFNWC_CTTH(SAFNWC):
                      ('0: No results (Non-processed, cloud free, no reliable method)','1: Good quality','2: Poor quality'))
         return
 
-
     def _CTTH_HEIGHT(self):       
         self.attr['CTTH_HEIGHT']={}
-        data = self.ncid.variables['ctth_alti'][:]
-        print("MAX height",np.amax(data))
-        #gain=25 #hPa/count
-        #intercept=-250 #hPa
-        gain=1 #hPa/count
-        intercept=-200 #hPa
-        fillvalue=65535.
-        #self.var['CTTH_PRESS']=np.ma.array(gain*var+intercept)
-        #self.var['CTTH_PRESS']=np.ma.array(gain*data+intercept)
-        ww=(data==fillvalue)
-        data=np.ma.array(data,mask=ww)
-        self.var['CTTH_HEIGHT']=data
+        self.var['CTTH_HEIGHT']=np.ma.array(self.ncid.variables['ctth_alti'][:])
         self.var['CTTH_HEIGHT'].__setmask__(self.mask)
         self.var['CTTH_HEIGHT']._sharedmask=False
-        self.attr['CTTH_HEIGHT']['units']='m'
-
-        data = self.ncid.variables['ctth_alti_pal'][:]        
-        self.attr['CTTH_HEIGHT']['PALETTE']=data
-        self.attr['CTTH_HEIGHT']['gain'] = gain
-        self.attr['CTTH_HEIGHT']['intercept'] = intercept
-        self.attr['CTTH_HEIGHT']['FillValue']=fillvalue        
+        self.attr['CTTH_HEIGHT']['units'] = self.ncid.variables['ctth_alti'].units     
+        self.attr['CTTH_HEIGHT']['PALETTE'] = self.ncid.variables['ctth_alti_pal'][:]
+        self.attr['CTTH_HEIGHT']['gain'] = self.ncid.variables['ctth_alti'].scale_factor
+        self.attr['CTTH_HEIGHT']['intercept'] = self.ncid.variables['ctth_alti'].add_offset
+        self.attr['CTTH_HEIGHT']['FillValue'] = self.ncid.variables['ctth_alti']._FillValue
+        self.attr['CTTH_HEIGHT']['MaskedFill'] = False
         return 
         
     def _CTTH_EFFECT(self):
         self.attr['CTTH_EFFECT']={}
-        data = self.h5.get_node(self.swathnode, 'CTTH_EFFECT')
-        var = data.read()
-        var=(var&0x1F).astype(int)
-        gain=5 #%/count
-        intercept=-50 #%
-        self.var['CTTH_EFFECT']=np.ma.array(gain*var+intercept)
+        self.var['CTTH_EFFECT']=np.ma.array(self.ncid.variables[ 'ctth_effectiv'][:])
         self.var['CTTH_EFFECT'].__setmask__(self.mask)
         self.var['CTTH_EFFECT']._sharedmask=False
         self.attr['CTTH_EFFECT']['units']='%'
-        data = self.h5.get_node(self.swathnode, '04-PALETTE')
-        self.attr['CTTH_EFFECT']['PALETTE']=data.read()
-        self.attr['CTTH_EFFECT']['gain'] = gain
-        self.attr['CTTH_EFFECT']['intercept'] = intercept
+        self.attr['CTTH_EFFECT']['PALETTE'] = self.ncid.variables['ctth_effectiv_pal'][:]
+        self.attr['CTTH_EFFECT']['gain'] = self.ncid.variables['ctth_effectiv'].scale_factor
+        self.attr['CTTH_EFFECT']['intercept'] = self.ncid.variables['ctth_effectiv'].add_offset
+        self.attr['CTTH_EFFECT']['FillValue'] = self.ncid.variables['ctth_effectiv']._Fillvalue
         return
-        
-        
- 
-           
         
