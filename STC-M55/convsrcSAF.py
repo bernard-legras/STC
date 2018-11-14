@@ -2,11 +2,11 @@
 """
 Main code to analyse the convective sources of the air sampled during the StratoClim
 campaign.
-This version is based on the cloudtop files calculated during summer 2017. It does not
-exploit the full resolution of the original satellite data and does not account properly
-of the weight of each satellite pixel.
-This is partially compensated by using a fairly coarse mesh 0.1°x0.1°. When several
-cloudtops fall within a mesh, we retain the highest one. This can be modified.
+This version is based on the SAFNWC product which is availabla at the same time and same 
+resolution as the satellite data.
+We use the reprocessed version which is produced on atrunacted image.
+
+Notice that the part time is supposed to start at day+1 0h where day is the day of the flight.
 
 Created on Sun Oct  8 14:03:20 2017
 
@@ -19,11 +19,12 @@ from collections import defaultdict
 from numba import jit
 from datetime import datetime, timedelta
 import os
-import deepdish as dd
-import pickle, gzip
 import sys
 import argparse
 import psutil
+import deepdish as dd
+from SAFNWCnc import SAFNWC_CTTH
+import geosat
 
 from io107 import readpart107, readidx107
 p0 = 100000.
@@ -44,7 +45,7 @@ highpcut = 50000
 
 # if True print a lot oj junk
 verbose = False
-debug = True
+debug = False
 
 # idx_orgn was not set to 1 but to 0 in M55 and GLO runs
 IDX_ORGN = 0
@@ -64,20 +65,23 @@ def main():
     parser.add_argument("-s","--suffix",type=str,help="suffix for special cases")
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
     parser.add_argument("-c","--clean0",type=bool,help="clean part_000")
-
+    parser.add_argument("-o","--opaq",type=bool,help="keep only opaque clouds")
+    parser.add_argument("-g","--good",type=bool,help="keep only good clouds") 
+    parser.add_argument("-t","--step",type=int,help="step in hour between two part files")
+    parser.add_argument("-f","--flight",type=str,help="flight identifier for balloons")
+    
     # to be updated
     if socket.gethostname() == 'graphium':
         pass
     elif 'ciclad' in socket.gethostname():
         #root_dir = '/home/legras/STC/STC-M55'
-        main_sat_dir = '/bdd/STRATOCLIM/flexpart_in'
+        main_sat_dir = '/data/legras/flexpart_in/SAFNWC'
         traj_dir = '/data/legras/flexout/STC/M55'
         out_dir = '/data/legras/STC'
     elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
         #root_dir = '/home/legras/STC/STC-M55'
-        main_sat_dir = '/bdd/STRATOCLIM/flexpart_in'
-        traj_dir = '/bdd/STRATOCLIM/flexout/M55'
-        out_dir = '/homedata/legras/STC'
+        print('does not rune on climserv')
+        exit()
     elif socket.gethostname() == 'grapelli':
         pass
     elif socket.gethostname() == 'gort':
@@ -89,26 +93,29 @@ def main():
     """ Parameters """
     # to do (perhaps) : some parameters might be parsed from command line
     # step and max output time
-    step = 1
+    step = 6
     hmax = 732
     dstep = timedelta (hours=step)
     # time width of the parcel slice
     slice_width = timedelta(minutes=5)
     # dtRange
-    dtRange={'MSG1':timedelta(minutes=30),'Hima':timedelta(minutes=20)}
+    dtRange={'MSG1':timedelta(minutes=15),'Hima':timedelta(minutes=20)}
     # number of slices between two outputs
     nb_slices = int(dstep/slice_width)
     # default values of parameters
     # date of the flight
     year=2017
     month=7
-    day=27
-    platform = 'M55'
-    advect = 'OPZ'
+    day=29
+    platform = 'GLO'
+    advect = 'EAZ'
     suffix =''
     launch_number=''
+    flight = 'KU005'
     quiet = False
     clean0 = False
+    opaq = False
+    good = False
     args = parser.parse_args()
     if args.year is not None:
         year=args.year
@@ -131,23 +138,39 @@ def main():
             quiet=False
     if args.clean0 is not None:
         clean0 = args.clean0
+    if args.good is not None:
+        good = args.good
+    if args.opaq is not None:
+        opaq = args.opaq
+    if opaq:
+        good = True
+    if args.step is not None:
+        step = args.step
+    if args.flight is not None:
+        flight = args.flight
 
     # Update the out_dir with the platform
-    out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT')
+    if opaq:
+        out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT-SAF-OPAQ')
+    elif good:
+        out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT-SAF-GOOD')
+    else:
+        out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT-SAF-ALL')
 
     fdate = datetime(year,month,day)
 
     # Manage the file that receives the print output
     if quiet:
         # Output file
-        print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.out')
-        saveout = sys.stdout
+        if platform == 'BAL':
+           print_file = os.path.join(out_dir,'out',flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.out')
+        else:  
+           print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.out')
         fsock = open(print_file,'w')
         sys.stdout=fsock
 
     # initial time to read the sat files
     # should be after the end of the flight
-    # and a 12h or 0h boundary
     sdate = fdate + timedelta(days=1)
     print('year',year,'month',month,'day',day)
     print('advect',advect)
@@ -155,34 +178,37 @@ def main():
     print('launch_number',launch_number)
     print('suffix',suffix)
 
-    # Directory of the backward trajectories
-    ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix)
-
-    # Output file
-    out_file = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.pkl')
-    out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.hdf5')
+    # Directories of the backward trajectories and name of the output file
+    if platform == 'BAL':
+        traj_dir = '/data/legras/flexout/STC/BAL'
+        ftraj = os.path.join(traj_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix)
+        out_file2 = os.path.join(out_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.hdf5')
+    else:    
+        ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix)
+        out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.hdf5')
 
     # Directories for the satellite cloud top files
-    satdir ={'MSG1':os.path.join(main_sat_dir,'StratoClim+1kmD_msg1-c'),\
-             'Hima':os.path.join(main_sat_dir,'StratoClim+1kmD_himawari-d')}
+    satdir ={'MSG1':os.path.join(main_sat_dir,'msg1','S_NWC'),\
+             'Hima':os.path.join(main_sat_dir,'himawari','S_NWC')}
 
     """ Initialization of the calculation """
-    # Initialize the slice map to be used as a buffer for the cloudtops
-    satmap = pixmap()
-    satfill = {}
-    datsat = {}
+    # Initialize the grid
+    gg = geosat.GeoGrid('FullAMA_SAFBox')
     # Initialize the dictionary of the parcel dictionaries
     partStep={}
+    satmap = pixmap(gg)
 
     # Build the satellite field generator
-    get_sat = {'MSG1': read_sat(sdate,dtRange['MSG1'],satdir['MSG1']),\
-               'Hima': read_sat(sdate,dtRange['Hima'],satdir['Hima'])}
+    get_sat = {'MSG1': read_sat(sdate,'MSG1',dtRange['MSG1'],satdir['MSG1']),\
+               'Hima': read_sat(sdate,'Hima',dtRange['Hima'],satdir['Hima'])}
 
     # Read the index file that contains the initial positions
     part0 = readidx107(os.path.join(ftraj,'index_old'),quiet=True)
     print('numpart',part0['numpart'])
     # stamp_date not set in these runs
     # current_date actually shifted by one day / sdate
+    # We assume here that part time is defined from this day at 0h
+    # sdate defined above should be equal or posterior to current_date
     current_date = fdate + timedelta(days=1)
     # check flag is clean
     print('check flag is clean ',((part0['flag']&I_HIT)!=0).sum(),((part0['flag']&I_DEAD)!=0).sum(),\
@@ -221,7 +247,6 @@ def main():
     new.fill(False)
 
     print('Initialization completed')
-
 
     """ Main loop on the output time steps """
     for hour in range(step,hmax+1,step):
@@ -304,33 +329,56 @@ def main():
             # get the slice for the particles
             datpart = next(gsp)
             if verbose: print('part slice ',i, datpart['time'])
-            # Make sure the present satellite slice is OK
+            # Check whether the present satellite image is valid
             # The while should ensure that the run synchronizes
             # when it starts.
             while satmap.check('MSG1',datpart['time']) is False:
-                # if not get next satellite slice
-                try:
-                    void = next(satfill['MSG1'])
-                # read new satellite file if the slice generator is over
-                # make a new slice generator and get first slice
-                except:
-                    datsat['MSG1'] = next(get_sat['MSG1'])
-                    satfill['MSG1'] = satmap.fill('MSG1',datsat)
-                    void = next(satfill['MSG1'])
-                finally:
-                    if verbose: print('check MSG1 ',satmap.check('MSG1',datpart['time']),'##',datpart['time'],
-                          '##',satmap.zone['MSG1']['ti'],'##',satmap.zone['MSG1']['tf'])
+                # if not get next satellite image 
+                datsat1 = next(get_sat['MSG1'])
+                # Check that the image is available
+                if datsat1 is not None:
+                    pm1 = geosat.SatGrid(datsat1,gg)
+                    pm1._sat_togrid('CTTH_PRESS')
+                    #print('pm1 diag',len(datsat1.var['CTTH_PRESS'][:].compressed()),
+                    #                 len(pm1.var['CTTH_PRESS'][:].compressed()))
+                    pm1._sat_togrid('ctth_quality')
+                    pm1._sat_togrid('ctth_conditions')
+                    pm1._sat_togrid('ctth_status_flag')
+                    pm1.attr = datsat1.attr.copy()
+                    satmap.fill('MSG1',pm1,good,opaq)
+                    del pm1
+                    del datsat1
+                else:
+                    # if the image is missing, extend the lease
+                    try:
+                        satmap.extend('MSG1')
+                    except:
+                        # This handle the unlikely case where the first image is missing
+                        continue
             while satmap.check('Hima',datpart['time']) is False:
-                try:
-                    void = next(satfill['Hima'])
-                except:
-                    datsat['Hima'] = next(get_sat['Hima'])
-                    satfill['Hima'] = satmap.fill('Hima',datsat)
-                    void = next(satfill['Hima'])
-                finally:
-                    if verbose: print('check Hima ',satmap.check('Hima',datpart['time']),'##',datpart['time'],
-                          '##',satmap.zone['Hima']['ti'],'##',satmap.zone['Hima']['tf'])
-
+                # if not get next satellite image 
+                datsath = next(get_sat['Hima'])
+                # Check that the image is available
+                if datsath is not None:
+                    pmh = geosat.SatGrid(datsath,gg)
+                    pmh._sat_togrid('CTTH_PRESS')
+                    #print('pmh diag',len(datsath.var['CTTH_PRESS'][:].compressed()),
+                    #                 len(pmh.var['CTTH_PRESS'][:].compressed()))
+                    pmh._sat_togrid('ctth_quality')
+                    pmh._sat_togrid('ctth_conditions')
+                    pmh._sat_togrid('ctth_status_flag')
+                    pmh.attr = datsath.attr
+                    satmap.fill('Hima',pmh,good,opaq)
+                    del datsath
+                    del pmh
+                else:
+                    # if the image is missing, extend the lease
+                    try:
+                        satmap.extend('Hima')
+                    except:
+                        # This handle the unlikely case where the first image is missing
+                        continue
+            
             """ PROCESS THE COMPARISON OF PARCEL PRESSURES TO CLOUDS """
             if len(datpart['x'])>0:
                 nhits += convbirth(datpart['itime'],
@@ -445,7 +493,7 @@ def convbirth(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ptop, ir_start, x0,
 #%%
 """ Function related to satellite read """
 
-def read_sat(t0,dtRange,satdir):
+def read_sat(t0,sat,dtRange,satdir):
     """ Generator reading the satellite data.
     The loop is infinite; sat data are called when required until the end of
     the parcel loop. """
@@ -453,67 +501,45 @@ def read_sat(t0,dtRange,satdir):
     dt = dtRange
     # initial time
     current_time = t0
+    namesat={'MSG1':'msg1','Hima':'himawari'}
     while True:
-        fname = os.path.join(satdir,current_time.strftime('%Y%m%d%H_TB230'))
-        dat = readidx107(fname,quiet=True)
-        """ Generate the sequence of time ranges.
-        This procedure works with empty time slots """
-        # get the list of discontinuities, note that it is turned to a list
-        id = list(np.where(dat['ir_start'][1:]-dat['ir_start'][:-1])[0])
-        #test print(dat['ir_start'][id+1],dat['ir_start'][0])
-        # append and prepend last and pre-first positions
-        id.append(len(dat['ir_start'])-1)
-        id[:0] = [-1]
-        #test  print(id)
-        dat['dtRange'] = dt
-        dat['nt'] = int(cloudtop_step/dtRange)
-        #test print('nt ',dat['nt'])
-        tf = current_time + cloudtop_step/2
-        # Generate list of time intervals
-        dat['time'] = [[tf-dt,tf]]
-        while tf > current_time - cloudtop_step/2 + dt:
-            tf -= dt
-            dat['time'].append([tf-dt,tf])
-        dat['time'].reverse()
-        #test print(len(dat['time']))
-        dat['numRange'] = np.zeros(dat['nt'],dtype='int')
-        dat['indexRange'] = np.empty(shape=(dat['nt'],2),dtype='int')
-        dat['indexRange'].fill(-999)
-        # index in the list of time segments
-        nc = dat['nt']-1
-        # process the list of crossing from the last one, backward in time
-        while len(id) > 1:
-            idc = id.pop()
-            # find the corresponding segment, skipping empty ones
-            while current_time+timedelta(seconds=int(dat['ir_start'][idc])) \
-                        != dat['time'][nc][0]:
-                nc -= 1
-            dat['indexRange'][nc,:] = [id[-1]+1,idc+1]
-            dat['numRange'][nc] = idc - id[-1]
-            nc -= 1
-        # check that all parcels are sorted
-        print('check sorting ',np.sum(dat['numRange']),dat['numpart'])
-        # iterate time
-        current_time -= cloudtop_step
+        # why do we need that since fname is not used, scoria of the previous non SAF version
+        fname = os.path.join(satdir,current_time.strftime('%Y/%Y_%m_%d'))
+        if sat=='MSG1':
+            fname = os.path.join(fname,current_time.strftime('S_NWC_CTTH_MSG1_FULLAMA-VISIR_%Y%m%dT%H%M00Z.nc'))
+        elif sat=='Hima':
+            fname = os.path.join(fname,current_time.strftime('S_NWC_CTTH_HIMAWARI08_FULLAMA-NR_%Y%m%dT%H%M00Z.nc'))
+        else:
+            print('sat should be MSG1 or Hima')
+            return
+        try:
+            dat = SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
+            dat._CTTH_PRESS()
+            # This pressure is left in hPa to allow masked with the fill_value in sat_togrid
+            # The conversion to Pa is made in fill
+            dat.attr['dtRange'] = dt
+            dat.attr['lease_time'] = current_time - dtRange
+            dat.attr['date'] = current_time
+            dat._get_var('ctth_status_flag')
+            dat._get_var('ctth_conditions')
+            dat._get_var('ctth_quality')
+            dat.close()
+        except FileNotFoundError:
+            print('SAF file not found ',current_time,namesat[sat])
+            dat = None
+        current_time -= dtRange
         yield dat
 
 #%%
 """ Describe the pixel map that contains the 5' slice of cloudtop data used in
 the comparison of parcel location """
 
-class pixmap(object):
+class pixmap(geosat.GridField):
 
-    def __init__(self):
-        self.range = np.array([[-10.,160.],[0.,50.]])
-        self.binx=1700; self.biny=500
-        self.xedges = np.arange(self.range[0,0],self.range[0,1]+0.001,\
-                               (self.range[0,1]-self.range[0,0])/self.binx)
-        self.yedges = np.arange(self.range[1,0],self.range[1,1]+0.001,\
-                               (self.range[1,1]-self.range[1,0])/self.biny)
-        self.xcent = 0.5*(self.xedges[1:] + self.xedges[:-1])
-        self.ycent = 0.5*(self.yedges[1:] + self.yedges[:-1])
-        self.stepx = 0.1
-        self.stepy = 0.1
+    def __init__(self,gg):
+        
+        geosat.GridField.__init__(self,gg)
+        
         self.zone = defaultdict(dict)
         self.zone['MSG1']['range'] = np.array([[-10.,90.],[0.,50.]])
         self.zone['Hima']['range'] = np.array([[90.,160.],[0.,50.]])
@@ -525,74 +551,80 @@ class pixmap(object):
         self.zone['Hima']['xi'] = 1000
         self.zone['MSG1']['yi'] = 0
         self.zone['Hima']['yi'] = 0
-        self.zone['MSG1']['dtRange'] = timedelta(minutes=30)
+        self.zone['MSG1']['dtRange'] = timedelta(minutes=15)
         self.zone['Hima']['dtRange'] = timedelta(minutes=20)
         # define the slice
-        self.ptop = np.empty(shape=(self.biny,self.binx),dtype=np.float)
+        self.ptop = np.empty(shape=self.geogrid.shapeyx,dtype=np.float)
         self.ptop.fill(p0)
-        self.num  = np.zeros(shape=(self.biny,self.binx),dtype=np.int)
-
-    def set_mask(self):
+        self.num  = np.zeros(shape=self.geogrid.shapeyx,dtype=np.int)
+        self.range = self.geogrid.box_range
+        self.binx = self.geogrid.box_binx
+        self.biny = self.geogrid.box_biny
+        self.stepx = (self.range[0,1]-self.range[0,0])/self.binx
+        self.stepy = (self.range[1,1]-self.range[1,0])/self.biny
+        print('steps',self.stepx,self.stepy)
+    #def set_mask(self):
          # define the regional mask of the pixmap
-         pass
+    #     pass
 
     def erase(self,zone):
-         # erase the data in the zone
-         x1 = self.zone[zone]['xi']
-         x2 = x1 + self.zone[zone]['binx']
-         y1 = self.zone[zone]['yi']
-         y2 = y1 + self.zone[zone]['biny']
-         self.ptop[y1:y2,x1:x2].fill(p0)
-         self.num[y1:y2,x1:x2].fill(0)
+        # erase the data in the zone
+        x1 = self.zone[zone]['xi']
+        x2 = x1 + self.zone[zone]['binx']
+        y1 = self.zone[zone]['yi']
+        y2 = y1 + self.zone[zone]['biny']
+        self.ptop[y1:y2,x1:x2].fill(p0)
+        self.num[y1:y2,x1:x2].fill(0)
 
     def check(self,zone,t):
-         # check that the zone is not expired
-         try:
-             test = (t > self.zone[zone]['ti']) and (t <= self.zone[zone]['tf'])
-         # Exception for the first usage when the time keys are not defined
-         except KeyError:
-             test = False
-         return test
+        # check that the zone is not expired
+        try:
+            test = (t > self.zone[zone]['ti']) and (t <= self.zone[zone]['tf'])
+            #print('check', zone,self.zone[zone]['ti'],self.zone[zone]['tf'])
+        # Exception for the first usage when the time keys are not defined
+        except KeyError:
+            print('check KeyError')
+            test = False
+        return test
+    
+    def extend(self,zone):
+        self.zone[zone]['ti'] -= self.zone[zone]['dtRange']
 
-    def fill(self,zone,dat):
-        """ Generator filling the slice with new data from the satellite dictionary
-        of cloudtop pixels, using the precalculated time ranges.
-        The data are read from the end to the beginning at fit the backward analysis
-            The indexRange is such that the first value point to the end of the last
-            range, the second to the end of the last-1 range and so on
+    def fill(self,zone,dat,good,opaq):
+        """ Function filling the zone with new data from the satellite dictionary.
         """
-        for i in reversed(range(dat[zone]['nt'])):
-            self.erase(zone)
-            self.zone[zone]['tf'] = dat[zone]['time'][i][1]
-            self.zone[zone]['ti'] = dat[zone]['time'][i][0]
-            if dat[zone]['numRange'][i] >0:
-                selec = range(dat[zone]['indexRange'][i,0],dat[zone]['indexRange'][i,1])
-
-                #idx = np.floor((dat[zone]['x'][selec] - self.range[0,0])/self.stepx).astype('int')
-                #idy = np.floor((dat[zone]['y'][selec] - self.range[1,0])/self.stepy).astype('int')
-                fillfast(self.ptop,self.num,dat[zone]['x'][selec], \
-                         dat[zone]['y'][selec],dat[zone]['p'][selec], \
-                         self.range[0,0],self.range[1,0],self.stepx,self.stepy,self.binx,self.biny)
-                if debug:
-                    sel = self.ptop < p0
-                    nbact = 100*sel.sum()/(self.binx*self.biny)
-                    if verbose: print('fill ',zone,' #selec ',len(selec),' % {:4.2f}'.format(nbact),\
-                          ' meanP {:6.0f} minP {:5.0f}'.format(self.ptop[sel].mean(),self.ptop.min()),\
-                          ' nmax ',self.num.max(),\
-                          ' minx {:7.2f} maxx {:7.2f}'.format(dat[zone]['x'][selec].min(),dat[zone]['x'][selec].max()))
-
-            yield i
-
-""" Functions related to slicing the satellite images """
-
-@jit(nopython=True)
-def fillfast(pSlice,numSlice,x,y,p,x0,y0,stepx,stepy,binx,biny):
-    for i in range(len(x)):
-        idx = min(int(np.floor((x[i]-x0)/stepx)),binx-1)
-        idy = min(int(np.floor((y[i]-y0)/stepy)),biny-1)
-        numSlice[idy,idx] += 1
-        pSlice[idy,idx] = min(p[i],pSlice[idy,idx])
-
+        # Erase the zone
+        self.erase(zone)
+        # Mask outside the new data outside the zone
+        if zone == 'MSG1':
+            dat.var['CTTH_PRESS'][:,self.zone['Hima']['xi']:] = np.ma.masked
+        elif zone == 'Hima':
+            dat.var['CTTH_PRESS'][:,:self.zone['MSG1']['binx']] = np.ma.masked
+        nbValidBeforeSel = len(dat.var['CTTH_PRESS'].compressed())
+        # Filter according to quality keeping only good retrievals with all input fields
+        if good:
+            sel = ((dat.var['ctth_quality']&0x38)==0x8) & ((dat.var['ctth_conditions']&0xFF00)==0x5500)
+            dat.var['CTTH_PRESS'][~sel] = np.ma.masked
+        # Filter the non opaque clouds if required
+        if opaq:
+            sel = (dat.var['ctth_status_flag']&4)==4
+            dat.var['CTTH_PRESS'][~sel] = np.ma.masked
+        # test : count the number of valid pixels
+        nbValidAfterSel = len(dat.var['CTTH_PRESS'].compressed())
+        print('valid pixels before & after selection',zone,nbValidBeforeSel,nbValidAfterSel)
+        # Inject the non masked new data in the pixmap
+        # Conversion to Pa is done here
+        self.ptop[~dat.var['CTTH_PRESS'].mask] = 100*dat.var['CTTH_PRESS'][~dat.var['CTTH_PRESS'].mask]
+        # set the new expiration date 
+        self.zone[zone]['tf'] = dat.attr['date']
+        self.zone[zone]['ti'] = dat.attr['lease_time']
+        
+        if debug:
+            sel = self.ptop < p0
+            nbact = 100*sel.sum()/(self.geogrid.box_binx*self.geogrid.box_biny)
+            if verbose: print('fill ',zone,' #selec ',len(sel),' % {:4.2f}'.format(nbact),\
+                ' meanP {:6.0f} minP {:5.0f}'.format(self.ptop[sel].mean(),self.ptop.min()))
+        return
 
 if __name__ == '__main__':
     main()

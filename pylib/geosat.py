@@ -45,33 +45,42 @@ import sza_correc
 
 # Defines data directories
 # To be replaced by your own environment variables 
+# Notice: sats_dir and gridsat not used in the module
+#         alt_root_dir used in the derived module SAFNWCnc for SAFBox
 if socket.gethostname() == 'Graphium':
     sats_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
     root_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
+    alt_root_dir = root_dir
     gridsat = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
 elif 'ciclad' in socket.gethostname():
     sats_dir = '/data/legras/sats'
     root_dir = '/bdd/STRATOCLIM/data'
+    alt_root_dir = '/data/legras/flexpart_in/SAFNWC'
     gridsat = 'undefined'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
     sats_dir = '/home/stratocl/TRAJ/pylib'
     root_dir = '/bdd/STRATOCLIM/data'
+    alt_root_dir = root_dir
     gridsat = 'undefined'
 elif socket.gethostname() == 'grapelli':
     sats_dir = '/limbo/data/STC/sats'
     root_dir = '/limbo/data/STC/sats'
+    alt_root_dir = root_dir
     gridsat =  '/limbo/data/STC/sats'
 elif socket.gethostname() in ['couperin','zappa','coltrane','puccini']:
     sats_dir = '/net/grapelli/limbo/data/STC/sats'
     root_dir = '/net/grapelli/limbo/data/STC/sats'
+    alt_root_dir = root_dir
     gridsat =  '/net/grapelli/limbo/data/STC/sats'
 elif socket.gethostname() == 'gort':
     sats_dir = '/dkol/data/STC/sats'
     root_dir = '/dkol/data/STC/sats'
+    alt_root_dir = root_dir
     gridsat =  '/dkol/data/STC/sats'  
 elif 'icare' in socket.gethostname():
     sats_dir = '/home/b.legras/SAFNWC'
     root_dir = '/home/b.legras/sats'
+    alt_root_dir = root_dir
     gridsat = 'undefined'
 else:
      print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
@@ -221,7 +230,6 @@ class MSG(GeoSat):
         self.var['IR0']._sharedmask=False
         try: 
             self.fill_value['IR0'] = self.ncid.variables['IR_108'][:].fill_value
-            print('damaged image')               
         except:
             self.fill_value['IR0'] = None                                         
         return
@@ -461,7 +469,7 @@ class GridField(object):
         # Initializes var disctionary
         self.var={}
 
-    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None):
+    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True):
         # test existence of key field
         if field not in self.var.keys():
             print ('undefined field')
@@ -473,7 +481,8 @@ class GridField(object):
         if 'FullAMA' in geogrid.gridtype:
             fig = plt.figure(figsize=[10, 6])
         else:
-            fig = plt.figure()  
+            fig = plt.figure()
+        
         m = Basemap(projection='cyl', llcrnrlat=geogrid.box_range[1, 0], urcrnrlat=geogrid.box_range[1, 1],
                 llcrnrlon=geogrid.box_range[0, 0], urcrnrlon=geogrid.box_range[0, 1], resolution='c')
         m.drawcoastlines(color='k')
@@ -504,12 +513,12 @@ class GridField(object):
         cax = fig.add_axes([0.91, 0.15, 0.03, 0.7])
         plt.colorbar(iax, cax=cax)
         plt.title(txt)
-        plt.show()
+        plt.show(block=block)
         return None
 
     def patch(self,other,lon,var):
         ''' Patch two fields on the same grid at a given longitude given by lon.
-        Self is on the left oth other
+        Self is on the left of the other
         '''
         if self.gridtype != other.gridtype:
             print('error: grids do not match')
@@ -546,8 +555,7 @@ class SatGrid(GridField):
             self.cname = self.sat + '_' + self.gridtype
         except:
             print ('geosat object basdly defined')
-            return 
-        # test whether the corresponding lookup table is loaded
+            return
         global lookup, lookup_dist
         try:
             if self.cname not in lookup.keys():
@@ -560,24 +568,31 @@ class SatGrid(GridField):
             try:
                 lookup[self.cname]=pickle.load(gzip.open(os.path.join(root_dir,self.sat,'lookup_'+self.cname+'.pkl'),'rb'))
                 lookup_dist[self.cname]=pickle.load(gzip.open(os.path.join(root_dir,self.sat,'lookup_dist_'+self.cname+'.pkl'),'rb'))
-                           
+                print('lookup table loaded for ',self.cname)          
             except:
                 print ('Lookup table for this grid and sat does not exist yet.')
                 print ('Must be done prior to creation of this object.' )     
 
 #%%
     def _sat_togrid(self,field,clean=True):
-        ''' Conversion to the grid using lookup table '''
+        ''' Conversion to the grid using lookup table 
+        If the parameter clean is set, the data with fill_value are masked'''
         # check that the field has been read
         if field not in self.geosat.var.keys():
             print ('field must be read before conversion to grid')
             return
-        self.var[field] = np.ma.array(self.geosat.var[field].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx),
-                       mask=lookup[self.cname]['mask'].reshape(self.geogrid.shapeyx))
+        # doing the conversion and setting the mask of the data which cannot be defined in
+        # the target grid
+        self.var[field] = np.ma.array(self.geosat.var[field].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx))
+        self.var[field].__setmask__(lookup[self.cname]['mask'].reshape(self.geogrid.shapeyx))
+        self.var[field]._sharedmask=False
         try:
             self.fill_value = self.geosat.fill_value[field]
         except:
-            self.fill_value = None
+            try:
+                self.fill_value = self.geosat.attr[field]['FillValue']
+            except:
+                self.fill_value = None
         if clean & (self.fill_value != None):
             self.var[field][self.var[field]==self.fill_value] = np.ma.masked
         return 
