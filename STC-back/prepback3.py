@@ -4,10 +4,13 @@
 Created on Fri Dec 23 09:57:27 2016
 
 This script generates the part_000 file containing parcels on a given pressure 
-for a backward run. The parcels are generated on a half-degree centered grid in the 
+for a backward run. The parcels are generated on a one degree centered grid in the 
 target_range which is also used for the analysis of forward runs from convection.  
 The parcels are launched every 15 minutes which means 816000 parcels per day in the 
 standard setting or 25296000 in July or august month.
+This version is made for the full domain 30S-50N, 179W-181E
+The interval between two launches is 1h.
+It generates 691200 parcels per day or 21427200 per July or August month
 
 The output is produced as a part_000 format 107 file which can be used in a StratoClim
 backward run. The format 107 is used for convenience even if the flag field is of no use
