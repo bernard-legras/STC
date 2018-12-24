@@ -39,7 +39,10 @@ import socket
 import os
 import pickle,gzip
 from scipy.interpolate import NearestNDInterpolator
-from mpl_toolkits.basemap import Basemap
+#from mpl_toolkits.basemap import Basemap
+from cartopy import feature
+#from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import sza_correc
 
@@ -90,24 +93,28 @@ else:
 mask_sat={}
 lonlat_sat={}
 
+# Read the masks used for the image read by this package
+# The masks are defined in the STC/sats subdirectories
 def read_mask_himawari():
     mask_sat['himawari'] = pickle.load(gzip.open(os.path.join(root_dir,'himawari','mask.pkl'),'rb'))
 def read_mask_MSG():
     # change after 14/05/2017: use the mask based on the data and not that from the lonlat file  
     mask_sat['msg'] = pickle.load(gzip.open(os.path.join(root_dir,'msg1','mask.pkl'),'rb'))
+# Read the satellite lonlat file to generate the projection
 def read_lonlat(sat):
     if sat == 'msg1':
         satin = 'msg3'
     else:
         satin = sat
     lonlat_sat[sat] = pickle.load(gzip.open(os.path.join(root_dir,satin,'lonlat.pkl'),'rb'))
+    # The msg1 longitudes are derived from the msg3 longitudes by +41.5 offset 
     if sat == 'msg1':
        lonlat_sat[sat]['lon'] += 41.5
 
 #%%
 class PureSat(object):
     ''' mother class of GeoSat that allows to define derived objects from
-    data read with GeoSat class    
+    data read with GeoSat class
     '''
     def __init__(self,sat):
         self.var={}
@@ -156,6 +163,7 @@ class PureSat(object):
 class GeoSat(PureSat):
     '''
     Generic parent class to read geostationary netcdf objects.
+    Not to be used directly.
     Use product-specific classes instead.
     '''
     def __init__(self, filename):
@@ -202,6 +210,7 @@ class GeoSat(PureSat):
 
     def degrad_IR0(self):
         ''' Makes a new geosat image with averaged total radiance from the estimated brightness temperature
+            This is not good and usage should be avoided. The average should be based on the radiance for the IR channel
         '''
         target=PureSat()
         radiance = self.var['IR0']**4
@@ -217,7 +226,7 @@ class GeoSat(PureSat):
         return target       
 
 class MSG(GeoSat):
-    
+    ''' Specific code for MSG SEVIRI instruments '''
     def __init__(self, filename):
         GeoSat.__init__(self,filename)
         
@@ -248,6 +257,7 @@ class MSG(GeoSat):
         return
     
 class MSG1(MSG):
+    ''' Specific code for MSG1 '''
     def __init__(self,date):
         self.sat = 'msg1'
         self.date =  date
@@ -257,6 +267,7 @@ class MSG1(MSG):
         MSG.__init__(self,fullname)
 
 class MSG3(MSG):
+    ''' Specific code for MSG3 '''
     def __init__(self,date):
         self.sat='msg3'
         self.date =  date
@@ -266,6 +277,7 @@ class MSG3(MSG):
         MSG.__init__(self,fullname)
 
 class Himawari(GeoSat):
+    ''' Specific code for Himawari '''
     def __init__(self,date):
         self.sat = 'himawari'
         self.date =  date
@@ -292,6 +304,11 @@ class Himawari(GeoSat):
 class GeoGrid(object):
     '''
     Defines the attributes of the grid.
+    The regular latxlongrids are defined by a bounding box and 
+    the number of meshes in latitude and longitudes.
+    The edges and the centers are then calculated. The projection
+    is based on the centers, thus assuming that the satellite grids
+    are also based on pixel centers.
     '''
     def __init__(self, gridtype,box=None,bins=None):
         self.gridtype = gridtype
@@ -326,7 +343,13 @@ class GeoGrid(object):
             self.box_range = np.array([[65.,130.],[5.,40.]])
             self.box_binx = 650; self.box_biny = 350;
         elif gridtype == "GridSat":
-            # pixels of 0.07 degree slightly overmatch
+            """ pixels of 0.07 degree slightly overmatch at the 
+                last longitude since 0.07 is not a divider of 360.
+                Notice however that the gridsat FAQ indicates that 
+                lat lon are centered but this contradicts somewhat 
+                starting in lat at -70 and ending at 69.93, 
+                not being symmetric. 
+            """
             self.box_range = np.array([[0.,360.01],[-70.,70.]])
             self.box_binx = 5143; self.box_biny = 2000;
         else:
@@ -335,7 +358,7 @@ class GeoGrid(object):
                 raise NameError
             else:
                 self.gridtype = gridtype
-                self.box_range = box
+                self.box_range = np.array(box)
                 self.box_binx = bins[0]
                 self.box_biny = bins[1]
         # derived grid properties 
@@ -364,7 +387,7 @@ class GeoGrid(object):
             print ('La1 outside bounds')
         if (La2 > self.box_range[1,1]) | (Lo1 < self.box_range[1,0]):
             print ('La2 outside bounds')
-        # find boundaries
+        # find boundaries as nearest neigbours in the mother grid
         eps=0.0001
         lowlon = np.where(self.xedge-Lo1-eps<=0)[0][-1]
         higlon = np.where(self.xedge-Lo2+eps>=0)[0][0]
@@ -392,6 +415,16 @@ class GeoGrid(object):
                lat1 and lat2 are the first and the last latitude retained
                lon1 and lon2 are the first and the last longitude retained
                BBname is a box name used to build the name of the output file
+               This option is useful if the input results from the processsing 
+               of a part of the satellite images.
+        Very important point: The lonlat file must be a masked array equipped
+               with the same mask that will be used for all the images of the satellite.
+               Failure to enforce strictly this rule will generate irrecoverable
+               errors. For MSG and Hiamawari, this mask is read in read_mask_MSG and
+               read_mask_himawari. It is not read here but it is assumed that lonlat.pkl
+               has been generated with it.
+               TO DO: add a check here that read the mask and compares it to that in the lonlat.pkl
+               file to be sure they match.
         '''                 
         # get the lon lat grid from the satellite
         try:
@@ -408,6 +441,7 @@ class GeoGrid(object):
             if sat == 'msg1':
                 lonlat['lon'] += 41.5
             # extract the bounding box if required
+            # 
             if BB is not None:
                 try: 
                     lonlat['lon'] = lonlat['lon'][BB[0]:BB[1]+1,BB[2]:BB[3]+1]
@@ -482,38 +516,55 @@ class GridField(object):
             fig = plt.figure(figsize=[10, 6])
         else:
             fig = plt.figure()
-        
-        m = Basemap(projection='cyl', llcrnrlat=geogrid.box_range[1, 0], urcrnrlat=geogrid.box_range[1, 1],
-                llcrnrlon=geogrid.box_range[0, 0], urcrnrlon=geogrid.box_range[0, 1], resolution='c')
-        m.drawcoastlines(color='k')
-        m.drawcountries(color='k')
-        if geogrid.box_range[0, 1] - geogrid.box_range[0, 0] <= 50.:
-            spacex = 5.
-        else:
-            spacex = 10.
-        if geogrid.box_range[1, 1] - geogrid.box_range[1, 0] <= 50.:
-            spacey = 5.
-        else:
-            spacey = 10.
-        bound_lon = np.floor(geogrid.box_range[0, 0]/spacex)*spacex
-        bound_lat = np.floor(geogrid.box_range[1, 0]/spacey)*spacey
-        meridians = np.arange(bound_lon, geogrid.box_range[0, 1]+spacex, spacex)
-        parallels = np.arange(bound_lat, geogrid.box_range[1, 1]+spacey, spacey)
-        m.drawmeridians(meridians, labels=[0, 0, 0, 1], fontsize=8)
-        m.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=8)
-        if subgrid==None:
+        fs = 15
+        # it is unclear how the trick with cm_lon works in imshow but it does
+        # the web says that it is tricky to plot data accross dateline with cartopy
+        # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
+        cm_lon =0
+        # guess that we want to plot accross dateline 
+        if geogrid.box_range[0,1]> 180: cm_lon = 180
+        proj = ccrs.PlateCarree(central_longitude=cm_lon)
+        fig = plt.figure(figsize=[11,4])
+        fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
+        ax = plt.axes(projection = proj)
+        if subgrid == None:
             plotted_field = self.var[field]
         else:
             # extraction in subgrid
             plotted_field = self.var[field][geogrid.corner[1]:geogrid.corner[1]+geogrid.box_biny,
                                             geogrid.corner[0]:geogrid.corner[0]+geogrid.box_binx]
-            
-        iax = plt.imshow(plotted_field, interpolation='nearest', extent=geogrid.box_range.flatten(),
-                     cmap=cmap,clim=clim, origin='lower', aspect=1.)
-        cax = fig.add_axes([0.91, 0.15, 0.03, 0.7])
-        plt.colorbar(iax, cax=cax)
-        plt.title(txt)
-        plt.show(block=block)
+        iax = ax.imshow(plotted_field, transform=proj, interpolation='nearest',
+                    extent=geogrid.box_range.flatten()-np.array([cm_lon,cm_lon,0,0]),
+                    origin='lower', aspect=1.,cmap=cmap,clim=clim)
+        ax.add_feature(feature.NaturalEarthFeature(
+            category='cultural',
+            name='admin_1_states_provinces_lines',
+            scale='50m',
+            facecolor='none'))
+        ax.coastlines('50m')
+        #ax.add_feature(feature.BORDERS)
+        # The grid adjusts automatically with the following lines
+        # If crossing the dateline, superimposition of labels there
+        # can be suppressed by specifying xlocs
+        xlocs = None
+        if cm_lon == 180: xlocs = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
+        gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
+                      linewidth=2, color='gray', alpha=0.5, linestyle='--')
+        gl.xlabels_top = False
+        gl.ylabels_right = False
+        #gl.xformatter = LONGITUDE_FORMATTER
+        #gl.yformatter = LATITUDE_FORMATTER
+        gl.xlabel_style = {'size': fs}
+        gl.ylabel_style = {'size': fs}
+        #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
+        plt.title(txt,fontsize=fs)
+        # plot adjusted colorbar
+        axpos = ax.get_position()
+        pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
+        pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
+        cbar=fig.colorbar(iax,cax=pos_cax)
+        cbar.ax.tick_params(labelsize=fs)
+        plt.show(block=block)     
         return None
 
     def patch(self,other,lon,var):
