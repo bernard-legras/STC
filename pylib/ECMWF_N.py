@@ -156,7 +156,10 @@ class ECMWF_pure(object):
         return None
 
     def extract(self,latRange=None,lonRange=None,varss=None,vard=None):
-        """ extract all variables on a reduced grid """
+        """ extract all variables on a reduced grid
+           varss is a list of the 3D variables
+           vard is a list of the 2D variables 
+        """
         # first determine the boundaries of the domain
         new = ECMWF_pure()
         if (latRange == []) | (latRange == None):
@@ -528,7 +531,7 @@ class ECMWF_pure(object):
         # dz from the hydrostatic formula dp/dz = - rho g = - p/T g /R 
         # dz = dz/dp p dlogp = - 1/T R/g dlogp (units m)
         # dz is shifted b one index position / T, p
-        # dz[i] is the positive logp thickness between levels i and i+1, that is 
+        # dz[i] is the positive logp thickness for the layer between levels i and i+1, that is 
         # above level i+1
         dz = cst.R/cst.g * self.var['T'][1:,:,:] * (logp[1:,:,:]-logp[:-1,:,:])
         # calculate dT/dz = - 1/p dT/dlogp rho g = - g/R 1/T dT/dlogp 
@@ -567,7 +570,7 @@ class ECMWF_pure(object):
                         found = True
                         break
                     # location of the basis of the interval 
-                    # +1 to account for the shift of leapfrogging
+                    # +1 to account for the shift of the finite difference
                     lev0 = test+1+highbnd
                     lev = lev0-1
                     Deltaz = dz[lev,jy,ix]
@@ -942,6 +945,10 @@ class ECMWF(ECMWF_pure):
             lev = self.attr['levs'][i]
             self.var['PZ'][i,:,:] = self.attr['ai'][lev-1] \
                                   + self.attr['bi'][lev-1]*self.var['SP']
+                                  
+    def _mkpscale(self):
+        # Define the standard pressure scale for this vertical grid
+        self.attr['pscale'] = self.attr['am'] + self.attr['bm'] * 101325
 
     def _mkthet(self):
         # Calculate the potential temperature
