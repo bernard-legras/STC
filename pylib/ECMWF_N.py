@@ -663,10 +663,10 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
             elif 'ciclad' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
-            elif 'grapelli' in socket.gethostname():
+            elif 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/STC'
-            elif socket.gethostname() in ['coltrane','zappa','couperin','puccini']:
-                self.rootdir = '/net/grapelli/dsk2/ERA5/STC'
+            elif socket.gethostname() in ['grapelli','coltrane','zappa','couperin','puccini']:
+                self.rootdir = '/net/satie/dsk2/ERA5/STC'
             else:
                 print('unknown hostname for this dataset')
                 return

@@ -65,16 +65,16 @@ elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostna
     root_dir = '/bdd/STRATOCLIM/data'
     alt_root_dir = root_dir
     gridsat = 'undefined'
-elif socket.gethostname() == 'grapelli':
+elif socket.gethostname() == 'satie':
     sats_dir = '/limbo/data/STC/sats'
     root_dir = '/limbo/data/STC/sats'
     alt_root_dir = root_dir
     gridsat =  '/limbo/data/STC/sats'
-elif socket.gethostname() in ['couperin','zappa','coltrane','puccini']:
-    sats_dir = '/net/grapelli/limbo/data/STC/sats'
-    root_dir = '/net/grapelli/limbo/data/STC/sats'
+elif socket.gethostname() in ['grapelli','couperin','zappa','coltrane','puccini']:
+    sats_dir = '/net/satie/limbo/data/STC/sats'
+    root_dir = '/net/satie/limbo/data/STC/sats'
     alt_root_dir = root_dir
-    gridsat =  '/net/grapelli/limbo/data/STC/sats'
+    gridsat =  '/net/satie/limbo/data/STC/sats'
 elif socket.gethostname() == 'gort':
     sats_dir = '/dkol/data/STC/sats'
     root_dir = '/dkol/data/STC/sats'
