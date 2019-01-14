@@ -500,7 +500,7 @@ class GridField(object):
         except:
             print ('geogrid object basdly defined')
             return
-        # Initializes var disctionary
+        # Initializes var dictionary
         self.var={}
 
     def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True):
@@ -630,7 +630,7 @@ class SatGrid(GridField):
         If the parameter clean is set, the data with fill_value are masked'''
         # check that the field has been read
         if field not in self.geosat.var.keys():
-            print ('field must be read before conversion to grid')
+            print ('field ',field,' must be read before conversion to grid')
             return
         # doing the conversion and setting the mask of the data which cannot be defined in
         # the target grid
