@@ -13,7 +13,7 @@ import geosat
 from datetime import datetime
 #import matplotlib.pyplot as plt
 #%%
-date=datetime(year=2017,month=5,day=18,hour=12)
+date=datetime(year=2017,month=3,day=15,hour=19)
 # Himawari read
 hima=geosat.Himawari(date)
 # read IR0
