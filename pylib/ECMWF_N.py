@@ -646,10 +646,10 @@ class ECMWF(ECMWF_pure):
         self.project = project
         self.date = date
         if self.project=='VOLC':
-            if 'grapelli' in socket.gethostname():
+            if 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/VOLC'
             elif 'ens' in socket.gethostname():
-                self.rootdir = '/net/grapelli/dsk2/ERA5/VOLC'
+                self.rootdir = '/net/satie/dsk2/ERA5/VOLC'
             else:
                 print('unknown hostname for this dataset')
                 return

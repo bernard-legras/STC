@@ -20,9 +20,9 @@ elif 'ciclad' in socket.gethostname():
     STC_database ='/home/legras/STC/STC-M55/database'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
     STC_database = '/home/legras//STC/STC-M55/database'
-elif socket.gethostname() == 'grapelli':
+elif socket.gethostname() == 'satie':
     STC_database = '/limbo/data/STC/STC-M55/database'
-elif socket.gethostname() == ['zappa','couperin','coltrane','puccini']:
+elif socket.gethostname() == ['zappa','couperin','coltrane','puccini','grapelli']:
     STC_database ='/net/grapelli/limbo/data/STC/STC-M55/database'
 elif socket.gethostname() == 'gort':
     STC_database = '/dkol/data/STC/STC-M55/database'
