@@ -6,6 +6,8 @@ This code process the forward runs to provide transit statistics
 
 This version should work for all cases
 
+Parameterized for Box-meanhigh on 15 Jan 2019
+
 @author: Bernard Legras
 """
 
@@ -45,8 +47,8 @@ vert = 'baro'
 target = 'FullAMA'
 
 # number of start dates to be processed
-ndate = 5
-dates = ["Jul-11","Jul-21","Aug-01","Aug-11","Aug-21"]
+ndate = 6
+dates = ["Jul-01","Jul-11","Jul-21","Aug-01","Aug-11","Aug-21"]
 
 # for each start date, define the first time read, the last time read and 
 # the increment, all in hour
@@ -85,8 +87,8 @@ print('target',target)
 # other parameters 
 #traj_dir = "/data/legras/flexout/STC/FORW"+saf    
 #out_dir = "/data/legras/STC/STC-FORW"+saf+"-OUT"
-traj_dir = "/data/legras/flexout/STC/FORWN"    
-out_dir = "/data/legras/STC/STC-FORWN-OUT-OPAQ"
+traj_dir = "/data/legras/flexout/STC/FORWBox-meanhigh"    
+out_dir = "/data/legras/STC/STC-FORWBox-meanhigh-OUT"
 
 # initialize transit dictionary
 pile=tt.transit(water_path=water_path,vert=vert,target=target)
@@ -95,7 +97,7 @@ pile=tt.transit(water_path=water_path,vert=vert,target=target)
 #%% Central section
 
 #if saf == 'N':
-run_type = supertype+'-N-'+vert+'-'+target
+run_type = supertype+'-Box-'+vert+'-'+target
 #else:
 #    run_type = supertype+'-O-'+vert+'-'+target
     
@@ -128,8 +130,11 @@ for i in range(ndate):
     # initialized live record
     sources['live'] = np.empty(sources['numpart'],dtype=bool)
     sources['live'].fill(True)
-    # good and opaq clouds
-    sources['go'] = (sources['flag'] & 0x18000000) == 0x18000000
+    # veryhigh filter generating a boolean slice among initial points
+    ct = sources['flag'] >> 24
+    sources['veryhigh'] = (ct == 9) | (ct == 13)
+    sources['silviahigh'] = ((ct == 9) & (sources['x']>90.75)) | \
+        (((ct==8)|(ct==9)|(ct==13)) & (sources['x']<=90.75))
     print("stat-forw> date "+ dates[i])
     
     # Loop on steps
@@ -156,7 +161,9 @@ for i in range(ndate):
         data['t0'] = sources['t'][idxsel]
         data['thet0'] = sources['thet'][idxsel]
         data['alt0'] = sources['alt'][idxsel]
-        data['go'] = sources['go'][idxsel]
+        # generate a veryhigh boolean slice among active parcels 
+        data['veryhigh'] = sources['veryhigh'][idxsel]
+        data['silviahigh'] = sources['silviahigh'][idxsel]
         if water_path :
             sources['rv_s'][idxsel] = np.minimum(sources['rv_s'][idxsel],satratio(data['p'],data['t']))
             data['rv_t'] = sources['rv_s'][idxsel]
