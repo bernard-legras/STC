@@ -5,7 +5,10 @@ Created on Sun 25 March 2018
 
 This script generates the part_000 file containing parcels initialized from the top of
 convective clouds for a forward run. The parcels are generated from the SAFNWC data on a 0.1° grid
-with a cutoff at 175 hPa.
+with a cutoff at 175 hPa by default which can be chnaged as a parameter.
+
+The sampling of the cloud data is performed every hour. This is not cngeable as a parameter in
+the present version. If this value is changed, the weighting in the analysis should be changed accordingly.
 
 The output is produced as a part_000 format 107 file which can be used in a StratoClim
 backward run. The format 107 is used for convenience even if the flag field is of no use
@@ -64,7 +67,7 @@ if __name__ == '__main__':
     parser.add_argument("-ld","--last_day",type=int,choices=1+np.arange(31),help="last day")      
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
     parser.add_argument("-c","--cut",type=float,help="pressure cut in hPa")
-    parser.add_argument("-t","--type",type=str,choices=["high","meanhigh","veryhigh"],help="type filter")                   
+    parser.add_argument("-ct","--cloud_type",type=str,choices=["high","meanhigh","veryhigh"],help="type filter")                   
     
     # Default values
     base_year = 2017
@@ -73,7 +76,7 @@ if __name__ == '__main__':
     base_day2 = 1
     cut_level = 175.1 # in hPa
     quiet = False
-    type = 'veryhigh'
+    cloud_type = 'veryhigh'
     
     #saf_levels = [175.,150.,125.,100.,75.]
     #p_interp = [17500.,15000.,12500.,1000.,7500.]
@@ -85,7 +88,7 @@ if __name__ == '__main__':
     if args.last_day is not None: base_day2 = args.last_day
     if args.quiet is not None:
         if args.quiet=='y': quiet=True
-    if args.type is not None: type = args.type
+    if args.cloud_type is not None: cloud_type = args.cloud_type
     if args.cut is not None: cut_level = args.cut
     
     # Needs to start at 0h next month to be on an EN date, avoids complicated adjustment
@@ -100,7 +103,7 @@ if __name__ == '__main__':
     # Define main directories
     if 'ciclad' in socket.gethostname():
             SAF_dir = '/data/legras/STC/STC-SAFNWC-OUT'
-            flexout = '/data/legras/flexout/STC/FORWBox-'+type
+            flexout = '/data/legras/flexout/STC/FORWBox-'+cloud_type
             #part_dir = os.path.join(flexout,'BACK-EAZ-'+date_beg.strftime('%b')\
             #                        +'-'+str(int(base_level))+'hPa')
             part_dir = os.path.join(flexout,'FORW-EAZ-'+date_beg.strftime('%Y-%b-%d'))
@@ -126,12 +129,12 @@ if __name__ == '__main__':
     part0['nact_lastO'] = 0
     part0['nact_lastNM'] = 0
     part0['nact_lastNH'] = 0
-    part0['ir_start'] = np.empty(0,dtype=int)
+    part0['ir_start'] = np.empty(0,dtype=np.uint32)
     part0['x'] = np.empty(0,dtype=float)
     part0['y'] = np.empty(0,dtype=float)
     part0['t'] = np.empty(0,dtype=float)
     part0['p'] = np.empty(0,dtype=float)
-    part0['flag'] = np.empty(0,dtype=int)
+    part0['flag'] = np.empty(0,dtype=np.uint32)
     
     # Generate the grid of points that will be used with the masked array
     # trick to generate the coordinates of points to be launched
@@ -173,24 +176,26 @@ if __name__ == '__main__':
         # process the cloud tops above cut_level 
         ptop_temp = np.ma.masked_greater(ptop,cut_level)
         ct = (cloud_flag >>24) & 0xFF
-        if type == 'high':
+        if cloud_type == 'high':
             filt = (ct == 8) | (ct == 9) | ((ct >= 11) & (ct <= 14))
-        elif type == 'meanhigh':
+        elif cloud_type == 'meanhigh':
             filt = (ct == 8) | (ct == 9) | (ct == 12) | (ct == 13)
-        elif type == 'veryhigh':
+        elif cloud_type == 'veryhigh':
             filt = (ct == 9) | (ct == 13)          
         ptop_temp[~filt] = np.ma.masked       
         # apply same mask to other fields
         x_temp = np.ma.array(data=xg,mask=ptop_temp.mask)
         y_temp = np.ma.array(data=yg,mask=ptop_temp.mask)
-        cloud_flag_temp = np.ma.array(cloud_flag,mask=ptop_temp.mask)
+        ct_temp = np.ma.array(data=ct,mask=ptop_temp.mask)
+        #cloud_flag_temp = np.ma.array(cloud_flag,mask=ptop_temp.mask)
         num_temp = ptop_temp.count()
         # compressed 1d data
         # pressure converted to Pa
         p_1d = ptop_temp.compressed()*100
         x_1d = x_temp.compressed()
         y_1d = y_temp.compressed()
-        cloud_flag_1d = cloud_flag_temp.compressed()
+        ct_1d = ct_temp.compressed()
+        #cloud_flag_1d = cloud_flag_temp.compressed()
         # calculate the index on the ECMWF ERA5 grid, clipping the round-off errors
         ix = np.clip(np.floor((x_1d-x0)*pixel_per_degree),0,max_ix).astype(np.int)
         jy = np.clip(np.floor((y_1d-y0)*pixel_per_degree),0,max_jy).astype(np.int)
@@ -204,17 +209,19 @@ if __name__ == '__main__':
         part0['y'] = np.append(part0['y'],y_1d)
         part0['t'] = np.append(part0['t'],tt_1d)
         part0['p'] = np.append(part0['p'],p_1d)
-        part0['ir_start'] = np.append(part0['ir_start'],np.full(num_temp,ir_start,dtype=int))
-        # add the flag for good and opaq clouds to the standard value 53=0x35 
-        # SAFNWC + new parcel + time relative to stampdate 
-        part0['flag'] = np.append(part0['flag'],cloud_flag_1d*0x8000000+53)
+        part0['ir_start'] = np.append(part0['ir_start'],np.full(num_temp,ir_start,dtype=np.uint32))
+        # add the type of clouds to the standard value 53=0x35 
+        # The cloud type is put in the last 8 bits of the 32 bit flag
+        # SAFNWC + new parcel + time relative to stampdate
+        # cloud_flag 
+        part0['flag'] = np.append(part0['flag'],53 + (ct_1d.astype(np.uint32) << 24))
         # increment of the date
         print('date',current_date,' numpart',numpart)
         current_date = current_date + timedelta(hours=1)
         stdout.flush()
     
     # final size information 
-    part0['idx_back'] = (1+np.arange(numpart)).astype(np.int)
+    part0['idx_back'] = (1+np.arange(numpart)).astype(np.uint32)
     part0['numpart'] = numpart
     part0['nact'] = numpart
     
