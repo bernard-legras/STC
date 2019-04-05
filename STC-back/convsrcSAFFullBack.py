@@ -23,7 +23,7 @@ import sys
 import argparse
 import psutil
 import deepdish as dd
-from SAFNWCnc import SAFNWC_CTTH
+import SAFNWCnc
 import geosat
 
 from io107 import readpart107, readidx107
@@ -64,9 +64,8 @@ def main():
     parser.add_argument("-s","--suffix",type=str,help="suffix for special cases")
     parser.add_argument("-l","--level",type=int,help="PT level")
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
-    parser.add_argument("-o","--opaq",type=bool,help="keep only opaque clouds")
-    parser.add_argument("-g","--good",type=bool,help="keep only good clouds") 
     parser.add_argument("-t","--step",type=int,help="step in hour between two part files")
+    parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -81,7 +80,7 @@ def main():
         main_sat_dir = '/data/legras/flexpart_in/SAFNWC'
         traj_dir = '/data/legras/flexout/STC/BACK'
         out_dir = '/homedata/legras/STC'
-    elif socket.gethostname() == 'grapelli':
+    elif socket.gethostname() == 'satie':
         pass
     elif socket.gethostname() == 'gort':
         pass
@@ -99,8 +98,6 @@ def main():
     age_bound = 44.
     # time width of the parcel slice
     slice_width = timedelta(minutes=5)
-    # dtRange
-    dtRange={'MSG1':timedelta(minutes=15),'Hima':timedelta(minutes=20)}
     # number of slices between two outputs
     nb_slices = int(dstep/slice_width)
     # default values of parameters
@@ -113,41 +110,22 @@ def main():
     advect = 'EAZ'
     suffix =''
     quiet = False
-    opaq = False
-    good = False
+    cloud_type = 'silviahigh'
     level = 380
     args = parser.parse_args()
-    if args.year is not None:
-        year=args.year
-    if args.month is not None:
-        month=args.month+1
-    if args.advect is not None:
-        advect=args.advect
-    if args.suffix is not None:
-        suffix='-'+args.suffix
-    if args.level is not None:
-        level=args.level
+    if args.year is not None: year=args.year
+    if args.month is not None: month=args.month+1
+    if args.advect is not None: advect=args.advect
+    if args.suffix is not None: suffix='-'+args.suffix
+    if args.level is not None: level=args.level
     if args.quiet is not None:
-        if args.quiet=='y':
-            quiet=True
-        else:
-            quiet=False
-    if args.good is not None:
-        good = args.good
-    if args.opaq is not None:
-        opaq = args.opaq
-    if opaq:
-        good = True
-    if args.step is not None:
-        step = args.step
-
-    # Update the out_dir with the platform
-    if opaq:
-        out_dir = os.path.join(out_dir,'STC-BACK-OUT-SAF-OPAQ')
-    elif good:
-        out_dir = os.path.join(out_dir,'STC-BACK-OUT-SAF-GOOD')
-    else:
-        out_dir = os.path.join(out_dir,'STC-BACK-OUT-SAF-ALL')
+        if args.quiet=='y': quiet=True
+        else: quiet=False
+    if args.cloud_type is not None: cloud_type = args.cloud_type
+    if args.step is not None: step = args.step
+    
+    # Update the out_dir with the cloud type
+    out_dir = os.path.join(out_dir,'STC-BACK-OUT-SAF-'+cloud_type)
     
     sdate = datetime(year,month,day)
     # fdate defined to make output under the name of the month where parcels are released 
@@ -196,8 +174,8 @@ def main():
     satmap = pixmap(gg)
 
     # Build the satellite field generator
-    get_sat = {'MSG1': read_sat(sdate,'MSG1',dtRange['MSG1'],satdir['MSG1']),\
-               'Hima': read_sat(sdate,'Hima',dtRange['Hima'],satdir['Hima'])}
+    get_sat = {'MSG1': read_sat(sdate,'MSG1',satmap.zone['MSG1']['dtRange'],satdir['MSG1'],pre=True),\
+               'Hima': read_sat(sdate,'Hima',satmap.zone['Hima']['dtRange'],satdir['Hima'],pre=True)}
 
     # Open the part_000 file that contains the initial positions
     part0 = readidx107(os.path.join(ftraj,'part_000'),quiet=True)
@@ -385,11 +363,9 @@ def main():
                     pm1._sat_togrid('CTTH_PRESS')
                     #print('pm1 diag',len(datsat1.var['CTTH_PRESS'][:].compressed()),
                     #                 len(pm1.var['CTTH_PRESS'][:].compressed()))
-                    pm1._sat_togrid('ctth_quality')
-                    pm1._sat_togrid('ctth_conditions')
-                    pm1._sat_togrid('ctth_status_flag')
+                    pm1._sat_togrid('CT')
                     pm1.attr = datsat1.attr.copy()
-                    satmap.fill('MSG1',pm1,good,opaq)
+                    satmap.fill('MSG1',pm1,cloud_type)
                     del pm1
                     del datsat1
                 else:
@@ -408,11 +384,9 @@ def main():
                     pmh._sat_togrid('CTTH_PRESS')
                     #print('pmh diag',len(datsath.var['CTTH_PRESS'][:].compressed()),
                     #                 len(pmh.var['CTTH_PRESS'][:].compressed()))
-                    pmh._sat_togrid('ctth_quality')
-                    pmh._sat_togrid('ctth_conditions')
-                    pmh._sat_togrid('ctth_status_flag')
-                    pmh.attr = datsath.attr
-                    satmap.fill('Hima',pmh,good,opaq)
+                    pmh._sat_togrid('CT')
+                    pmh.attr = datsath.attr.copy()
+                    satmap.fill('Hima',pmh,cloud_type)
                     del datsath
                     del pmh
                 else:
@@ -594,7 +568,7 @@ def convbirth(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ptop, ir_start, x0,
 #%%
 """ Function related to satellite read """
 
-def read_sat(t0,sat,dtRange,satdir):
+def read_sat(t0,sat,dtRange,satdir,pre=False):
     """ Generator reading the satellite data.
     The loop is infinite; sat data are called when required until the end of
     the parcel loop. """
@@ -613,17 +587,24 @@ def read_sat(t0,sat,dtRange,satdir):
             print('sat should be MSG1 or Hima')
             return
         try:
-            dat = SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
+            dat = SAFNWCnc.SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
+            dat_ct = SAFNWCnc.SAFNWC_CT(current_time,namesat[sat],BBname='SAFBox')
             dat._CTTH_PRESS()
+            dat_ct._CT()
+            dat.var['CT'] = dat_ct.var['CT']
             # This pressure i left in hPa to allow masked with the fill_value in sat_togrid
             # The conversion to Pa is made in fill
             dat.attr['dtRange'] = dt
-            dat.attr['lease_time'] = current_time - dtRange
-            dat.attr['date'] = current_time
-            dat._get_var('ctth_status_flag')
-            dat._get_var('ctth_conditions')
-            dat._get_var('ctth_quality')
+            # if pre, the validity interval follows the time of the satellite image
+            # if not pre (default) the validity interval is before 
+            if pre:
+               dat.attr['lease_time'] = current_time 
+               dat.attr['date'] = current_time + dtRange
+            else:
+               dat.attr['lease_time'] = current_time - dtRange
+               dat.attr['date'] = current_time
             dat.close()
+            dat_ct.close()
         except FileNotFoundError:
             print('SAF file not found ',current_time,namesat[sat])
             dat = None
@@ -690,7 +671,7 @@ class pixmap(geosat.GridField):
     def extend(self,zone):
         self.zone[zone]['ti'] -= self.zone[zone]['dtRange']
 
-    def fill(self,zone,dat,good,opaq):
+    def fill(self,zone,dat,cloud_type):
         """ Function filling the zone with new data from the satellite dictionary.
         """
         # Erase the zone
@@ -700,14 +681,16 @@ class pixmap(geosat.GridField):
             dat.var['CTTH_PRESS'][:,self.zone['Hima']['xi']:] = np.ma.masked
         elif zone == 'Hima':
             dat.var['CTTH_PRESS'][:,:self.zone['MSG1']['binx']] = np.ma.masked
-        nbValidBeforeSel = len(dat.var['CTTH_PRESS'].compressed())
-        # Filter according to quality keeping only good retrievals with all input fields
-        if good:
-            sel = ((dat.var['ctth_quality']&0x38)==0x8) & ((dat.var['ctth_conditions']&0xFF00)==0x5500)
+        #nbValidBeforeSel = len(dat.var['CTTH_PRESS'].compressed())
+        # Filter according to cloud_type
+        if cloud_type == 'meanhigh':
+            sel = (dat.var['CT'] ==8) |  (dat.var['CT'] ==9) | (dat.var['CT'] == 12) | (dat.var['CT'] == 13)
             dat.var['CTTH_PRESS'][~sel] = np.ma.masked
-        # Filter the non opaque clouds if required
-        if opaq:
-            sel = (dat.var['ctth_status_flag']&4)==4
+        elif cloud_type == 'veryhigh':
+            sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 13)
+            dat.var['CTTH_PRESS'][~sel] = np.ma.masked
+        elif cloud_type == 'silviahigh':
+            sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 13) | (dat.var['CT'] == 8)
             dat.var['CTTH_PRESS'][~sel] = np.ma.masked
         # test : count the number of valid pixels
         #nbValidAfterSel = len(dat.var['CTTH_PRESS'].compressed())
