@@ -23,7 +23,7 @@ import sys
 import argparse
 import psutil
 import deepdish as dd
-from SAFNWCnc import SAFNWC_CTTH
+import SAFNWCnc
 import geosat
 
 from io107 import readpart107, readidx107
@@ -65,10 +65,10 @@ def main():
     parser.add_argument("-s","--suffix",type=str,help="suffix for special cases")
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
     parser.add_argument("-c","--clean0",type=bool,help="clean part_000")
-    parser.add_argument("-o","--opaq",type=bool,help="keep only opaque clouds")
-    parser.add_argument("-g","--good",type=bool,help="keep only good clouds") 
     parser.add_argument("-t","--step",type=int,help="step in hour between two part files")
     parser.add_argument("-f","--flight",type=str,help="flight identifier for balloons")
+    parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
+    parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
     
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -82,7 +82,7 @@ def main():
         #root_dir = '/home/legras/STC/STC-M55'
         print('does not rune on climserv')
         exit()
-    elif socket.gethostname() == 'grapelli':
+    elif socket.gethostname() == 'satie':
         pass
     elif socket.gethostname() == 'gort':
         pass
@@ -98,8 +98,6 @@ def main():
     dstep = timedelta (hours=step)
     # time width of the parcel slice
     slice_width = timedelta(minutes=5)
-    # dtRange
-    dtRange={'MSG1':timedelta(minutes=15),'Hima':timedelta(minutes=20)}
     # number of slices between two outputs
     nb_slices = int(dstep/slice_width)
     # default values of parameters
@@ -114,58 +112,37 @@ def main():
     flight = 'KU005'
     quiet = False
     clean0 = False
-    opaq = False
-    good = False
+    cloud_type = 'silviahigh'
+    diffus = '01'
     args = parser.parse_args()
-    if args.year is not None:
-        year=args.year
-    if args.month is not None:
-        month=args.month
-    if args.day is not None:
-        day=args.day
-    if args.advect is not None:
-        advect=args.advect
-    if args.platform is not None:
-        platform=args.platform
-    if args.launch_number is not None:
-        launch_number='-'+str(args.launch_number)
-    if args.suffix is not None:
-        suffix='-'+args.suffix
+    if args.year is not None: year=args.year
+    if args.month is not None: month=args.month
+    if args.day is not None: day=args.day
+    if args.advect is not None: advect=args.advect
+    if args.platform is not None: platform=args.platform
+    if args.launch_number is not None: launch_number='-'+str(args.launch_number)
+    if args.suffix is not None: suffix='-'+args.suffix
     if args.quiet is not None:
-        if args.quiet=='y':
-            quiet=True
-        else:
-            quiet=False
-    if args.clean0 is not None:
-        clean0 = args.clean0
-    if args.good is not None:
-        good = args.good
-    if args.opaq is not None:
-        opaq = args.opaq
-    if opaq:
-        good = True
-    if args.step is not None:
-        step = args.step
-    if args.flight is not None:
-        flight = args.flight
+        if args.quiet=='y': quiet=True
+        else: quiet=False
+    if args.clean0 is not None: clean0 = args.clean0
+    if args.cloud_type is not None: cloud_type = args.cloud_type
+    if args.step is not None: step = args.step
+    if args.flight is not None: flight = args.flight
+    if args.diffus is not None: diffus = args.diffus
+    diffus = '-D' + diffus
 
-    # Update the out_dir with the platform
-    if opaq:
-        out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT-SAF-OPAQ')
-    elif good:
-        out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT-SAF-GOOD')
-    else:
-        out_dir = os.path.join(out_dir,'STC-'+platform+'-OUT-SAF-ALL')
-
+    # Update the out_dir with the cloud type
+    out_dir = os.path.join(out_dir,'STC-M55-OUT-SAF-'+cloud_type)
     fdate = datetime(year,month,day)
 
     # Manage the file that receives the print output
     if quiet:
         # Output file
         if platform == 'BAL':
-           print_file = os.path.join(out_dir,'out',flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.out')
+           print_file = os.path.join(out_dir,'out',flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.out')
         else:  
-           print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.out')
+           print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.out')
         fsock = open(print_file,'w')
         sys.stdout=fsock
 
@@ -177,15 +154,18 @@ def main():
     print('platform',platform)
     print('launch_number',launch_number)
     print('suffix',suffix)
+    
+    # patch to fix the problem of the data hole on the evening of 2 August 2017
+    if fdate == datetime(2017,8,2): sdate = datetime(2017,8,3,6)
 
     # Directories of the backward trajectories and name of the output file
     if platform == 'BAL':
         traj_dir = '/data/legras/flexout/STC/BAL'
-        ftraj = os.path.join(traj_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix)
-        out_file2 = os.path.join(out_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.hdf5')
+        ftraj = os.path.join(traj_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix)
+        out_file2 = os.path.join(out_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.hdf5')
     else:    
-        ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix)
-        out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.hdf5')
+        ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix)
+        out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.hdf5')
 
     # Directories for the satellite cloud top files
     satdir ={'MSG1':os.path.join(main_sat_dir,'msg1','S_NWC'),\
@@ -199,8 +179,8 @@ def main():
     satmap = pixmap(gg)
 
     # Build the satellite field generator
-    get_sat = {'MSG1': read_sat(sdate,'MSG1',dtRange['MSG1'],satdir['MSG1']),\
-               'Hima': read_sat(sdate,'Hima',dtRange['Hima'],satdir['Hima'])}
+    get_sat = {'MSG1': read_sat(sdate,'MSG1',satmap.zone['MSG1']['dtRange'],satdir['MSG1'],pre=True),\
+               'Hima': read_sat(sdate,'Hima',satmap.zone['Hima']['dtRange'],satdir['Hima'],pre=True)}
 
     # Read the index file that contains the initial positions
     part0 = readidx107(os.path.join(ftraj,'index_old'),quiet=True)
@@ -341,11 +321,9 @@ def main():
                     pm1._sat_togrid('CTTH_PRESS')
                     #print('pm1 diag',len(datsat1.var['CTTH_PRESS'][:].compressed()),
                     #                 len(pm1.var['CTTH_PRESS'][:].compressed()))
-                    pm1._sat_togrid('ctth_quality')
-                    pm1._sat_togrid('ctth_conditions')
-                    pm1._sat_togrid('ctth_status_flag')
+                    pm1._sat_togrid('CT')
                     pm1.attr = datsat1.attr.copy()
-                    satmap.fill('MSG1',pm1,good,opaq)
+                    satmap.fill('MSG1',pm1,cloud_type)
                     del pm1
                     del datsat1
                 else:
@@ -364,11 +342,9 @@ def main():
                     pmh._sat_togrid('CTTH_PRESS')
                     #print('pmh diag',len(datsath.var['CTTH_PRESS'][:].compressed()),
                     #                 len(pmh.var['CTTH_PRESS'][:].compressed()))
-                    pmh._sat_togrid('ctth_quality')
-                    pmh._sat_togrid('ctth_conditions')
-                    pmh._sat_togrid('ctth_status_flag')
-                    pmh.attr = datsath.attr
-                    satmap.fill('Hima',pmh,good,opaq)
+                    pmh._sat_togrid('CT')
+                    pmh.attr = datsath.attr.copy()
+                    satmap.fill('Hima',pmh,cloud_type)
                     del datsath
                     del pmh
                 else:
@@ -493,7 +469,7 @@ def convbirth(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ptop, ir_start, x0,
 #%%
 """ Function related to satellite read """
 
-def read_sat(t0,sat,dtRange,satdir):
+def read_sat(t0,sat,dtRange,satdir,pre=False):
     """ Generator reading the satellite data.
     The loop is infinite; sat data are called when required until the end of
     the parcel loop. """
@@ -513,17 +489,24 @@ def read_sat(t0,sat,dtRange,satdir):
             print('sat should be MSG1 or Hima')
             return
         try:
-            dat = SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
+            dat = SAFNWCnc.SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
+            dat_ct = SAFNWCnc.SAFNWC_CT(current_time,namesat[sat],BBname='SAFBox')
             dat._CTTH_PRESS()
+            dat_ct._CT()
+            dat.var['CT'] = dat_ct.var['CT']
             # This pressure is left in hPa to allow masked with the fill_value in sat_togrid
             # The conversion to Pa is made in fill
             dat.attr['dtRange'] = dt
-            dat.attr['lease_time'] = current_time - dtRange
-            dat.attr['date'] = current_time
-            dat._get_var('ctth_status_flag')
-            dat._get_var('ctth_conditions')
-            dat._get_var('ctth_quality')
+             # if pre, the validity interval follows the time of the satellite image
+            # if not pre (default) the validity interval is before 
+            if pre:
+               dat.attr['lease_time'] = current_time 
+               dat.attr['date'] = current_time + dtRange
+            else:
+               dat.attr['lease_time'] = current_time - dtRange
+               dat.attr['date'] = current_time
             dat.close()
+            dat_ct.close()
         except FileNotFoundError:
             print('SAF file not found ',current_time,namesat[sat])
             dat = None
@@ -590,7 +573,7 @@ class pixmap(geosat.GridField):
     def extend(self,zone):
         self.zone[zone]['ti'] -= self.zone[zone]['dtRange']
 
-    def fill(self,zone,dat,good,opaq):
+    def fill(self,zone,dat,cloud_type):
         """ Function filling the zone with new data from the satellite dictionary.
         """
         # Erase the zone
@@ -601,13 +584,15 @@ class pixmap(geosat.GridField):
         elif zone == 'Hima':
             dat.var['CTTH_PRESS'][:,:self.zone['MSG1']['binx']] = np.ma.masked
         nbValidBeforeSel = len(dat.var['CTTH_PRESS'].compressed())
-        # Filter according to quality keeping only good retrievals with all input fields
-        if good:
-            sel = ((dat.var['ctth_quality']&0x38)==0x8) & ((dat.var['ctth_conditions']&0xFF00)==0x5500)
+        # Filter according to cloud_type
+        if cloud_type == 'meanhigh':
+            sel = (dat.var['CT'] ==8) |  (dat.var['CT'] ==9) | (dat.var['CT'] == 12) | (dat.var['CT'] == 13)
             dat.var['CTTH_PRESS'][~sel] = np.ma.masked
-        # Filter the non opaque clouds if required
-        if opaq:
-            sel = (dat.var['ctth_status_flag']&4)==4
+        elif cloud_type == 'veryhigh':
+            sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 13)
+            dat.var['CTTH_PRESS'][~sel] = np.ma.masked
+        elif cloud_type == 'silviahigh':
+            sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 13) | (dat.var['CT'] == 8)
             dat.var['CTTH_PRESS'][~sel] = np.ma.masked
         # test : count the number of valid pixels
         nbValidAfterSel = len(dat.var['CTTH_PRESS'].compressed())
