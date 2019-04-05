@@ -21,6 +21,7 @@ from collections import defaultdict
 from numba import jit
 from datetime import datetime, timedelta
 import os
+from os.path import join
 import deepdish as dd
 import pickle
 #import pickle, gzip
@@ -59,11 +60,15 @@ def main():
     parser.add_argument("-t","--step",type=int,help="step in hours between two part files")
     parser.add_argument("-s","--suffix",type=str,help="suffix for special cases")
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
-    parser.add_argument("-w","--who",type=str,choices=["Sivan","Silvia"])
     parser.add_argument("-d","--duration",type=int,help="duration of integration in hours")
     parser.add_argument("-gs","--granule_size",type=int,help="size of the granule")
     parser.add_argument("-gn","--granule_step",type=int,help="number of granules in a step")
     parser.add_argument("-ab","--age_bound",type=int,help="age_bound")
+    parser.add_argument("-binx","--binx",type=int,help="number of grid points in longitude direction")
+    parser.add_argument("-biny","--biny",type=int,help="number of grid points in latitude direction")
+    parser.add_argument("-hmax","--hmax",type=int,help='maximum number of hours in traczilla simulation')
+    parser.add_argument("-username","--username",type=str,help='username')
+    parser.add_argument("-userout","--userout",type=str,help='userout')    
     
     """ Parsed parameters"""
     # Parsed parameters
@@ -81,11 +86,13 @@ def main():
     suffix ='_150_150hPa_500'
     quiet = False
     #level = 150
-    who = "Sivan"
+    username = "sbucci"
+    userout = username.copy() 
     # Bound on the age of the parcel (in days)
     age_bound = 30
-    # Number of parcels launched per time slot
-    granule_size = 71680
+    # Number of parcels launched per time slot (grid size)
+    binx = 320
+    biny = 224
     # Number of granules in a step betwwen two part files
     granule_step = 6
     
@@ -102,7 +109,6 @@ def main():
     highpcut = 50000
     # step in the cloudtop procedure
     cloudtop_step = timedelta(hours=12)
-
     
     args = parser.parse_args()
     if args.year is not None: year=args.year
@@ -114,33 +120,30 @@ def main():
         if args.quiet=='y': quiet=True
         else: quiet=False
     if args.step is not None: step = args.step
-    if args.who is not None: who = args.who
+    if args.hmax is not None: hmax = args.hmax
+    if args.binx is not None: binx = args.binx
+    if args.biny is not None: biny = args.biny
+    granule_size = binx*biny
     if args.granule_size is not None: granule_size = args.granule_size
     if args.duration is not None: hmax = args.duration
     if args.age_bound is not None: age_bound = args.age_bound
     if args.granule_step is not None: granule_step = args.granule_step
+    if args.username is not None: username = args.username
+    if args.userout is not None: userout = args.userout
         
     # Define main directories
+    main_sat_dir = '/bdd/STRATOCLIM/flexpart_in'
     if 'ciclad' in socket.gethostname():
-        main_sat_dir = '/bdd/STRATOCLIM/flexpart_in'
-        if who=='Silvia':
-           traj_dir = '/data/sbucci/flexout/COCHIN/BACK'
-        elif who =='Sivan':
-           traj_dir = '/data/schandra/flexout/COCHIN/BACK'
-        else:
-           print('CANNOT RECOGNIZE WHO')
-           exit()
-        out_dir = '/data/legras/STC'
-    elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
-        main_sat_dir = '/bdd/STRATOCLIM/flexpart_in'
-        traj_dir = '/homedata/legras/flexout/COCHIN/BACK'
-        out_dir = '/homedata/legras/STC'
+        traj_dir = join('/data/',username,'flexout','COCHIN','BACK')
+        out_dir = join('/data',userout,'STC')
+    elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):      
+        traj_dir = join('/homedata/',username,'flexout','COCHIN','BACK')
+        out_dir = join('/homedata',userout,'STC')
     else:
          print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
          exit()
-
     # Update the out_dir with the platform
-    out_dir = os.path.join(out_dir,'STC-BACK-OUT-Cochin')
+    out_dir = join(out_dir,'STC-BACK-OUT-Cochin')
 
     sdate = datetime(year,month,day)
     # fdate defined to make output under the name of the month where parcels are released 
@@ -156,7 +159,7 @@ def main():
     # Manage the file that receives the print output
     if quiet:
         # Output file
-        print_file = os.path.join(out_dir,'out','BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.out')
+        print_file = join(out_dir,'out','BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.out')
         fsock = open(print_file,'w') 
         sys.stdout=fsock    
 
@@ -165,16 +168,16 @@ def main():
     print('suffix',suffix)
     
     # Directory of the backward trajectories
-    ftraj = os.path.join(traj_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix)
+    ftraj = join(traj_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix)
 
     # Output file
-    out_file = os.path.join(out_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.hdf5')
-    out_file1 = os.path.join(out_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.hdf5b')
-    out_file2 = os.path.join(out_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.pkl')
+    out_file = join(out_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.hdf5')
+    out_file1 = join(out_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.hdf5b')
+    out_file2 = join(out_dir,'BACK-'+advect+fdate.strftime('-%b-%Y')+suffix+'.pkl')
 
     # Directories for the satellite cloud top files
-    satdir ={'MSG1':os.path.join(main_sat_dir,'StratoClim+1kmD_msg1-c'),\
-             'Hima':os.path.join(main_sat_dir,'StratoClim+1kmD_himawari-d')}
+    satdir ={'MSG1':join(main_sat_dir,'StratoClim+1kmD_msg1-c'),\
+             'Hima':join(main_sat_dir,'StratoClim+1kmD_himawari-d')}
 
     """ Initialization of the calculation """
     # Initialize the slice map to be used as a buffer for the cloudtops
@@ -185,11 +188,11 @@ def main():
     partStep={}
 
     # Build the satellite field generator
-    get_sat = {'MSG1': read_sat(sdate,dtRange['MSG1'],satdir['MSG1']),\
-               'Hima': read_sat(sdate,dtRange['Hima'],satdir['Hima'])}
+    get_sat = {'MSG1': read_sat(sdate,dtRange['MSG1'],satdir['MSG1'],pre=True),\
+               'Hima': read_sat(sdate,dtRange['Hima'],satdir['Hima'],pre=True)}
 
     # Open the part_000 file that contains the initial positions
-    part0 = readidx107(os.path.join(ftraj,'part_000'),quiet=True)
+    part0 = readidx107(join(ftraj,'part_000'),quiet=True)
     print('numpart',part0['numpart'])
     numpart = part0['numpart']
     numpart_s = granule_size
@@ -567,7 +570,7 @@ def convbirth(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ptop, ir_start, x0,
 #%%
 """ Function related to satellite read """
 
-def read_sat(t0,dtRange,satdir):
+def read_sat(t0,dtRange,satdir,pre=False):
     """ Generator reading the satellite data.
     The loop is infinite; sat data are called when required until the end of
     the parcel loop. """
@@ -593,9 +596,18 @@ def read_sat(t0,dtRange,satdir):
         tf = current_time + cloudtop_step/2
         # Generate list of time intervals
         dat['time'] = [[tf-dt,tf]]
-        while tf > current_time - cloudtop_step/2 + dt:
-            tf -= dt
-            dat['time'].append([tf-dt,tf])
+        if pre:          
+           off = timedelta()
+           while tf >= current_time - cloudtop_step/2:
+               dat['time'].append([tf,tf+dt])
+               if debug: print('times',[tf,tf+dt])
+               tf -= dt
+        else:   
+           off = -dt
+           while tf > current_time - cloudtop_step/2 :
+               tf -= dt
+               dat['time'].append([tf-dt,tf])
+               
         dat['time'].reverse()
         #test print(len(dat['time']))
         dat['numRange'] = np.zeros(dat['nt'],dtype='int')
@@ -607,7 +619,7 @@ def read_sat(t0,dtRange,satdir):
         while len(id) > 1:
             idc = id.pop()
             # find the corresponding segment, skipping empty ones
-            while current_time+timedelta(seconds=int(dat['ir_start'][idc])) \
+            while off+current_time+timedelta(seconds=int(dat['ir_start'][idc])) \
                         != dat['time'][nc][0]:
                 nc -= 1
             dat['indexRange'][nc,:] = [id[-1]+1,idc+1]
