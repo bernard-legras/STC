@@ -36,13 +36,16 @@ delta_time = 5
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s","--segment",type=str,choices=["Jul.01","Jul.11","Jul.21","Aug.01","Aug.11","Aug.21"],help="segment to be processed")
+    parser.add_argument("-s","--segment",type=str,choices=["Jun.01","Jun.11","Jun.21","Jul.01","Jul.11","Jul.21","Aug.01","Aug.11","Aug.21"],help="segment to be processed")
     seg_dates = {'Jul.01':[datetime(2017,7,1,0),datetime(2017,7,11,0)],
                  'Jul.11':[datetime(2017,7,11,0),datetime(2017,7,21,0)],
                  'Jul.21':[datetime(2017,7,21,0),datetime(2017,8,1,0)],
                  'Aug.01':[datetime(2017,8,1,0),datetime(2017,8,11,0)],
                  'Aug.11':[datetime(2017,8,11,0),datetime(2017,8,21,0)],
-                 'Aug.21':[datetime(2017,8,21,0),datetime(2017,9,1,0)]}
+                 'Aug.21':[datetime(2017,8,21,0),datetime(2017,9,1,0)],
+                 'Jun.01':[datetime(2017,6,1,0),datetime(2017,6,11,0)],
+                 'Jun.11':[datetime(2017,6,11,0),datetime(2017,6,21,0)],
+                 'Jun.21':[datetime(2017,6,21,0),datetime(2017,7,1,0)]}
     
     seg = 'Jul.11'
 
