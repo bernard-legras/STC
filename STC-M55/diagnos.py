@@ -68,7 +68,7 @@ def main():
         STC_out ='tbd'
     elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
         STC_out = '/homedata/legras/STC/STC-M55'
-    elif socket.gethostname() == 'grapelli':
+    elif socket.gethostname() == 'satie':
         STC_out = '/limbo/data/STC/STC-M55-OUT'
     elif socket.gethostname() == 'zappa':
         STC_out ='tbd'
