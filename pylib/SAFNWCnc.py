@@ -307,7 +307,7 @@ class SAFNWC_CTTH(SAFNWC):
 
     def _CTTH_TEMPER(self):
         self.attr['CTTH_TEMPER']={}
-        self.var['CTTH_TEMPER'] = np.ma.array(self.ncid.variables['ctth_tempe'][:])
+        self.var['CTTH_TEMPER'] = np.ma.array(data = self.ncid.variables['ctth_tempe'][:])
         self.var['CTTH_TEMPER'].__setmask__(self.mask)
         self.var['CTTH_TEMPER']._sharedmask=False
         self.attr['CTTH_TEMPER']['units'] = self.ncid.variables['ctth_tempe'].units
@@ -334,16 +334,16 @@ class SAFNWC_CTTH(SAFNWC):
         self.attr['CTTH_QUALITY']['units']=('0: processing status','1: RTTOV IR availability','2: NWP input data status','3: SEVIRI input data status','4: method','5: Quality of processing')
         self.attr['CTTH_QUALITY']['flags']=(('0: Non processed','1: Non processed beacause cloud free','2: Processed, cloudy but no results','3: Processed with results'),\
                    ('0: Non available','1: Available'),\
-                    ('0: Undefined (Space)','1: All NWP parameters available (no thermal inversion)','2: All NWP parameters available (thermal inversion present)',\
+                   ('0: Undefined (Space)','1: All NWP parameters available (no thermal inversion)','2: All NWP parameters available (thermal inversion present)',\
                     '3: Some NWP pressure levels missing (no thermal inversion)','4: Some NWP pressure levels missing (thermal inversion present)',\
                     '5: At least one mandatory NWP information missing'),\
-                    ('0: Undefined (Space)','1: All useful SEVIRI channels available','2: At least one useful SEVIRI channel missing',\
+                   ('0: Undefined (Space)','1: All useful SEVIRI channels available','2: At least one useful SEVIRI channel missing',\
                     '3: At least one mandatory SAVIRI channel missing'),\
-                     ('0: Non processed','1: Opaqe cloud, using RTTOV','2: Opaqe cloud, not using RTTOV','3: Intercept method 10.8um/13.4um','4: Intercept method 10.8um/6.2um',\
-                      '5: Intercept method 10.8um/7.3um','6: Radiance Ratioing method 10.8um/13.4um','7: Radiance Ratioing method 10.8um/6.2um','8: Radiance Ratioing method 10.8um/7.3um',\
-                      '9: Spare','10: Spare','11: Spare','12: Spare','13: Opaqe cloud, using RTTOV, in case thermal inversion',\
-                      '14: Spatial smoothing (gap filling in semi-transparent cloud field)','15: Spare for not yet defined methods'),\
-                     ('0: No results (Non-processed, cloud free, no reliable method)','1: Good quality','2: Poor quality'))
+                   ('0: Non processed','1: Opaqe cloud, using RTTOV','2: Opaqe cloud, not using RTTOV','3: Intercept method 10.8um/13.4um','4: Intercept method 10.8um/6.2um',\
+                    '5: Intercept method 10.8um/7.3um','6: Radiance Ratioing method 10.8um/13.4um','7: Radiance Ratioing method 10.8um/6.2um','8: Radiance Ratioing method 10.8um/7.3um',\
+                    '9: Spare','10: Spare','11: Spare','12: Spare','13: Opaqe cloud, using RTTOV, in case thermal inversion',\
+                    '14: Spatial smoothing (gap filling in semi-transparent cloud field)','15: Spare for not yet defined methods'),\
+                   ('0: No results (Non-processed, cloud free, no reliable method)','1: Good quality','2: Poor quality'))
         return
 
     def _CTTH_HEIGHT(self):       
