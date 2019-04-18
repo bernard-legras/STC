@@ -645,6 +645,13 @@ class ECMWF(ECMWF_pure):
         ECMWF_pure.__init__(self)
         self.project = project
         self.date = date
+        #SP_expected = False
+        self.EN_expected = False
+        self.DI_expected = False
+        self.WT_expected = False
+        self.VD_expected = False
+        self.DE_expected = False
+        self.offd = 100 # offset to be set for ERA-I below, 100 for ERA5
         if self.project=='VOLC':
             if 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/VOLC'
@@ -653,11 +660,9 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
-            SP_expected = False
-            EN_expected = True
-            DI_expected = True
-            WT_expected = True
-            VD_expected = False
+            self.EN_expected = True
+            self.DI_expected = True
+            self.WT_expected = True
         elif project=='STC':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
@@ -665,16 +670,15 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/STC'
-            elif socket.gethostname() in ['grapelli','coltrane','zappa','couperin','puccini']:
+            elif socket.gethostname() in ['grapelli','coltrane','zappa','couperin','puccini','lalo']:
                 self.rootdir = '/net/satie/dsk2/ERA5/STC'
             else:
                 print('unknown hostname for this dataset')
                 return
-            SP_expected = False
-            EN_expected = True
-            DI_expected = True
-            WT_expected = True
-            VD_expected = False
+            self.EN_expected = True
+            self.DI_expected = True
+            self.WT_expected = True
+            self.VD_expected = True
         elif project=='FULL-EI':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/NIRgrid'
@@ -683,11 +687,10 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
-            SP_expected = False
-            EN_expected = True
-            DI_expected = True
-            WT_expected = False
-            VD_expected = False
+            self.EN_expected = True
+            self.DI_expected = True
+            self.DE_expected = True
+            self.offd = 300
         elif project=='FULL-EA':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/ERA5'
@@ -696,30 +699,38 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
-            SP_expected = False
-            EN_expected = True
-            DI_expected = False
-            WT_expected = False
-            VD_expected = False
+            self.EN_expected = True
         else:
             print('Non implemented project')
             return
 
-        if SP_expected:
-            self.fname = 'SP'+date.strftime('%y%m%d%H')
-            path1 = 'SP-true/grib'
-        if EN_expected:
-            if project=='FULL-EA':
+        #if SP_expected:
+        #    self.fname = 'SP'+date.strftime('%y%m%d%H')
+        #    path1 = 'SP-true/grib'
+        if self.EN_expected:
+            if project == 'FULL-EA':
                 self.fname = date.strftime('ERA5EN%Y%m%d.grb')
+                path1 ='EN-true'
             else:    
                 self.fname = date.strftime('EN%y%m%d%H')           
             path1 = 'EN-true/grib'
+            if project == 'FULL-EI': path1 = 'EN-true'
             self.ENvar = {'U':['u','U component of wind','m s**-1'],
                      'V':['v','V component of wind','m s**-1'],
                      'W':['w','Vertical velocity','Pa s**-1'],
                      'T':['t','Temperature','K'],
                      'LNSP':['lnsp','Logarithm of surface pressure','Log(Pa)']}
-            self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
+        if self.DI_expected:
+            if project=='FULL-EI':
+                # for ERA-I: tendencies over 3-hour intervals following file date, provided as temperature increments
+                self.DIvar = {'ASSWR':['srta','Mean temperature tendency due to short-wave radiation','K'],
+                     'ASLWR':['trta','Mean temperature tendency due to long-wave radiation','K'],
+                     'CSSWR':['srtca','Mean temperature tendency due to short-wave radiation, clear sky','K'],
+                     'CSLWR':['trtca','Mean temperature tendency due to long-wave radiation, clear sky','K'],
+                     'PHR':['ttpha','Mean temperature tendency due to physics','K'],}
+            else:
+                # for ERA5: tendencies over 1-hour intervals following file date
+                self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
                      'ASLWR':['mttlwr','Mean temperature tendency due to long-wave radiation','K s**-1'],
                      'CSSWR':['mttswrcs','Mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
                      'CSLWR':['mttlwrcs','Mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
@@ -728,24 +739,29 @@ class ECMWF(ECMWF_pure):
                      'DMF':['mdmf','Mean downdraught mass flux','kg m**-2 s**-1'],
                      'UDR':['mudr','Mean updraught detrainment rate','kg m**-3 s**-1'],
                      'DDR':['mddr','Mean downdraught detrainement rate','kg m**-3 s**-1']}
+            self.dname = 'DI'+date.strftime('%y%m%d%H')
+        if self.WT_expected:
+            # for ERA5
             self.WTvar = {'CRWC':['crwc','Specific rain water content','kg kg**-1'],
                      'CSWC':['cswc','Specific snow water content','kg kg**-1'],
                      'Q':['q','Specific humidity','kg kg**-1'],
                      'QL':['clwc','Specific cloud liquid water content','kg kg**-1'],
                      'QI':['ciwc','Specific cloud ice water content','kg kg**-1'],
                      'CC':['cc','Fraction of cloud cover','0-1']}
-            self.VDvar = {'DIV':['xxx','Divergence','s**-1'],
-                          'VOR':['xxx','Vorticity','s**-1'],
-                          'Z':['xxx','Geopotential','m'],
-                          'WE':['xxx','Eta dot','s**-1*']}
-        if DI_expected:
-            self.dname = 'DI'+date.strftime('%y%m%d%H')
-        if WT_expected:
             self.wname = 'WT'+date.strftime('%y%m%d%H')
-        if VD_expected:
-            self.wname = 'VD'+date.strftime('%y%m%d%H')
+        if self.VD_expected:
+            # for ERA5
+            self.VDvar = {'DIV':['d','Divergence','s**-1'],
+                          'VOR':['vo','Vorticity','s**-1'],
+                          #'Z':['xxx','Geopotential','m'],
+                          'WE':['etadot','Eta dot','s**-1*']}
+            self.vname = 'VD'+date.strftime('%y%m%d%H')
+        if self.DE_expected:
+            # for ERA-I
+            self.DEvar = {'UDR':['udra','Mean updraught detrainment rate','kg m**-3 s**-1']}
+            self.dename = 'DE'+date.strftime('%y%m%d%H')
             
-        # opening the files    
+        # opening the main file    
         try:
             self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
         except:
@@ -757,6 +773,7 @@ class ECMWF(ECMWF_pure):
         # Define searched valid date and time
         validityDate = int(self.date.strftime('%Y%m%d'))
         validityTime = int(self.date.strftime('%H%M'))
+        self.EN_open = True
         try:
             sp = self.grb.select(name='Surface pressure',validityTime=validityTime)[0]
             logp = False
@@ -785,11 +802,18 @@ class ECMWF(ECMWF_pure):
         self.attr['lons'] = sp['distinctLongitudes']
         self.attr['lats'] = sp['distinctLatitudes']
         # in ERA-Interim, it was necessary to divide by 1000
-        self.attr['Lo1'] = sp['longitudeOfFirstGridPoint']/1000000  # in degree
-        self.attr['Lo2'] = sp['longitudeOfLastGridPoint']/1000000  # in degree
-        # reversing last and first for latitudes
-        self.attr['La1'] = sp['latitudeOfLastGridPoint']/1000000  # in degree
-        self.attr['La2'] = sp['latitudeOfFirstGridPoint']/1000000 # in degree
+        if project == 'FULL-EI':
+          self.attr['Lo1'] = sp['longitudeOfFirstGridPoint']/1000  # in degree
+          self.attr['Lo2'] = sp['longitudeOfLastGridPoint']/1000  # in degree
+          # reversing last and first for latitudes
+          self.attr['La1'] = sp['latitudeOfLastGridPoint']/1000  # in degree
+          self.attr['La2'] = sp['latitudeOfFirstGridPoint']/1000 # in degree
+        else:
+            self.attr['Lo1'] = sp['longitudeOfFirstGridPoint']/1000000  # in degree
+            self.attr['Lo2'] = sp['longitudeOfLastGridPoint']/1000000  # in degree
+            # reversing last and first for latitudes
+            self.attr['La1'] = sp['latitudeOfLastGridPoint']/1000000  # in degree
+            self.attr['La2'] = sp['latitudeOfFirstGridPoint']/1000000 # in degree
         # longitude and latitude interval
         self.attr['dlo'] = (self.attr['lons'][-1] - self.attr['lons'][0]) / (self.nlon-1)
         self.attr['dla'] = (self.attr['lats'][-1] - self.attr['lats'][0]) / (self.nlat-1) 
@@ -818,39 +842,46 @@ class ECMWF(ECMWF_pure):
         self.DI_open = False
         self.WT_open = False
         self.VD_open = False
-        if DI_expected:
+        self.DE_open = False
+        if self.DI_expected:
             try:
                 self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
                 self.DI_open = True
             except:
                 try:
-                    self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y'),self.dname))
+                    self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/%Y'),self.dname))
                     self.DI_open = True 
                 except:
                     print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
-        if WT_expected:
+        if self.WT_expected:
             try:
                 self.wrb = pygrib.open(os.path.join(self.rootdir,date.strftime('WT-true/grib/%Y/%m'),self.wname))
                 self.WT_open = True
             except:
                 print('cannot open '+os.path.join(self.rootdir,date.strftime('WT-true/grib/%Y/%m'),self.wname))
-        if VD_expected:
+        if self.VD_expected:
             try:
-                self.vrb = pygrib.open(os.path.join(self.rootdir,date.strftime('VD-true/grib/%Y/%m'),self.wname))
+                self.vrb = pygrib.open(os.path.join(self.rootdir,date.strftime('VD-true/grib/%Y/%m'),self.vname))
                 self.VD_open = True
             except:
-                print('cannot open '+os.path.join(self.rootdir,date.strftime('VD-true/grib/%Y/%m'),self.wname))
-
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('VD-true/grib/%Y/%m'),self.vname))
+        if self.DE_expected:
+            try:
+                self.derb = pygrib.open(os.path.join(self.rootdir,date.strftime('DE-true/%Y'),self.dename))
+                self.DE_open = True
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('DE-true/%Y'),self.dename))
+    
     def close(self):
         self.grb.close()
-        try:
-            self.drb.close()
-        except:
-            pass
-        try:
-            self.wrb.close()
-        except:
-            pass
+        try: self.drb.close()
+        except: pass
+        try: self.wrb.close()
+        except: pass
+        try: self.derb.close()
+        except: pass
+        try: self.vrb.close()
+        except: pass
 
 # short cut for some common variables
     def _get_T(self):
@@ -868,22 +899,30 @@ class ECMWF(ECMWF_pure):
     def _get_var(self,var):
         if var in self.var.keys():
             return
+        get = False
         try:
-            if var in self.ENvar.keys():
-                TT = self.grb.select(shortName=self.ENvar[var][0],validityTime=self.attr['valTime'])
-            elif var in self.DIvar.keys() and self.DI_open:
-                TT = self.drb.select(shortName=self.DIvar[var][0],validityTime=self.attr['valTime'])
-            elif var in self.WTvar.keys() and self.WT_open:
-                TT = self.wrb.select(shortName=self.WTvar[var][0],validityTime=self.attr['valTime'])
-            elif var in self.VDvar.keys() and self.VD_open:
-                TT = self.vrb.select(shortName=self.VDvar[var][0],validityTime=self.attr['valTime'])
-            elif var in self.DIvar.keys() and not self.DI_open:
-                print('DI file is not open for '+var)
-            elif var in self.WTvar.keys() and not self.WT_open:
-                print('WT file is not open for '+var)
-            elif var in self.VDvar.keys() and not self.VD_open:
-                print('VD file is not open for '+var)
-            else:
+            if self.EN_open:
+                if var in self.ENvar.keys():
+                    TT = self.grb.select(shortName=self.ENvar[var][0],validityTime=self.attr['valTime'])
+                    get = True
+            if self.DI_open:
+                if var in self.DIvar.keys():
+                    TT = self.drb.select(shortName=self.DIvar[var][0],validityTime=(self.attr['valTime']+self.offd) % 2400)
+                    get = True
+            if self.WT_open:
+                if var in self.WTvar.keys():
+                    TT = self.wrb.select(shortName=self.WTvar[var][0],validityTime=self.attr['valTime'])
+                    get = True
+            if self.VD_open:
+                if var in self.VDvar.keys():
+                    TT = self.vrb.select(shortName=self.VDvar[var][0],validityTime=self.attr['valTime'])
+                    get = True
+            if self.DE_open:
+                if var in self.DEvar.keys():
+                    # Shift of validity time due to ERA-I convention
+                    TT = self.derb.select(shortName=self.DEvar[var][0],validityTime=(self.attr['valTime']+self.offd) % 2400)
+                    get = True
+            if get == False:
                 print(var+' not found')
         except:
             print(var+' not found or read error')
