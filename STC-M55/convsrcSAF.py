@@ -25,6 +25,7 @@ import psutil
 import deepdish as dd
 import SAFNWCnc
 import geosat
+import constants as cst
 
 from io107 import readpart107, readidx107
 p0 = 100000.
@@ -69,6 +70,7 @@ def main():
     parser.add_argument("-f","--flight",type=str,help="flight identifier for balloons")
     parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
+    parser.add_argument("-v","--vshift",type=int,choices=[0,1],help='vertical shift')
     
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -114,6 +116,7 @@ def main():
     clean0 = False
     cloud_type = 'silviahigh'
     diffus = '01'
+    vshift = 0
     args = parser.parse_args()
     if args.year is not None: year=args.year
     if args.month is not None: month=args.month
@@ -131,9 +134,13 @@ def main():
     if args.flight is not None: flight = args.flight
     if args.diffus is not None: diffus = args.diffus
     diffus = '-D' + diffus
+    if args.vshift is not None: 
+        vshift = args.vshift
+        if vshift > 0:
+            super = 'super'+str(vshift)
 
-    # Update the out_dir with the cloud type
-    out_dir = os.path.join(out_dir,'STC-M55-OUT-SAF-'+cloud_type)
+    # Update the out_dir with the cloud type and the super paramater
+    out_dir = os.path.join(out_dir,'STC-M55-OUT-SAF-'+super+cloud_type)
     fdate = datetime(year,month,day)
 
     # Manage the file that receives the print output
@@ -179,8 +186,8 @@ def main():
     satmap = pixmap(gg)
 
     # Build the satellite field generator
-    get_sat = {'MSG1': read_sat(sdate,'MSG1',satmap.zone['MSG1']['dtRange'],satdir['MSG1'],pre=True),\
-               'Hima': read_sat(sdate,'Hima',satmap.zone['Hima']['dtRange'],satdir['Hima'],pre=True)}
+    get_sat = {'MSG1': read_sat(sdate,'MSG1',satmap.zone['MSG1']['dtRange'],satdir['MSG1'],pre=True,vshift=vshift),\
+               'Hima': read_sat(sdate,'Hima',satmap.zone['Hima']['dtRange'],satdir['Hima'],pre=True,vshift=vshift)}
 
     # Read the index file that contains the initial positions
     part0 = readidx107(os.path.join(ftraj,'index_old'),quiet=True)
@@ -322,8 +329,9 @@ def main():
                     #print('pm1 diag',len(datsat1.var['CTTH_PRESS'][:].compressed()),
                     #                 len(pm1.var['CTTH_PRESS'][:].compressed()))
                     pm1._sat_togrid('CT')
+                    if vshift>0: pm1._sat_togrid('CTTH_TEMPER')
                     pm1.attr = datsat1.attr.copy()
-                    satmap.fill('MSG1',pm1,cloud_type)
+                    satmap.fill('MSG1',pm1,cloud_type,vshift=vshift)
                     del pm1
                     del datsat1
                 else:
@@ -343,8 +351,9 @@ def main():
                     #print('pmh diag',len(datsath.var['CTTH_PRESS'][:].compressed()),
                     #                 len(pmh.var['CTTH_PRESS'][:].compressed()))
                     pmh._sat_togrid('CT')
+                    if vshift>0: pmh._sat_togrid('CTTH_TEMPER')
                     pmh.attr = datsath.attr.copy()
-                    satmap.fill('Hima',pmh,cloud_type)
+                    satmap.fill('Hima',pmh,cloud_type,vshift=vshift)
                     del datsath
                     del pmh
                 else:
@@ -469,7 +478,7 @@ def convbirth(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ptop, ir_start, x0,
 #%%
 """ Function related to satellite read """
 
-def read_sat(t0,sat,dtRange,satdir,pre=False):
+def read_sat(t0,sat,dtRange,satdir,pre=False,vshift=0):
     """ Generator reading the satellite data.
     The loop is infinite; sat data are called when required until the end of
     the parcel loop. """
@@ -492,6 +501,7 @@ def read_sat(t0,sat,dtRange,satdir,pre=False):
             dat = SAFNWCnc.SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
             dat_ct = SAFNWCnc.SAFNWC_CT(current_time,namesat[sat],BBname='SAFBox')
             dat._CTTH_PRESS()
+            if vshift > 0: dat._CTTH_TEMPER()
             dat_ct._CT()
             dat.var['CT'] = dat_ct.var['CT']
             # This pressure is left in hPa to allow masked with the fill_value in sat_togrid
@@ -573,7 +583,7 @@ class pixmap(geosat.GridField):
     def extend(self,zone):
         self.zone[zone]['ti'] -= self.zone[zone]['dtRange']
 
-    def fill(self,zone,dat,cloud_type):
+    def fill(self,zone,dat,cloud_type,vshift=0):
         """ Function filling the zone with new data from the satellite dictionary.
         """
         # Erase the zone
@@ -594,6 +604,14 @@ class pixmap(geosat.GridField):
         elif cloud_type == 'silviahigh':
             sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 13) | (dat.var['CT'] == 8)
             dat.var['CTTH_PRESS'][~sel] = np.ma.masked
+            # shift according to the cloud type + 500m for 8 and 9, +1.5 km for 13
+            # recall that pressure is in hPa
+            if vshift == 1:
+                rhog = (100*cst.g/cst.R)*dat.var['CTTH_PRESS']/dat.var['CTTH_TEMPER']
+                sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 8)
+                dat.var['CTTH_PRESS'][sel] -= 500*rhog[sel]
+                sel = (dat.var['CT'] == 13) 
+                dat.var['CTTH_PRESS'][sel] -= 1500*rhog[sel]
         # test : count the number of valid pixels
         nbValidAfterSel = len(dat.var['CTTH_PRESS'].compressed())
         print('valid pixels before & after selection',zone,nbValidBeforeSel,nbValidAfterSel)
