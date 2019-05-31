@@ -51,6 +51,29 @@ debug = False
 # idx_orgn was not set to 1 but to 0 in M55 and GLO runs
 IDX_ORGN = 0
 
+# Error handling
+class BlacklistError(Exception):
+    pass
+
+blacklist = [datetime(2017,8,30,11),
+    datetime(2017,8,30,11,20),
+    datetime(2017,8,30,11,45),
+    datetime(2017,8,30,5,15),
+    datetime(2017,8,30,5,20),
+    datetime(2017,8,11,13,30),
+    datetime(2017,8,11,13,40),
+    datetime(2017,8,11,14,30),
+    datetime(2017,8,18,8,30),
+    datetime(2017,8,18,8,40),
+    datetime(2017,6,26,17,30),
+    datetime(2017,6,26,18),
+    datetime(2017,6,26,18,20),
+    datetime(2017,6,26,18,40),
+    datetime(2017,6,21,20,15),
+    datetime(2017,6,21,20,20),
+    datetime(2017,7,11,7,15),
+    datetime(2017,7,11,7,20)]
+
 #%%
 """@@@@@@@@@@@@@@@@@@@@@@@@   MAIN   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
 
@@ -70,7 +93,7 @@ def main():
     parser.add_argument("-f","--flight",type=str,help="flight identifier for balloons")
     parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
-    parser.add_argument("-v","--vshift",type=int,choices=[0,1],help='vertical shift')
+    parser.add_argument("-v","--vshift",type=int,choices=[0,1,2,3],help='vertical shift')
     
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -116,6 +139,7 @@ def main():
     clean0 = False
     cloud_type = 'silviahigh'
     diffus = '01'
+    super = ''
     vshift = 0
     args = parser.parse_args()
     if args.year is not None: year=args.year
@@ -202,7 +226,7 @@ def main():
                                  ((part0['flag']&I_CROSSED)!=0).sum())
     # check idx_orgn
     if part0['idx_orgn'] != 0:
-        print('MINCHIA, IDX_ORGN NOT 0 AS ASSUMED, CORRECTED WITH READ VALUE')
+        print('MINCHIA, IDX_ORGN NOT 0 ASSTC-M55-OUT-SAF-super1silviahigh ASSUMED, CORRECTED WITH READ VALUE')
         print('VALUE ',part0['idx_orgn'])
         IDX_ORGN = part0['idx_orgn']
 
@@ -498,6 +522,8 @@ def read_sat(t0,sat,dtRange,satdir,pre=False,vshift=0):
             print('sat should be MSG1 or Hima')
             return
         try:
+            # process the blacklist
+            if (sat=='MSG1') & (current_time in blacklist): raise BlacklistError()
             dat = SAFNWCnc.SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
             dat_ct = SAFNWCnc.SAFNWC_CT(current_time,namesat[sat],BBname='SAFBox')
             dat._CTTH_PRESS()
@@ -517,6 +543,9 @@ def read_sat(t0,sat,dtRange,satdir,pre=False,vshift=0):
                dat.attr['date'] = current_time
             dat.close()
             dat_ct.close()
+        except BlacklistError:
+            print('blacklisted date for MSG1',current_time)
+            dat = None
         except FileNotFoundError:
             print('SAF file not found ',current_time,namesat[sat])
             dat = None
@@ -607,11 +636,25 @@ class pixmap(geosat.GridField):
             # shift according to the cloud type + 500m for 8 and 9, +1.5 km for 13
             # recall that pressure is in hPa
             if vshift == 1:
-                rhog = (100*cst.g/cst.R)*dat.var['CTTH_PRESS']/dat.var['CTTH_TEMPER']
+                # rhog is scaled by a factor 0.01 but this is OK as it is used to 
+                # update the pressure which is still in hPa
+                rhog = (cst.g/cst.R)*dat.var['CTTH_PRESS']/dat.var['CTTH_TEMPER']
                 sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 8)
                 dat.var['CTTH_PRESS'][sel] -= 500*rhog[sel]
                 sel = (dat.var['CT'] == 13) 
                 dat.var['CTTH_PRESS'][sel] -= 1500*rhog[sel]
+            elif vshift == 2:
+                rhog = (cst.g/cst.R)*dat.var['CTTH_PRESS']/dat.var['CTTH_TEMPER']
+                sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 8)
+                dat.var['CTTH_PRESS'][sel] -= 350*rhog[sel]
+                sel = (dat.var['CT'] == 13) 
+                dat.var['CTTH_PRESS'][sel] += 200*rhog[sel]
+            elif vshift == 3:
+                rhog = (cst.g/cst.R)*dat.var['CTTH_PRESS']/dat.var['CTTH_TEMPER']
+                sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 8)
+                dat.var['CTTH_PRESS'][sel] -= 1350*rhog[sel]
+                sel = (dat.var['CT'] == 13) 
+                dat.var['CTTH_PRESS'][sel] -= 800*rhog[sel]
         # test : count the number of valid pixels
         nbValidAfterSel = len(dat.var['CTTH_PRESS'].compressed())
         print('valid pixels before & after selection',zone,nbValidBeforeSel,nbValidAfterSel)
