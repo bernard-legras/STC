@@ -82,6 +82,11 @@ def strictly_increasing(L):
 d = lambda x,y:(1/(x[2:,:,:]-x[:-2,:,:]))\
                 *((y[2:,:,:]-y[1:-1,:,:])*(x[1:-1,:,:]-x[:-2,:,:])/(x[2:,:,:]-x[1:-1,:,:])\
                 -(y[:-2,:,:]-y[1:-1,:,:])*(x[2:,:,:]-x[1:-1,:,:])/(x[1:-1,:,:]-x[:-2,:,:]))
+            
+class curtain(object):
+    def __init__(self):
+        self.var={}
+        self.attr={}
 
 # template object produced by extraction and interpolation
 class ECMWF_pure(object):
@@ -91,14 +96,14 @@ class ECMWF_pure(object):
         self.d2d={}
         self.warning = []
 
-    def show(self,var,lev=0,txt=None,log=False):
+    def show(self,var,lev=0,txt=None,log=False,clim=(None,None)):
         """ Chart for data fields """
         # test existence of key field
         if var in self.var.keys():
             if len(self.var[var].shape) == 3:
                 buf = self.var[var][lev,:,:]
             else:
-                buf = self.var['var']
+                buf = self.var[var]
         elif var in self.d2d.keys():
             buf = self.d2d[var]
         else:
@@ -118,7 +123,7 @@ class ECMWF_pure(object):
         iax = ax.imshow(buf, transform=proj, interpolation='nearest',
                     extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
                             self.attr['lats'][0], self.attr['lats'][-1]],
-                    origin='lower', aspect=1.,cmap='jet')
+                    origin='lower', aspect=1.,cmap='jet',clim=clim)
         ax.add_feature(feature.NaturalEarthFeature(
             category='cultural',
             name='admin_1_states_provinces_lines',
@@ -167,15 +172,15 @@ class ECMWF_pure(object):
             nlatmin = 0
             nlatmax = len(self.attr['lats'])
         else:
-            nlatmin = np.abs(self.attr['lats']-latRange[0]).argmin()
-            nlatmax = np.abs(self.attr['lats']-latRange[1]).argmin()+1
+            nlatmin = np.argmax(self.attr['lats']>latRange[0])-1            
+            nlatmax = np.argmax(self.attr['lats']>latRange[1])
         if (lonRange == []) | (lonRange == None):
             new.attr['lons'] = self.attr['lons']
             nlonmin = 0
             nlonmax = len(self.attr['lons'])
         else:
-            nlonmin = np.abs(self.attr['lons']-lonRange[0]).argmin()
-            nlonmax = np.abs(self.attr['lons']-lonRange[1]).argmin()+1
+            nlatmin = np.argmax(self.attr['lons']>lonRange[0])-1            
+            nlatmax = np.argmax(self.attr['lons']>lonRange[1])
         new.attr['lats'] = self.attr['lats'][nlatmin:nlatmax]
         new.attr['lons'] = self.attr['lons'][nlonmin:nlonmax]
         new.nlat = len(new.attr['lats'])
@@ -402,7 +407,7 @@ class ECMWF_pure(object):
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
-        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43]}
+        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43],'STC':[10,90]}
         # TODO: find a way to avoid the big loop
         self.d2d['pcold'] = np.empty(shape=(self.nlat,self.nlon))
         self.d2d['Tcold'] = np.empty(shape=(self.nlat,self.nlon))
@@ -423,12 +428,15 @@ class ECMWF_pure(object):
         return
     
     def _lzrh(self):
-        """ Calculate the clear sky and all sky lzrh. Translated from LzrnN.m 
-        Not yet validated. Use with cautione.
+        """ Calculate the clear sky LZRH. Translated from LzrnN.m 
+        Not yet validated. Use with caution.
+        Add the calculation of the all sky LZRH
         """
-        if not set(['P','ASSWR','ASLWR','CSSWR']).issubset(self.var.keys()):
+        if not set(['P','ASSWR','ASLWR','CSSWR','CSLWR']).issubset(self.var.keys()):
             print('P or heating rate missing')
             return
+        # bound for the test of positive heating in the stratosphere
+        levbnd = {'FULL-EA':31,'FULL-EI':15,'STC':11}
         # Restrict the column (top at 60 hPa) 
         ntop1 = 60 - self.attr['levs'][0]
         nbot1 = self.attr['levs'][-1] - 30
@@ -438,7 +446,7 @@ class ECMWF_pure(object):
         uniq = np.empty(shape=(self.nlat,self.nlon))
         for jy in range(self.nlat):
             for ix in range(self.nlon):
-                print(jy,ix)
+                #print(jy,ix)
                 # Clear sky heating in the column
                 csh = self.var['CSSWR'][ntop1:nbot1,jy,ix] + self.var['CSLWR'][ntop1:nbot1,jy,ix]
                 # Define location of positive heating
@@ -448,8 +456,9 @@ class ECMWF_pure(object):
                 # Number of crossings
                 uniq[jy,ix] = len(pos)
                 # Select column with at least one crossing and make sure there is heating 
-                # in the strato below 66 hpa level to eliminate tropopause folds in the subtropics
-                if len(pos)==0 | np.max(cst[:11]<0):
+                # in the strato higher than 66 hpa level to eliminate tropopause folds in the subtropics
+                # 
+                if (len(pos)==0) | (np.max(csh[:levbnd[self.project]])<0) :
                     self.d2d['plzrh'][jy,ix] = np.ma.masked
                     self.d2d['ptlzrh'][jy,ix] = np.ma.masked
                     self.d2d['aslzrh'][jy,ix] = np.ma.masked
@@ -460,7 +469,7 @@ class ECMWF_pure(object):
                 for k in range(len(pos)):
                     id = pos[k]
                     #@@ Temporary test
-                    if (cst[id]*csh[id+1]>0) | (csh[id]<0):
+                    if (csh[id]*csh[id+1]>0) | (csh[id]<0):
                         print('ERROR: localization')
                         return
                     px.append(csh[id]/(csh[id]-csh[id+1]))
@@ -471,7 +480,7 @@ class ECMWF_pure(object):
                 # and find intersections in the current column which is closest to these values
                 
                 if len(pos)==1: 
-                    k=1
+                    k=0
                 else:
                     if jy>0 & ix>0:
                         if ix<self.nlon-1:
@@ -493,12 +502,17 @@ class ECMWF_pure(object):
                         # (empirical)
                         if pzk[k] < 9500:
                             print(jy,ix,len(pzk),avpzt,len(pzt),pzt,type(pzt))
-                            idx = np.sort((np.array(pzk)-avpzt)**2)
-                            if pzk[idx[0]]>12000:
-                                k=idx[0]
+                            idx = np.argsort((np.array(pzk)-avpzt)**2)
+                            if pzk[idx[1]]>12000:
+                                k=idx[1]
                     else:
-                        k=1
-                self.d2d['plzrh'][jy,ix] = pzk[k]
+                        k=0
+                try:
+                    self.d2d['plzrh'][jy,ix] = pzk[k]
+                except:
+                    print('ERROR')
+                    print(self.d2d['plzrh'].shape,jy,ix)
+                    print(len(pzk),k)
                 # test
                 if jy==166 & ix==0:
                     print(k,pzk[k])
@@ -524,7 +538,7 @@ class ECMWF_pure(object):
             zwmo = True
         else:
             zwmo = False
-        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43]}
+        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43],'STC':[10,85]}
         highbnd = levbnd[self.project][0]
         lowbnd =  levbnd[self.project][1]
         logp = np.log(self.var['P'])
@@ -591,7 +605,8 @@ class ECMWF_pure(object):
         return 
        
     def interpol_track(self,p,x,y,varList='All'):
-        """ Calculate the distance to the cold point and to the LZRH ."""  
+        """ Writing in progress. For the moment, this is a copy of interpol_part.
+        Calculate the distance to the cold point and to the LZRH ."""  
         if 'P' not in self.var.keys():
             self._mkp()
         if varList == 'All':
@@ -624,7 +639,7 @@ class ECMWF_pure(object):
             print('small ps detected ',np.exp(-np.max(lspi)))
         # Horizontal interpolation
         ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int64)
-        jy = np.floor((y-self.attr['la1'])/self.attr['dla']).astype(np.int64)
+        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int64)
         px = ((x - self.attr['Lo1']) %  self.attr['dlo'])/self.attr['dlo']
         py = ((y - self.attr['La1']) %  self.attr['dla'])/self.attr['dla']
         for var in varList:
@@ -635,7 +650,31 @@ class ECMWF_pure(object):
             hc = hyb % 1
             result[var] = (1-hc)*vhigh + hc*vlow
             del hc; del vhigh; del vlow
-        return result  
+        return result
+    
+    def interpol_orbit(self,x,y,varList='All'):
+        """ Generate an interpolation to an orbit curtain in 2d """
+        if varList == 'All':
+            varList = list(self.var.keys())
+            varList.remove('SP')
+        sect = curtain()
+        sect.x = x
+        sect.y = y
+        # extract within a bounding box
+        #bb = self.extract(latRange=(y.min(),y.max()),lonRange=(x.min(),x.max()),vard=['SP',],varss=varList)
+        # Horizontal interpolation
+        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int64)
+        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int64)
+        px = ((x - self.attr['Lo1']) %  self.attr['dlo'])/self.attr['dlo']
+        py = ((y - self.attr['La1']) %  self.attr['dla'])/self.attr['dla']
+        sect.var['SP'] = (1-px)*(1-py)*self.var['SP'][jy,ix] + (1-px)*py*self.var['SP'][jy+1,ix] \
+                  + px*(1-py)*self.var['SP'][jy,ix+1] + px*py*self.var['SP'][jy+1,ix+1]
+        for var in varList: sect.var[var] = np.empty(shape=(self.nlev,len(x)))
+        for lev in range(self.nlev):
+            for var in varList:
+                sect.var[var][lev,:] = (1-px)*(1-py)*self.var[var][lev,jy,ix] + (1-px)*py*self.var[var][lev,jy+1,ix] \
+                  + px*(1-py)*self.var[var][lev,jy,ix+1] + px*py*self.var[var][lev,jy+1,ix+1]
+        return sect
                         
 # standard class to read data
 class ECMWF(ECMWF_pure):
@@ -684,6 +723,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/dkol/data/NIRgrid'
             elif 'ciclad' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/NIRgrid'
+            elif 'satie' in socket.gethostname():
+                self.rootdir = '/limbo/NIRgrid'
             else:
                 print('unknown hostname for this dataset')
                 return
