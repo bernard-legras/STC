@@ -42,11 +42,11 @@ parser.add_argument("-am","--age_max",type=int,help="max age to be processed")
 parser.add_argument("-ami","--age_max_inter",type=int,help="max intermediate age to be processed")
 parser.add_argument("-i","--inc",type=int,help='step inc for processing')
 
-# default values for the first start day
+# default values for the date
 year = 2017
 #month = 7
-day = 1
-#saf = 'N'
+#day = 1
+date = 'Jun-01'
 supertype = 'EAZ'
 water_path = True
 quiet = False
@@ -143,6 +143,10 @@ sources['veryhigh'] = (ct == 9) | (ct == 13)
 sources['silviahigh'] = (ct == 9) | (ct == 13) | (ct == 8)
 print("stat-forw-uniq > date "+ date,np.sum(sources['veryhigh']),np.sum(sources['silviahigh']))
 
+# kill the sources of 30 August 2017 at 11h (227h)
+if date == 'Aug-21':
+    sources['live'][sources['ir_start'] == 3600*227] = False
+
 # Loop on steps
 for step in range(step_start,hmax + step_inc ,step_inc):
     print("stat-forw> step "+str(step))
@@ -150,7 +154,7 @@ for step in range(step_start,hmax + step_inc ,step_inc):
     data = io107.readpart107(step,run_dir,quiet=True)
     # Get the list of indexes for the active parcels after removing the offset
     idxsel = data['idx_back']-IDX_ORGN
-    # Generate the list of ages of active parcels from their launch
+    # Generate the list of ages of active parcels from their launch (in days)
     data['age'] = step/24 - sources['ir_start'][idxsel]/86400
     # Killing exited parcels if FULL in supertype and if target=FullAMA
     # The killed parcels remain killed afterwards, even if they re-enter the domain
@@ -158,7 +162,9 @@ for step in range(step_start,hmax + step_inc ,step_inc):
         selkill = np.any([data['x']<=-10,data['x']>=160,data['y']<=0,data['y']>=50],axis=0)
         idxkill = idxsel[selkill]
         sources['live'][idxkill] = False
-    # Selecting parcels which are both of age less than a month and have never left the FullAMA box
+        del selkill
+        del idxkill
+    # Selecting parcels which are both of age less than age_max (in days) and have never left the FullAMA box
     # selage is a boolean array of dimension nactive
     selage = np.all([data['age'] <= age_max, sources['live'][idxsel] == True],axis=0)
     # A second filter is applied to intermediate age
@@ -208,7 +214,6 @@ for step in range(step_start,hmax + step_inc ,step_inc):
         pickle.dump(pile_inter,gzip.open(pile_sav_inter_stream,'wb',pickle.HIGHEST_PROTOCOL))
 sources.clear()
 sys.stdout.flush()
-# save the pile to restart the run if needed
 pickle.dump(pile,gzip.open(pile_sav_stream,'wb',pickle.HIGHEST_PROTOCOL))
     
 # %%
