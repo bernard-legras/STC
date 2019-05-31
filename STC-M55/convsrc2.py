@@ -10,6 +10,8 @@ and heating rates.
 
 Created on Sat 3 February 2018
 
+Modified in April 2019 to correct errors and to add the choice of reanalysis for UDR data
+
 @author: Bernard Legras
 """
 
@@ -40,8 +42,9 @@ I_DBORNE =  0x1000000
 # prior to 18 March 2018
 
 # misc parameters
-# step in the ERA5 data
+# step in the ERA5 and ERA-I data
 ERA5_step = timedelta(hours=1)
+ERAI_step = timedelta(hours=3)
 # low p cut in the M55 traczilla runs
 lowpcut = 3000
 # highpcut in the M55 traczilla runs
@@ -69,76 +72,74 @@ def main():
     parser.add_argument("-s","--suffix",type=str,help="suffix for special cases")
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
     parser.add_argument("-c","--clean0",type=bool,help="clean part_000")
+    parser.add_argument("-r","--reanalysis",type=str,choices=["ERA5","ERAI"],help="reanalysis for detrainement")
 
     # to be updated
-    if socket.gethostname() == 'graphium':
-        pass
-    elif 'ciclad' in socket.gethostname():
-        root_dir = '/home/legras/STC/STC-M55'
+    if 'ciclad' in socket.gethostname():
+        #root_dir = '/home/legras/STC/STC-M55'
         traj_dir = '/data/legras/flexout/STC/M55'
         out_dir = '/data/legras/STC'
+        mask_dir = '/home/legras/STC/mkSTCmask'
     elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
-        root_dir = '/home/legras/STC/STC-M55'
+        #root_dir = '/home/legras/STC/STC-M55'
         traj_dir = '/bdd/STRATOCLIM/flexout/M55'
         out_dir = '/homedata/legras/STC'
-    elif socket.gethostname() == 'grapelli':
-        pass
-    elif socket.gethostname() == 'gort':
-        pass
+        mask_dir = '/home/legras/STC/mkSTCmask'
     else:
          print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
          exit()
 
     """ Parameters """
+    # fixed parameters
     # to do (perhaps) : some parameters might be parsed from command line
     # step and max output time
     step = 6
     hmax = 732
     dstep = timedelta (hours=step)
     # time width of the parcel slice
+    # slice_width cannot be chosen independently of the step
+    # see below the main loop
+    # ACHTUNG ACHTUNG!!!! If you change this value, change also the chi erosion in detrainer which is hard coded
+    # to occur by 1-hour steps
     slice_width = timedelta(hours=1)
     # number of slices between two outputs
     nb_slices = int(dstep/slice_width)
     # defines here the offset for the detrainment (100h)
     detr_offset = 1/(100*3600.)
-    # defines the domain
+    # defines the domain where M55 parcels are living (no FULL trajectories for this setup)
     domain = np.array([[-10.,160.],[0.,50.]])
     # Size of each packet of parcels
     segl = 1000  
     
-    # default values of parameters
+    # default values of changeable parameters
     # date of the flight
     year=2017
     month=7
     day=29
-    platform = 'GLO'
+    platform = 'M55'
     advect = 'EAZ'
+    # choice of the reanalysis from which detrainement rates are extracted
+    rea = 'ERA5'
     suffix =''
     launch_number=''
     quiet = False
     clean0 = False
     args = parser.parse_args()
-    if args.year is not None:
-        year=args.year
-    if args.month is not None:
-        month=args.month
-    if args.day is not None:
-        day=args.day
-    if args.advect is not None:
-        advect=args.advect
-    if args.platform is not None:
-        platform=args.platform
+    if args.year is not None: year=args.year
+    if args.month is not None: month=args.month
+    if args.day is not None: day=args.day
+    if args.advect is not None: advect=args.advect
+    if args.platform is not None: platform=args.platform
     if args.launch_number is not None:
         launch_number='-'+str(args.launch_number)
-    if args.suffix is not None:
-        suffix='-'+args.suffix
+    if args.suffix is not None: suffix='-'+args.suffix
     if args.quiet is not None:
         if args.quiet=='y':
             quiet=True
         else:
             quiet=False
-    if args.clean0 is not None:
-        clean0 = args.clean0
+    if args.clean0 is not None: clean0 = args.clean0
+    if args.reanalysis is not None: rea = args.reanalysis
 
     # Update the out_dir with the platform
     out_dir = os.path.join(out_dir,'STC-'+platform+'-DETR-OUT')
@@ -148,7 +149,7 @@ def main():
     # Manage the file that receives the print output
     if quiet:
         # Output file
-        print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.out')
+        print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'-'+rea+'.out')
         fsock = open(print_file,'w')
         sys.stdout=fsock
 
@@ -162,7 +163,12 @@ def main():
     print('suffix',suffix)
     
     # Read the region mask
-    mm = pickle.load(gzip.open(os.path.join(root_dir,'STCmask2-era5.pkl')))
+    # ACHTUNG: the mask should fit the domain and dimensions of the prodO['source']
+    # defined below
+    if rea == 'ERA5':
+        mm = pickle.load(gzip.open(os.path.join(mask_dir,'MaskCartopy2-ERA5-STC.pkl')))
+    elif rea == 'ERAI':
+        mm = pickle.load(gzip.open(os.path.join(mask_dir,'MaskCartopy2-ERA-I.pkl')))
     mask = mm['mask']
 
     # Directory of the backward trajectories
@@ -170,7 +176,7 @@ def main():
 
     # Output file
     #out_file = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.pkl')
-    out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'.hdf5')
+    out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+'-D01'+suffix+'-'+rea+'.hdf5')
 
     """ Initialization of the calculation """
     # Initialize the dictionary of the parcel dictionaries
@@ -205,19 +211,28 @@ def main():
     # Flag is copied from index
     prod0['flag_source'] = part0['flag']
     # Make a source array to accumulate the chi 
-    # Dimension is that of the ERA5 field (201,681) at 0.25° resolution
+    # For ERA5: Dimension is that of the STC ERA5 fields (201,681) at 0.25° resolution
+    # For ERAI: The domain is the reduced domain (10-50N,10W,160E) at 1° resolution, that is (51,171) size
     # Both latitudes and longitudes are growing
-    prod0['source'] = np.zeros(shape=(201,681),dtype='float')
+    if rea == 'ERA5':
+        prod0['source'] = np.zeros(shape=(201,681),dtype='float')
+        xshift = 0
+        yshift = 0
+    elif rea == 'ERAI':
+        prod0['source'] = np.zeros(shape=(51,171),dtype='float')
+        # shift of the source grid in the original ERAI grid with origins at (90S, 179W)
+        xshift = -169
+        yshift = -90
     # truncate eventually to 32 bits at the output stage
     # Source array that cumulates within regions as a function of time
-    prod0['pl'] = np.zeros(shape=(len(mm['regcode']),int(part0['numpart']/segl)),dtype='float') 
+    prod0['pl'] = np.zeros(shape=(len(mm['regcode'])+1,int(part0['numpart']/segl)),dtype='float') 
     
-     # Ininitalize the erosion 
+     # Initialize the erosion 
     prod0['chi'] = np.full(part0['numpart'],1.,dtype='float')
     prod0['passed'] = np.full(part0['numpart'],10,dtype='int')
    
     # Build the interpolator to the hybrid level
-    fhyb, void = tohyb()
+    fhyb, void = tohyb(rea)
     #vfhyb = np.vectorize(fhyb)
 
     # Read the part_000 file
@@ -322,7 +337,7 @@ def main():
         """  MAIN LOOP ON THE PARCEL TIME SLICES  """
 
         for i in range(nb_slices):
-            # get the 1h slice for the particles
+            # get the next slice for the particles
             datpart = next(gsp)         
             # skip if no particles
             if datpart['ti'] == None:
@@ -333,40 +348,58 @@ def main():
 #            print('pi in main ',np.min(datpart['pi']),np.max(datpart['pi']))
 #            print('idx_back   ',np.min(datpart['idx_back']),np.max(datpart['idx_back']))
 #            #@@ end test
-            # as the ECMWF files are also available every hour
-            datrean = read_ECMWF(datpart['ti'])
-            # calculate the -log surface pressure at parcel location at time ti  
-            # create a 2D linear interpolar from the surface pressure field
-            lsp = RegularGridInterpolator((datrean.attr['lats'],datrean.attr['lons']),\
-                                          -np.log(datrean.var['SP']))
-            # perform the interpolation for the location of live parcels at time ti
-            datpart['lspi'] = lsp(np.transpose([datpart['yi'],datpart['xi']]))
+            # What follows is not independent of the choices of step and slice_width
+            # TO DO : a more general version that does not have this dependency
+            # This should not be difficult using a generator with validity times
+            # We just need to make sure the entrainment data and SP data are valid 
+            # during the interval [ti tf]
+            # Read ERA5 data as the files are also available every hour
+            # this might not work if output step is changed without changing slice width 
+            # the detrainement is actually defined as an average over the next hour that is between ti and tf
+            if rea == 'ERA5':
+                datrean = read_ECMWF(datpart['ti'],rea)
+                # calculate the -log surface pressure at parcel location at time ti  
+                # create a 2D linear interpolar from the surface pressure field
+                lsp = RegularGridInterpolator((datrean.attr['lats'],datrean.attr['lons']),\
+                        -np.log(datrean.var['SP']))
+            # In the case of ERA-Interim, we read the detrainment which is averaged over a 3h-interval
+            # if ti corresponds to the first or the fourth interval of a 6-hour step
+            # This might not work if the output step is cahnged without changing slice width
+            elif rea =='ERAI' and ((datpart['ti'].hour % 3)==2):
+                datrean = read_ECMWF(datpart['ti'] - timedelta(hours=2),rea)
+                lsp = RegularGridInterpolator((datrean.attr['lats'],np.append(datrean.attr['lons'],181)),\
+                        -np.log(np.append(datrean.var['SP'].T,[datrean.var['SP'][:,0]],axis=0).T))
+            # perform the interpolation for the location of live parcels at time 0.5*(ti+tf)
+            datpart['lsp'] = lsp(np.transpose([0.5*(datpart['yi']+datpart['yf']),
+                                               0.5*(datpart['xi']+datpart['xf'])]))
             #@@ test
-#            print('surface pressure ',np.exp(-np.min(datpart['lspi'])),np.exp(-np.max(datpart['lspi'])))
+#            print('surface pressure ',np.exp(-np.min(datpart['lsp'])),np.exp(-np.max(datpart['lsp'])))
 #            print('particle pressure ',np.min(datpart['pi']),np.max(datpart['pi'])) 
             #@@ end test
             # get the closest hybrid level at time ti
-            # define first -log sigma = -log(p) - -log(ps)
-            lsig = - np.log(datpart['pi']) - datpart['lspi']
+            # define first -log sigma = -log(p) - -log(ps) = - log(p/ps)
+            lsig = - np.log(0.5*(datpart['pi']+datpart['pf'])) - datpart['lsp']
             #@@ test
 #            print('sigma ',np.exp(-np.max(lsig)),np.exp(-np.min(lsig)))
             #@@ end test
-            # get the hybrid level, the rank of the first retained level is substracted to have hyb starting from 0
+            # get the hybrid level at time ti, the rank of the first retained level is substracted to have hyb starting from 0
             # +1 because the levels are counted from 1, not 0 and +0.5 because we get the closest neighbour
-            hyb = np.floor(fhyb(np.transpose([lsig,datpart['lspi']]))+1.5).astype(np.int64)-datrean.attr['levs'][0]
+            hyb = np.floor(fhyb(np.transpose([lsig,datpart['lsp']]))+1.5).astype(np.int64)-datrean.attr['levs'][0]
             #@@ test the extreme values of sigma end ps
             if np.min(lsig) < - np.log(0.95):
                 print('large sigma detected ',np.exp(-np.min(lsig)))
-            if np.max(datpart['lspi']) > -np.log(45000):
-                print('small ps detected ',np.exp(-np.max(datpart['lspi'])))
+            if np.max(datpart['lsp']) > -np.log(45000):
+                print('small ps detected ',np.exp(-np.max(datpart['lsp'])))
                 
             """ PROCESS THE PARCELS WHICH ARE TOO CLOSE TO GROUND
              These parcels are flagged as crossed and dead, their last location is stored in the
              index 0 of src fields.
              This test handles also the cases outside the interpolation domain as NaN produced by fhyb
              generates very large value of hyb. 
-             The trajectories which are stopped here have exited the domain where winds are avilable to flexpart
-             and therefore are wrong from this point. For this reason we label them from their last valid position."""
+             The trajectories which are stopped here have exited the domain where winds are available to flexpart
+             and therefore are wrong from this point. For this reason we label them from their last valid position.
+             The threshold 100 is valid for the particular STC ERA5 archive only.
+             With ERA-I, this section should not operate."""
             if np.max(hyb)> 100 :
                 selec = hyb>100
                 nr = radada(datpart['itime'],
@@ -386,7 +419,7 @@ def main():
                 prod0['src']['x'],prod0['src']['y'],prod0['src']['p'],prod0['src']['t'],\
                 prod0['src']['age'],prod0['source'],prod0['pl'],\
                 datrean.attr['Lo1'],datrean.attr['La1'],datrean.attr['dlo'],datrean.attr['dla'],\
-                detr_offset,segl,mask)
+                xshift,yshift,detr_offset,segl,mask)
             nhits += n1
             #@@ test
             print('return from detrainer',nhits)
@@ -450,7 +483,9 @@ def main():
     dd.io.save(out_file2,prod0,compression='zlib')
     #pickle.dump(prod0,gzip.open(out_file,'wb'))
     # close the print file
+    print('completed run')
     if quiet: fsock.close()
+    return
 
 """@@@@@@@@@@@@@@@@@@@@@@@@@@@ END OF MAIN @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
 
@@ -458,9 +493,15 @@ def main():
 """ Functions related to the parcel data """
 
 def get_slice_part(part_a,part_p,live_a,live_p,current_date,dstep,slice_width):
-    """ Generator to generate 1h slices along flight track. 
-    Each slice contains the coordinates of the beginning and the end of the interval.
-    tp <= ti < tf <= ta """
+    """ Generator to generate slices along flight track determined by the slice_width. 
+    Each slice is a sub-interval [ti, tf] dividing the interval [tp, ta] between two outputs.
+    tp <= ti < tf <= ta
+    part_a: previously read positions (time ta)
+    part_p: last read positions (time tp = ta - step)
+    Each call returns the position of the parcels at the beginning and end of each subinterval.
+    The first generated interval is for tf = ta, and then they are scanned backward.
+    ACHTUNG: bounds for xf and yf are hard coded
+    """
     nb_slices = int(dstep/slice_width+0.0001)
     ta = current_date + dstep
     tp = current_date
@@ -491,8 +532,8 @@ def get_slice_part(part_a,part_p,live_a,live_p,current_date,dstep,slice_width):
                 dat['idx_back'] = part_a['idx_back'][live_a]
                 dat['xf'] = np.clip(part_a['x'][live_a],-10.,160.)
                 dat['yf'] = np.clip(part_a['y'][live_a],0.,50.)
-                dat['pf'] = np.clip(part_a['p'][live_a],0.,50.)
-                dat['tempf'] = np.clip(part_a['t'][live_a],0.,50.)
+                dat['pf'] = part_a['p'][live_a]
+                dat['tempf'] = part_a['t'][live_a]
                 #dat['pf'] = part_a['p'][live_a]
                 #dat['tempf'] = part_a['t'][live_a]
                 dat['xi'] = np.clip(coefai*part_a['x'][live_a] + coefpi*part_p['x'][live_p],-10.,160.)
@@ -503,21 +544,19 @@ def get_slice_part(part_a,part_p,live_a,live_p,current_date,dstep,slice_width):
                 #@@ end test
                 dat['tempi'] = coefai*part_a['t'][live_a] + coefpi*part_p['t'][live_p]
             elif i == nb_slices-1:
-                dat['xf'] = dat['xi']
-                dat['yf'] = dat['yi']
-                dat['pf'] = dat['pi']
-                dat['tempf'] = dat['tempi']
-                #dat['pf'] = dat['pi']
-                #dat['tempf'] = dat['ti']
+                dat['xf'] = dat['xi'].copy()
+                dat['yf'] = dat['yi'].copy()
+                dat['pf'] = dat['pi'].copy()
+                dat['tempf'] = dat['tempi'].copy()
                 dat['xi'] = np.clip(part_p['x'][live_p],-10.,160.)
                 dat['yi'] = np.clip(part_p['y'][live_p],0.,50.)
                 dat['pi'] = part_p['p'][live_p]
                 dat['tempi'] = part_p['t'][live_p]
             else:
-                dat['xf'] = dat['xi']
-                dat['yf'] = dat['yi']
-                dat['pf'] = dat['pi']
-                dat['tempf'] = dat['tempi']
+                dat['xf'] = dat['xi'].copy()
+                dat['yf'] = dat['yi'].copy()
+                dat['pf'] = dat['pi'].copy()
+                dat['tempf'] = dat['tempi'].copy()
                 #dat['pf'] = dat['pi']
                 #dat['tempf'] = dat['ti']
                 dat['xi'] = np.clip(coefai*part_a['x'][live_a] + coefpi*part_p['x'][live_p],-10.,160.)
@@ -573,8 +612,11 @@ def radada(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ir_start):
 @jit(nopython=True,cache=True)
 def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,passed,\
               xc,yc,pc,tc,age,source,pl,\
-              Lo1,La1,dlo,dla,detr_offset,segl,mask):
+              Lo1,La1,dlo,dla,xshift,yshift,detr_offset,segl,mask):
     nhits = [0,0,0,0,0,0]
+    # get dimensions (without using shape)
+    nlat = len(source)
+    nlon = len(source[0])
     # loop on the kept parcels
     for i in range(len(xi)):
         i0 = idx_back[i]-IDX_ORGN
@@ -587,8 +629,8 @@ def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,pass
             # find integer coordinates of closest location on the mesh
             # It is assumed no point outside the domain
             xig = int(math.floor((xi[i]-Lo1)/dlo+0.5))
-            yig = int(math.floor((yi[i]-La1)/dlo+0.5))
-            xfg = int(math.floor((xf[i]-Lo1)/dla+0.5))
+            yig = int(math.floor((yi[i]-La1)/dla+0.5))
+            xfg = int(math.floor((xf[i]-Lo1)/dlo+0.5))
             yfg = int(math.floor((yf[i]-La1)/dla+0.5))
             #@@ test
 #            if xig<0 or xig>679:
@@ -605,6 +647,8 @@ def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,pass
             # find the meshes on the path 
             ll = line(xig,yig,xfg,yfg)
             # calculate mean detrainment on the path
+            # limitation: the level of detrainement is
+            # that at the ti end only
             detr = 0.
             for j in range(len(ll)):
                 #@@ test
@@ -617,13 +661,18 @@ def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,pass
             detr = detr/len(ll)
             # erode the parcel
             if detr >= detr_offset:
+                # ACHTUNG ACHTUNG!!!! This time 3600 should be the same as the width_slice defined in the header
+                # and not hard coded as it is
                 newchi = chi[i0] * math.exp(-3600*detr)
-                xm = int(0.5*(xig+xfg))
-                ym = int(0.5*(yig+yfg))
+                # clipping to avoid segmentation faults due to truncation errors
+                xm = min(nlon-1,max(0,int(0.5*(xig+xfg))+xshift))
+                ym = min(nlat-1,max(0,int(0.5*(yig+yfg))+yshift))
+                #xm = int(0.5*(xig+xfg))+xshift
+                #ym = int(0.5*(yig+yfg))+yshift
                 # Contribution to the source distribution
                 source[ym,xm] += chi[i0] - newchi
                 # Contribution to the boxed source distribution
-                pl[mask[ym,xm],int(i0/segl)] += chi[i0] - newchi
+                pl[int(mask[ym,xm]),int(i0/segl)] += chi[i0] - newchi
                 chi[i0] = newchi
                 if passed[i0] >1:
                     if passed[i0] == 10:
@@ -677,7 +726,7 @@ def detrainer(itime, xi,yi,pi,ti,hyb,xf,yf, udr, idx_back,flag,ir_start,chi,pass
 #%%
 """ Function related to ECMWF read """
 
-def read_ECMWF(date):
+def read_ECMWF(date,rea):
     """ Script reading the ECMWF data.
     Not a generator as this is synchronized with the 1h part slice.
     The data are assumed valid over the 1h period that follows the timestamp.
@@ -685,7 +734,10 @@ def read_ECMWF(date):
     this one-hour period.
     Cloud-cover is from analysis, therefore as an instantaneous map, but varies less rapidly 
     than the UDR. """
-    dat = ECMWF('STC',date)
+    if rea == 'ERA5':
+        dat = ECMWF('STC',date)
+    elif rea == 'ERAI':
+        dat = ECMWF('FULL-EI',date)
     dat._get_var('T')
     dat.attr['dlo'] = (dat.attr['lons'][-1] - dat.attr['lons'][0]) / (dat.nlon-1)
     dat.attr['dla'] = (dat.attr['lats'][-1] - dat.attr['lats'][0]) / (dat.nlat-1) 
