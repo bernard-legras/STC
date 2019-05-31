@@ -10,6 +10,9 @@ Chart and vect changed to cartopy but untested
 
 This code needs a correction near line 200 for future usage.
 
+A patch is applied to filter out the contribution of 30 August at 11:00 in the statistics.
+No filter for spurious high lat contributions at the moment.
+
 @author: Bernard Legras
 """
 
@@ -156,6 +159,7 @@ class transit(object):
             idv=np.digitize(altbaro,self.vedge)-1
         elif self.vertype == 'theta':
             idv=np.digitize(thet,self.vedge)-1
+        # here we select the target level j
         for j in range(self.binv):
             #print(j,'.',end="")
             sys.stdout.write(str(j)+'.')
@@ -211,6 +215,8 @@ class transit(object):
             # ww = area_pix * np.cos(np.deg2rad(y0_s))
             
             # Histograms in the source and target space
+            # notice, however, that the cumul is done by levels in the target space
+            # the sum of H_t and H_s per level should be the same
             H_t,_,_=np.histogram2d(yy_t,xx_t,weights=ww,bins=[self.target['biny'],self.target['binx']],
                          range=np.flip(self.target['range'],0))
             H_s,_,_=np.histogram2d(y0_s,x0_s,weights=ww,bins=[self.source['biny'],self.source['binx']],
