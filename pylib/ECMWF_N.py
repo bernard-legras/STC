@@ -652,28 +652,37 @@ class ECMWF_pure(object):
             del hc; del vhigh; del vlow
         return result
     
-    def interpol_orbit(self,x,y,varList='All'):
+    def interpol_orbit(self,x,y,varList='All',var2='All'):
         """ Generate an interpolation to an orbit curtain in 2d """
         if varList == 'All':
             varList = list(self.var.keys())
-            varList.remove('SP')
+        if var2=='All':
+            var2 = list(self.d2d.keys())
         sect = curtain()
-        sect.x = x
-        sect.y = y
+        sect.attr['lons'] = x
+        sect.attr['lats'] = y
+        sect.n = len(x)
         # extract within a bounding box
         #bb = self.extract(latRange=(y.min(),y.max()),lonRange=(x.min(),x.max()),vard=['SP',],varss=varList)
         # Horizontal interpolation
-        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int64)
-        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int64)
+        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int)
+        # trick to handle periodicity in longitude and profiles in the cutting strip
+        ix1 = (ix+1) % self.nlon
+        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int)
         px = ((x - self.attr['Lo1']) %  self.attr['dlo'])/self.attr['dlo']
         py = ((y - self.attr['La1']) %  self.attr['dla'])/self.attr['dla']
-        sect.var['SP'] = (1-px)*(1-py)*self.var['SP'][jy,ix] + (1-px)*py*self.var['SP'][jy+1,ix] \
-                  + px*(1-py)*self.var['SP'][jy,ix+1] + px*py*self.var['SP'][jy+1,ix+1]
-        for var in varList: sect.var[var] = np.empty(shape=(self.nlev,len(x)))
-        for lev in range(self.nlev):
-            for var in varList:
-                sect.var[var][lev,:] = (1-px)*(1-py)*self.var[var][lev,jy,ix] + (1-px)*py*self.var[var][lev,jy+1,ix] \
-                  + px*(1-py)*self.var[var][lev,jy,ix+1] + px*py*self.var[var][lev,jy+1,ix+1]
+        for var in var2:
+            sect.var[var] = (1-px)*(1-py)*self.d2d[var][jy,ix] + (1-px)*py*self.d2d[var][jy+1,ix] \
+                  + px*(1-py)*self.d2d[var][jy,ix1] + px*py*self.d2d[var][jy+1,ix1]
+        for var in varList: 
+            if len(self.var[var].shape)==2:
+                sect.var[var] = (1-px)*(1-py)*self.var[var][jy,ix] + (1-px)*py*self.var[var][jy+1,ix] \
+                    + px*(1-py)*self.var[var][jy,ix1] + px*py*self.var[var][jy+1,ix1]
+            else:
+                sect.var[var] = np.empty(shape=(self.nlev,len(x)))
+                for lev in range(self.nlev):
+                    sect.var[var][lev,:] = (1-px)*(1-py)*self.var[var][lev,jy,ix] + (1-px)*py*self.var[var][lev,jy+1,ix] \
+                        + px*(1-py)*self.var[var][lev,jy,ix1] + px*py*self.var[var][lev,jy+1,ix1]
         return sect
                         
 # standard class to read data
@@ -707,6 +716,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
             elif 'ciclad' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
+            elif 'climserv' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/STC'
             elif socket.gethostname() in ['grapelli','coltrane','zappa','couperin','puccini','lalo']:
@@ -723,6 +734,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/dkol/data/NIRgrid'
             elif 'ciclad' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/NIRgrid'
+            elif 'climserv' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/NIRgrid'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/limbo/NIRgrid'
             else:
@@ -737,6 +750,10 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/dkol/data/ERA5'
             elif 'ciclad' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/ERA5'
+            elif 'climserv' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/ERA5'
+            elif 'satie' in socket.gethostname():
+                self.rootdir = '/limbo/data/ERA5'
             else:
                 print('unknown hostname for this dataset')
                 return
