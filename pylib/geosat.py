@@ -54,22 +54,22 @@ if socket.gethostname() == 'Graphium':
     sats_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
     root_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
     alt_root_dir = root_dir
-    gridsat = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
+    gridsat = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats\\gridsat'
 elif 'ciclad' in socket.gethostname():
     sats_dir = '/data/legras/sats'
     root_dir = '/bdd/STRATOCLIM/data'
     alt_root_dir = '/data/legras/flexpart_in/SAFNWC'
-    gridsat = 'undefined'
+    gridsat = '/bdd/FCDR/GridSat-B1'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
-    sats_dir = '/home/stratocl/TRAJ/pylib'
+    sats_dir = '/data/legras/sats'
     root_dir = '/bdd/STRATOCLIM/data'
     alt_root_dir = root_dir
-    gridsat = 'undefined'
+    gridsat = '/bdd/FCDR/GridSat-B1'
 elif socket.gethostname() == 'satie':
     sats_dir = '/limbo/data/STC/sats'
     root_dir = '/limbo/data/STC/sats'
     alt_root_dir = root_dir
-    gridsat =  '/limbo/data/STC/sats'
+    gridsat =  '/limbo/data/STC/sats/gridsat'
 elif socket.gethostname() in ['grapelli','couperin','zappa','coltrane','puccini']:
     sats_dir = '/net/satie/limbo/data/STC/sats'
     root_dir = '/net/satie/limbo/data/STC/sats'
@@ -350,7 +350,7 @@ class GeoGrid(object):
                 starting in lat at -70 and ending at 69.93, 
                 not being symmetric. 
             """
-            self.box_range = np.array([[0.,360.01],[-70.,70.]])
+            self.box_range = np.array([[-180.,180.01],[-70.,70.]])
             self.box_binx = 5143; self.box_biny = 2000;
         else:
             if bins==None:
@@ -370,6 +370,9 @@ class GeoGrid(object):
         self.ycent = 0.5*(self.yedge[range(0, len(self.yedge)-1)]+self.yedge[range(1, len(self.yedge))])
         self.shapeyx = [len(self.ycent),len(self.xcent)]
         self.shapexy = [len(self.xcent),len(self.ycent)]
+        self.stepx = (self.box_range[0,1]-self.box_range[0,0])/self.box_binx
+        self.stepy = (self.box_range[1,1]-self.box_range[1,0])/self.box_biny
+        return
 
     def subgrid(self,bounds):        
         ''' Generates a subgrid with name temp that is a daughter of the main 
@@ -481,7 +484,7 @@ class GeoGrid(object):
         # Add lonlat mask to the dist as this is useful to process the data (highly compressible)
         #self.lookup_dict['in_mask'] = lonlat['lon'].mask
         # Store the lookup table and distances separately
-        if BBname is not '':
+        if BBname != '':
             BBname = '_'+BBname
         pickle.dump(self.lookup_dict,gzip.open(os.path.join(root_dir,sat,
               'lookup_'+sat+'_'+self.gridtype+BBname+'.pkl'),'wb',pickle.HIGHEST_PROTOCOL))
@@ -522,7 +525,7 @@ class GridField(object):
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
         cm_lon =0
         # guess that we want to plot accross dateline 
-        if geogrid.box_range[0,1]> 180: cm_lon = 180
+        if geogrid.box_range[0,1]> 181: cm_lon = 180
         proj = ccrs.PlateCarree(central_longitude=cm_lon)
         fig = plt.figure(figsize=[11,4])
         fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
@@ -594,7 +597,45 @@ class GridField(object):
         elif sign == 'more':
             #np.ma.masked_greater(self.var[var], threshold, copy=False)
             self.var[var][self.var[var] > threshold] = np.ma.masked
-
+#%%            
+class GridSat(GridField):
+    ''' Class for GridSat data '''
+    
+    def __init__(self,date):
+        self.sat = 'GridSat'
+        self.date = date
+        self.var = {}
+        self.file = os.path.join(gridsat,date.strftime('%Y'),date.strftime('GRIDSAT-B1.%Y.%m.%d.%H.v02r01.nc'))
+        try:
+            self.ncid = Dataset(self.file,mode='r')
+        except:
+            print('cannot open ',self.file)
+            return None
+        self.geogrid = GeoGrid('GridSat')
+        self.convert_GridSat = {'IR0':'irwin_cdr','WV67':'irwvp','IR2':'irwin_2'}
+        GridField.__init__(self,self.geogrid)
+        
+    def _get_var(self,var):
+        try:
+            var_file = self.convert_GridSat[var]
+        except:
+            var_file = var
+        self.var[var] = np.ma.array(self.ncid.variables[var_file][0,...].data,
+                fill_value = self.ncid.variables[var_file].missing_value)
+        self.var[var][self.var[var]==self.ncid.variables[var_file].missing_value] = np.ma.masked
+        self.var[var] *= self.ncid.variables[var_file].scale_factor
+        self.var[var] += self.ncid.variables[var_file].add_offset
+        
+    def _get_IR0(self):
+        self._get_var('IR0')
+        
+    def _get_WV67(self):
+       self._get_var('WV67')
+       
+    def close(self):
+        self.ncid.close()
+    
+        
 #%%
 class SatGrid(GridField):    
     ''' Associates a geosat object to a grid, both being predefined '''
