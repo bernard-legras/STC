@@ -72,7 +72,8 @@ def main():
     parser.add_argument("-t","--step",type=int,help="step in hour between two part files")
     parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
-    parser.add_argument("-v","--vshift",type=int,choices=[0,1,2],help='vertical shift')
+    parser.add_argument("-v","--vshift",type=int,choices=[0,10],help='vertical shift')
+    parser.add_argument("-hm","--hmax",type=int,help='maximum considered integration time')
     
     # to be updated
     # Define main directories
@@ -86,9 +87,7 @@ def main():
          exit()   
 
     """ Parameters """
-    # to do (perhaps) : some parameters might be parsed from command line
-    # step and max output time
-    step = 6
+    step = 3
     hmax = 732
     dstep = timedelta (hours=step)
     # time width of the parcel slice
@@ -116,6 +115,7 @@ def main():
     if args.advect is not None: advect=args.advect
     if args.day1 is not None: day1 = args.day1
     if args.day2 is not None: day2 = args.day2
+    if args.hmax is not None: hmax = args.hmax
     if args.suffix is not None: suffix='-'+args.suffix
     if args.quiet is not None:
         if args.quiet=='y': quiet=True
@@ -170,7 +170,7 @@ def main():
     gg = geosat.GeoGrid('GridSat')
 
     # Build the satellite field generator
-    get_sat = read_sat(sdate,dtRange,pre=True)
+    get_sat = read_sat(sdate,dtRange,pre=True,vshift=vshift)
     # Read the index file that contains the initial positions
     part0 = readidx107(os.path.join(ftraj,'part_000'),quiet=True)
     print('numpart',part0['numpart'])
@@ -252,10 +252,10 @@ def main():
         print('kept a, p ',len(kept_a),len(kept_p),kept_a.sum(),kept_p.sum(),'  new ',len(partpost['x'])-kept_p.sum())
 
         """ IDENTIFY AND TAKE CARE OF DEADBORNE AS NON BORNE PARCELS """
-        if (hour <= ((day2-day1)*24)) & (partpost['nact']>0):
+        if (hour < ((day2-day1+5)*24)) & (partpost['nact']>0):
             new[partpost['idx_back'][~kept_p]-IDX_ORGN] = True
             nnew += len(partpost['x'])-kept_p.sum()
-        if hour == ((day2-day1)*24):
+        if hour == ((day2-day1+5)*24):
             ndborne = np.sum(~new)
             prod0['flag_source'][~new] |= I_DBORNE + I_DEAD
             prod0['src']['x'][~new] = part0['x'][~new]
@@ -442,6 +442,11 @@ def read_sat(t0,dtRange,pre=False,vshift=0):
             print('read GridSat for ',current_time)
             try: del dat
             except: pass
+            # Make shift below if needed, presently shift not used 
+            # Start shift at 10
+            if vshift == 10:
+                # make temperatures colder by 5K, approximately +1km
+                dat0.var['IR0'] -= 5
             dat = dat0
             if pre:
                 dat.tf = current_time + dtRange
@@ -458,10 +463,6 @@ def read_sat(t0,dtRange,pre=False,vshift=0):
             # extend the lease while keeping the old dat
             dat.ti -= dtRange
         current_time -= dtRange
-        # Make shift below if needed, presently shift not used 
-        # Start shift at 10
-        if vshift>0:
-            print ('nothing to do with vshift')
         
         yield dat
 
