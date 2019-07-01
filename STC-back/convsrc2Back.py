@@ -432,7 +432,7 @@ def main():
                         datpart['xf'][selec],datpart['yf'][selec],datpart['pf'][selec],
                         datpart['tempf'][selec],datpart['idx_back'][selec],
                         prod0['flag_source'],prod0['src']['x'],prod0['src']['y'],
-                        prod0['src']['p'],prod0['src']['t'],prod0['src']['age'] ,prod0['source'],
+                        prod0['src']['p'],prod0['src']['t'],prod0['src']['age'] ,
                         part0['ir_start'])
                 nradada += nr
                 nhits[0] += nr
