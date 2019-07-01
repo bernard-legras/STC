@@ -2,9 +2,9 @@
 """
 Main code to analyse the convective sources of the air sampled during the StratoClim
 campaign.
-This version is based on the SAFNWC product which is availabla at the same time and same 
+This version is based on the SAFNWC product which is available at the same time and same 
 resolution as the satellite data.
-We use the reprocessed version which is produced on atrunacted image.
+We use the reprocessed version which is produced on a truncated image.
 
 Notice that the part time is supposed to start at day+1 0h where day is the day of the flight.
 
@@ -116,16 +116,14 @@ def main():
          exit()
 
     """ Parameters """
-    # to do (perhaps) : some parameters might be parsed from command line
-    # step and max output time
-    step = 6
+    # parameters not passed as arguments
+    # max output time
     hmax = 732
-    dstep = timedelta (hours=step)
     # time width of the parcel slice
-    slice_width = timedelta(minutes=5)
-    # number of slices between two outputs
-    nb_slices = int(dstep/slice_width)
-    # default values of parameters
+    slice_width = timedelta(minutes=5)    
+    # default values of parameters also passed as arguments or modified by arguments
+    # step
+    step = 6  
     # date of the flight
     year=2017
     month=7
@@ -162,7 +160,12 @@ def main():
         vshift = args.vshift
         if vshift > 0:
             super = 'super'+str(vshift)
-
+            
+    # derived parameters
+    # number of slices between two outputs
+    dstep = timedelta (hours=step)
+    nb_slices = int(dstep/slice_width)
+    
     # Update the out_dir with the cloud type and the super paramater
     out_dir = os.path.join(out_dir,'STC-M55-OUT-SAF-'+super+cloud_type)
     fdate = datetime(year,month,day)
@@ -426,6 +429,9 @@ def main():
 
 def get_slice_part(part_a,part_p,live_a,live_p,current_date,dstep,slice_width):
     """ Generator to generate 5' slices along flight track """
+    # Check that dstep corresponds to the time difference in the two part files
+    if (part_a['itime']-part_p['itime']) != int(dstep.total_seconds()):
+        print('ACTHTUNG ACHTUNG !! Incorrect time slicing',int(dstep.total_seconds()),part_a['itime']-part_p['itime'])
     nb_slices = int(dstep/slice_width)
     ta = current_date + dstep
     tp = current_date
