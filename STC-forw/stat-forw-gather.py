@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-This script gathers all the analysis made for a given supertype for the dates from June to August 2017 into a single 
-archive that can be used to produce the plots. 
+This script gathers all the analysis made for a given supertype 
+for the dates from June to August 2017 into groups 
+that can be used to produce the plots. 
 This version is designed for the SAFBox runs with the meanhigh filter in the initialization.
 For each supertype, there is an analysis archive for ages truncated at 1 month and for ages truncated at 2 months
+
 Essentially useless since the gathering is now included in plot1Box
 
 Created on Sun Jan 20 19:11:52 2019

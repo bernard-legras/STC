@@ -5,19 +5,53 @@ Created on Sun 25 March 2018
 
 This script generates the part_000 file containing parcels initialized from the top of
 convective clouds for a forward run. The parcels are generated from the SAFNWC data on a 0.1° grid
-with a cutoff at 175 hPa by default which can be chnaged as a parameter.
+with a cutoff at 175 hPa by default which can be changed as a parameter.
 
-The sampling of the cloud data is performed every hour. This is not cngeable as a parameter in
-the present version. If this value is changed, the weighting in the analysis should be changed accordingly.
+The sampling of the cloud data is performed every hour. This is not changeable as a parameter in
+the present version. If this value is changed, the scaling in the analysis (that account
+for a set of new trajectories every hour) should be changed accordingly.
 
 The output is produced as a part_000 format 107 file which can be used in a StratoClim
-backward run. The format 107 is used for convenience even if the flag field is of no use
-here. flag is set to the uniform value 0x35 (=53) which means pressure coordinate (to be changed 
-in a diabatic run), new parcel, SAFNWC grid and times relative to stamp-date. In addition mode=3     
+forward run. The format 107 is used for convenience even if the flag field is of no use
+here. flag is first set to the uniform value 0x35 (=53) which means pressure coordinate (to be changed 
+in a diabatic run), new parcel, SAFNWC grid and times relative to stamp-date. In addition mode=3.
+In a second step, the cloud type is coded into the flag.  
 
 Version Box (January 2019): uses the SFNWC-PTOP products calculated from the reprocessed archive in the SAFBox
+SAF_dir defines where the SAF data 
 
-The selection is based on the CT field and no longer on the status fielf of CTTH
+The selection is based on the CT field and no longer on the status field of CTTH as i previos version.
+
+Parsed parameters
+- year
+- month
+- first_day
+- last_day
+These four parameters define the period to process. The first and last days are
+included in the period from 0 UTC to the time of the same day.
+- cut: pressure cut in hPa, below which the clouds are not taken into consideration
+- cloud_type: determine which cloud types are retained from the SAF cloud classification
+Four choices are offered: high, meanhigh,'veryhigh'. 
+High: cloud types 8, 9, 11, 12, 13, 14 are retained
+Meanhigh: cloud types 8, 9, 12, 13 are retained
+Veryhigh: cloud type 13 is retained
+Notice that the option silviahigh (cloud types 8, 9 and 13) is not defined here but
+can be used in te analysis by appropriate filtering.
+The cloud type is stored in the flag
+# cloud type
+# 8  : High opaque clouds
+# 9  : Very high opaque clouds
+# 11 : High semi-transparent thin clouds
+# 12 : High semi-transparent meanly thick clouds
+# 13 : High semi-transparent thick clouds
+# 14 : High semi-transparent above low or medium clouds
+
+The script exploit the PTOP files that contain ptop and cloud type and are generated 
+from the SAFBox product by STC-SAFNWC/compositMH-Box.py
+
+The temperature for the top pressure of the clouds is determined from ERA5 data in order
+to be consistent with the time integration. We refrain therefore to use the cloud top temperature
+provided by the SAFNWC product as it may not be representative of the cloud environment.
 
 @author: Bernard Legras
 """
@@ -65,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument("-m","--month",type=int,choices=1+np.arange(12),help="month")
     parser.add_argument("-fd","--first_day",type=int,choices=1+np.arange(31),help="first day")
     parser.add_argument("-ld","--last_day",type=int,choices=1+np.arange(31),help="last day")      
-    parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
+    #parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
     parser.add_argument("-c","--cut",type=float,help="pressure cut in hPa")
     parser.add_argument("-ct","--cloud_type",type=str,choices=["high","meanhigh","veryhigh"],help="type filter")                   
     
@@ -86,8 +120,8 @@ if __name__ == '__main__':
     if args.month is not None: base_month = args.month
     if args.first_day is not None: base_day1 = args.first_day
     if args.last_day is not None: base_day2 = args.last_day
-    if args.quiet is not None:
-        if args.quiet=='y': quiet=True
+    #if args.quiet is not None:
+    #    if args.quiet=='y': quiet=True
     if args.cloud_type is not None: cloud_type = args.cloud_type
     if args.cut is not None: cut_level = args.cut
     

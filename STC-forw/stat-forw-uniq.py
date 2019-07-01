@@ -2,13 +2,47 @@
 """
 Created on 30 March 2018
 
-This code process the forward runs to provide transit statistics
+This code processes the forward runs to provide transit statistics
+
+It calculate transit properties by accumulating for all the parcels during their 
+lifetime under some filtering conditions given below.
+The two major filters are based on the age and on the cloud type associated to 
+the parcel.
+
+Two values of the age max are managed simultaneously generating two transit 
+tables. They are given in age_max and in age_max_inter
+
+The veryhigh and silviahigh sources are flagged before calling transit.
+The forward runs are therefore expected to have been initialized with sources
+that include these two types of sources, like meanhigh.
 
 This version should work for all cases
+
+Generate printed diagnostics and two output pickle files.
+The two output pickle files are generated for the two values of the max age. They
+are distinguished by the suffix hxxx where xxx is the max age in hours. 
+Take input into runs archived in /data/legras/flexout/STC/FORWBox-meanhigh    
+and generate outputs in /data/legras/STC/STC-FORWBox-meanhigh-OUT
+
+Parameters:
+--type: supertype of wind data used and domain used in this analysis
+"EAD","EAZ","EIZ","EID","EIZ-FULL","EID-FULL"
+--vert: choice of the type of vertical levels used to determine the transit properties
+"baro" or "theta"
+--quiet: determines whether printed outputs go to a file or to the screen
+--full: determines whether the domain is global, can only be used with EID-FULL and EIZ-FULL
+--date: determines the run stream following the segmentation of the 
+runs
+["Jun-01","Jun-11","Jun-21","Jul-01","Jul-11","Jul-21","Aug-01","Aug-11","Aug-21"]
+--age_max: age max (in days)
+--age_max_inter: second age max, should be less than the first
+--inc:  step inc for which the part file are processed    
 
 Parameterized for Box-meanhigh on 15 Jan 2019
 Forked from stat-forw to process a unique run
 Needs a subsequent script stat-forw-gather to gather the data
+
+The parcels launched from the erroneous image on 30 August at 11 are eliminated.
 
 @author: Bernard Legras
 """
@@ -32,7 +66,7 @@ import constants as cst
 parser = argparse.ArgumentParser()
 #parser.add_argument("-y","--year",type=int,help="year")
 #parser.add_argument("-m","--month",type=int,choices=1+np.arange(12),help="month")
-parser.add_argument("-t","--type",choices=["EAD","EAZ","EIZ","EID","EIZ-FULL","EID-FULL"],help="type")
+parser.add_argument("-t","--type",choices=["EAT","EAD","EAZ","EIZ","EID","EIZ-FULL","EID-FULL"],help="type")
 #parser.add_argument("-s","--saf",choices=["O","N"],help="SAF version")
 parser.add_argument("-v","--vert",choices=["theta","baro"],help="vertical discretization")
 parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")

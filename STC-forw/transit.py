@@ -3,13 +3,65 @@
 Created on Tue Sep 20 01:15:15 2016
 Exploit the trajectories to investigate the transit properties from sources to 
 target levels
+
+The methods of transit class are:
+    
+__init__: initializes the source and target dictionaries
+For all quantities defined in these dictionary, the horizontal grid is either in the source
+or the target space. The vertical levels always refer to the target space. Therefore this tool
+cannot be used to study the vertical distribution of sources, exccept by the mean theta or z and
+the mean displacements.
+Variables diagnosed in transit
+'hist': count of the parcels,
+'age': mean age,
+'z': mean altitude,
+'dz': mean altitude displacement,
+'dx': mean longitude displacement,
+'dy': mean latitude displacement,
+'dx2': mean squarred longitude displacement,
+'dy2': mean squarred latitude displacement,
+'thet': mean potential temperature,
+'dthet': mean potential temperature displacement
+'r_v': water mixing ratio (if water_path argument is true)
+The prefix tot in __init__ means that these quantities are first accumulated and 
+then divided by the count registry (in hist)
+The accumulation is made in "update" and the division is made in "complete".
+The grid domain is either fullAMA (for source an target space) or global (for target space only).
+The grids are 1° resolution in [10W, 160E, 0, 50N] and [179W, 181E, 90S, 90N]
+made of 170x50 and 360x180 meshes. The parcels are localized within the mesh.
+A centered grid is also defined with the same dimensions.
+The vertical levels are defined either in termes of barometric altitude or in terms of potential temperature.
+The current definition is such that in pressure, there are 21 levels of 500m each from 10 to 20 km, and
+in potential temperature 20 levels of 5K each from 325 to 420 K.
+
+update: Performs the accumulation.
+The accumulation consist in counting all the parcel provided with dat in both the source and the 
+target grid (_s and _t suffixes).
+A weight is applied due to the pixelisation of the sources in the PTOP files that serve to initialize
+the forward runs (see prepforw5Box and STC-SAFNWC/). The weight is 0.1°x0.1°xcos(lat source). See also notes 
+on impact scaling.
+
+complete: Calculate the means from the accumulations and the counts.
+
+merge: Merge two accumulations
+
+chart: makes a density plot of a field at a given level, in addition can plot another field
+as contours with the option of choosing and labelling contour from its cumulative sum starting
+from the maximum value
+
+vect: shows the horizontal displacement as a vector field.
+
+chartv: shows a vertical longitude x altitude section
+
 Modified 30 March 2018 to process the FORW and FORWN runs.
 Modified 16 January 2019 to accommodate the new calculations based on meanhigh selection
-and doing a further selection on veryhigh (_vh index) in the analysis.
-Chart and vect changed to cartopy but untested
+and doing a further selection on veryhigh (_vh index) or silviahigh (_sh index) in the analysis.
+Vect changed to cartopy but untested
 
-This code needs a correction near line 200 for future usage.
+This code needs a correction near line 208 for future usages if the resolution of the 
+analysis grid is no longer 1°
 
+Fixing data error:
 A patch is applied to filter out the contribution of 30 August at 11:00 in the statistics.
 No filter for spurious high lat contributions at the moment.
 

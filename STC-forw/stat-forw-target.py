@@ -4,14 +4,14 @@ Created on 20 May 2019
 
 This code process the forward runs to provide transit statistics
 
-This version is made to provide statistics within a given period in the target
-space
+This version is derived from stat-forw-uniq.py to provide statistics within
+a given period in the target space, that is, instead of looping on all dates
+of a stream, it loops on all streams for dates corresponding to a given
+time interval.
 
-From stat-forw-uniq.py
-
-Parameterized for Box-meanhigh on 15 Jan 2019
-Forked from stat-forw to process a unique run
-Needs a subsequent script stat-forw-gather to gather the data
+As a matter of simplification there is one 10-day period associated with each
+stream, as described in trueDates and the relevant streams for each period
+are listed in preDates. The first period that can be investigated is Jul-11. 
 
 @author: Bernard Legras
 """
@@ -35,7 +35,7 @@ import constants as cst
 parser = argparse.ArgumentParser()
 #parser.add_argument("-y","--year",type=int,help="year")
 #parser.add_argument("-m","--month",type=int,choices=1+np.arange(12),help="month")
-parser.add_argument("-t","--type",choices=["EAD","EAZ","EIZ","EID","EIZ-FULL","EID-FULL"],help="type")
+parser.add_argument("-t","--type",choices=["EAT","EAD","EAZ","EIZ","EID","EIZ-FULL","EID-FULL"],help="type")
 #parser.add_argument("-s","--saf",choices=["O","N"],help="SAF version")
 parser.add_argument("-v","--vert",choices=["theta","baro"],help="vertical discretization")
 parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
