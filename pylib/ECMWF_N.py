@@ -54,16 +54,17 @@ import math
 import pygrib
 import os
 #from mpl_toolkits.basemap import Basemap
-from cartopy import feature
+#from cartopy import feature
 #from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
-import cartopy.crs as ccrs
-import matplotlib.pyplot as plt
+#import cartopy.crs as ccrs
+#import matplotlib.pyplot as plt
 import socket
 from scipy.interpolate import RegularGridInterpolator
 from mki2d import tohyb
 import constants as cst
 import gzip,pickle
 from numba import jit
+#from copy import copy,deepcopy
 
 MISSING = -999
 # Physical constants
@@ -96,12 +97,24 @@ class ECMWF_pure(object):
         self.d2d={}
         self.warning = []
 
-    def show(self,var,lev=0,txt=None,log=False,clim=(None,None)):
+    def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None)):
         """ Chart for data fields """
+        from cartopy import feature
+        #from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+        import cartopy.crs as ccrs
+        import matplotlib.pyplot as plt
+        
         # test existence of key field
         if var in self.var.keys():
             if len(self.var[var].shape) == 3:
-                buf = self.var[var][lev,:,:]
+                # detection of the level as pressure or potential temperature with a value always 
+                # larger than the number of levels (may fail at the top of the model in pressure or in z coordinate (if km))
+                # in this cas, force the value with cardinal_level
+                if (cardinal_level==False) | (lev > self.nlev-1):
+                    clev = np.abs(np.array(self.attr['levs'])-lev).argmin()
+                else:
+                    clev = lev
+                buf = self.var[var][clev,:,:]
             else:
                 buf = self.var[var]
         elif var in self.d2d.keys():
@@ -109,6 +122,7 @@ class ECMWF_pure(object):
         else:
             print ('undefined field')
             return
+                
         fs=15
         # it is unclear how the trick with cm_lon works in imshow but it does
         # the web says that it is tricky to plot data accross dateline with cartopy
@@ -187,6 +201,8 @@ class ECMWF_pure(object):
         new.nlon = len(new.attr['lons'])
         new.nlev = self.nlev
         new.attr['levtype'] = self.attr['levtype']
+        new.attr['levs'] = self.attr['levs']
+        new.attr['plev'] = self.attr['plev']
         new.date = self.date
         new.attr['La1'] = self.attr['lats'][nlatmin]
         new.attr['Lo1'] = self.attr['lons'][nlonmin]
@@ -326,6 +342,7 @@ class ECMWF_pure(object):
         new.nlev = len(p)
         new.attr['levtype'] = 'pressure'
         new.attr['plev'] = p
+        new.attr['levs'] = p
         pmin = np.min(p)
         pmax = np.max(p)
         for var in varList:
@@ -345,6 +362,83 @@ class ECMWF_pure(object):
                     #                     self.var[var][npmin:npmax,jys,ixs])
                     #new.var[var][:,jyt,ixt] = fint(np.log(p))
                     new.var[var][:,jyt,ixt] = np.interp(np.log(p),np.log(self.var['P'][npmin:npmax,jys,ixs]),self.var[var][npmin:npmax,jys,ixs])
+                    ixt += 1
+                jyt += 1
+        return new
+    
+    def interpolPT(self,pt,varList='All',latRange=None,lonRange=None):
+        """ interpolate the variables to a potential temperature level or a set of 
+            potential tempearture levels
+            vars must be a list of variables or a single varibale
+            pt must be a list of potential temperatures in K
+        """
+        if 'PT' not in self.var.keys():
+            try:
+                self._mkthet()
+            except:
+                print('missing P or T')
+                return -1
+        new = ECMWF_pure()
+        if varList == 'All':
+            varList = list(self.var.keys())
+            varList.remove('SP')
+            varList.remove('P')
+        elif type(varList) == str:
+            varList = [varList,]
+        for var in varList:
+            if var not in self.var.keys():
+                print(var,' not defined')
+                return
+        if type(pt) != list:
+            pt = [pt,]
+        ptrev = [-x for x in pt]
+        #print(ptrev)
+        # first determine the boundaries of the domain
+        if (latRange == []) | (latRange == None):
+            nlatmin = 0
+            nlatmax = self.nlat
+        else:
+            nlatmin = np.abs(self.attr['lats']-latRange[0]).argmin()
+            nlatmax = np.abs(self.attr['lats']-latRange[1]).argmin()+1
+        if (lonRange == []) | (lonRange == None):
+            nlonmin = 0
+            nlonmax = self.nlon
+        else:
+            nlonmin = np.abs(self.attr['lons']-lonRange[0]).argmin()
+            nlonmax = np.abs(self.attr['lons']-lonRange[1]).argmin()+1
+        new.attr['lats'] = self.attr['lats'][nlatmin:nlatmax]
+        new.attr['lons'] = self.attr['lons'][nlonmin:nlonmax]
+        new.nlat = len(new.attr['lats'])
+        new.nlon = len(new.attr['lons'])
+        new.date = self.date
+        new.nlev = len(pt)
+        new.attr['levtype'] = 'potential temperature'
+        new.attr['levs'] = pt
+        new.attr['plev'] = MISSING
+        thetmin = np.min(pt)
+        thetmax = np.max(pt)
+        for var in varList:
+            new.var[var] = np.empty(shape=(len(pt),nlatmax-nlatmin,nlonmax-nlonmin))
+            jyt = 0
+            # big loop that should be paralellized or calling numa for good performance
+            for jys in range(nlatmin,nlatmax):
+                ixt = 0
+                for ixs in range(nlonmin,nlonmax):
+                    # find the range of pt in the column assumed ordered from top to bottom
+                    npup = np.abs(self.var['PT'][:,jys,ixs]-thetmax).argmin()
+                    npbot = np.abs(self.var['PT'][:,jys,ixs]-thetmin).argmin()+1
+                    npup = max(npup - 1,0)
+                    npbot = min(npbot + 1,self.nlev)
+                    #if jyt == 20 : print(npup,npbot)
+                    # Test sorting and interpolation with reverse potential temperature to ensure growth
+                    # along x-axis 
+                    if np.any(self.var['PT'][npup+1:npbot,jys,ixs]-self.var['PT'][npup:npbot-1,jys,ixs]>0):
+                        #print('sort for ',ixt,jyt)
+                        pts = np.sort(-self.var['PT'][npup:npbot,jys,ixs])
+                        #print(pts)
+                    else:
+                        pts = -self.var['PT'][npup:npbot,jys,ixs]
+                    new.var[var][:,jyt,ixt] = np.interp(ptrev,pts,self.var[var][npup:npbot,jys,ixs])
                     ixt += 1
                 jyt += 1
         return new
@@ -715,9 +809,11 @@ class ECMWF(ECMWF_pure):
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
             elif 'ciclad' in socket.gethostname():
-                self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
+                self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'
             elif 'climserv' in socket.gethostname():
-                self.rootdir = '/data/legras/flexpart_in/STC/ERA5'
+                self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'
+            elif 'camelot' in socket.gethostname():
+                self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'              
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/STC'
             elif socket.gethostname() in ['grapelli','coltrane','zappa','couperin','puccini','lalo']:
@@ -733,11 +829,13 @@ class ECMWF(ECMWF_pure):
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/NIRgrid'
             elif 'ciclad' in socket.gethostname():
-                self.rootdir = '/data/legras/flexpart_in/NIRgrid'
+                self.rootdir = '/proju/flexpart/flexpart_in/NIRgrid'
             elif 'climserv' in socket.gethostname():
-                self.rootdir = '/data/legras/flexpart_in/NIRgrid'
+                self.rootdir = '/proju/flexpart/flexpart_in/NIRgrid'
+            elif 'camelot' in socket.gethostname():
+                self.rootdir = '/proju/flexpart/flexpart_in/NIRgrid'
             elif 'satie' in socket.gethostname():
-                self.rootdir = '/limbo/NIRgrid'
+                self.rootdir = '/limbo/data/NIRgrid'
             else:
                 print('unknown hostname for this dataset')
                 return
