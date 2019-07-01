@@ -51,6 +51,29 @@ debug = False
 # idx_orgn was not set to 1 but to 0 in M55 and GLO runs
 IDX_ORGN = 0
 
+# Error handling
+class BlacklistError(Exception):
+    pass
+
+blacklist = [datetime(2017,8,30,11),
+    datetime(2017,8,30,11,20),
+    datetime(2017,8,30,11,45),
+    datetime(2017,8,30,5,15),
+    datetime(2017,8,30,5,20),
+    datetime(2017,8,11,13,30),
+    datetime(2017,8,11,13,40),
+    datetime(2017,8,11,14,30),
+    datetime(2017,8,18,8,30),
+    datetime(2017,8,18,8,40),
+    datetime(2017,6,26,17,30),
+    datetime(2017,6,26,18),
+    datetime(2017,6,26,18,20),
+    datetime(2017,6,26,18,40),
+    datetime(2017,6,21,20,15),
+    datetime(2017,6,21,20,20),
+    datetime(2017,7,11,7,15),
+    datetime(2017,7,11,7,20)]
+
 #%%
 """@@@@@@@@@@@@@@@@@@@@@@@@   MAIN   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"""
 
@@ -574,15 +597,18 @@ def read_sat(t0,sat,dtRange,satdir,pre=False):
             print('sat should be MSG1 or Hima')
             return
         try:
+            # process the blacklist
+            if (sat=='MSG1') & (current_time in blacklist): raise BlacklistError()
             dat = SAFNWCnc.SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
             dat_ct = SAFNWCnc.SAFNWC_CT(current_time,namesat[sat],BBname='SAFBox')
             dat._CTTH_PRESS()
+            #if vshift > 0: dat._CTTH_TEMPER()
             dat_ct._CT()
             dat.var['CT'] = dat_ct.var['CT']
-            # This pressure i left in hPa to allow masked with the fill_value in sat_togrid
+            # This pressure is left in hPa to allow masked with the fill_value in sat_togrid
             # The conversion to Pa is made in fill
             dat.attr['dtRange'] = dt
-            # if pre, the validity interval follows the time of the satellite image
+             # if pre, the validity interval follows the time of the satellite image
             # if not pre (default) the validity interval is before 
             if pre:
                dat.attr['lease_time'] = current_time 
@@ -592,6 +618,9 @@ def read_sat(t0,sat,dtRange,satdir,pre=False):
                dat.attr['date'] = current_time
             dat.close()
             dat_ct.close()
+        except BlacklistError:
+            print('blacklisted date for MSG1',current_time)
+            dat = None
         except FileNotFoundError:
             print('SAF file not found ',current_time,namesat[sat])
             dat = None
