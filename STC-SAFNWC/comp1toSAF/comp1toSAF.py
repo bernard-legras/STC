@@ -20,10 +20,9 @@ Modification to retro apply to convsrc:
     - dtRange defined in a single location in the pixmap initialization
 
 Modification to be done to convsrc
-    - chage opaq policy to a policy based on the CT product
+    - change opaq policy to a policy based on the CT product (one)
 
 Modification not to retro apply
-    - SAF: opaq is coded in a flag field rather than used to mask the data
     - cloudtop: the creation flag copied in the flag field
     
 The inconvenience of this program is that it reads all the files even if only 
