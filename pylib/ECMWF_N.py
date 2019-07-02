@@ -193,8 +193,8 @@ class ECMWF_pure(object):
             nlonmin = 0
             nlonmax = len(self.attr['lons'])
         else:
-            nlatmin = np.argmax(self.attr['lons']>lonRange[0])-1            
-            nlatmax = np.argmax(self.attr['lons']>lonRange[1])
+            nlonmin = np.argmax(self.attr['lons']>lonRange[0])-1            
+            nlonmax = np.argmax(self.attr['lons']>lonRange[1])
         new.attr['lats'] = self.attr['lats'][nlatmin:nlatmax]
         new.attr['lons'] = self.attr['lons'][nlonmin:nlonmax]
         new.nlat = len(new.attr['lats'])
@@ -206,8 +206,12 @@ class ECMWF_pure(object):
         new.date = self.date
         new.attr['La1'] = self.attr['lats'][nlatmin]
         new.attr['Lo1'] = self.attr['lons'][nlonmin]
-        new.attr['dla'] = self.attr['dla']
-        new.attr['dlo'] = self.attr['dlo']
+        try:
+            new.attr['dla'] = self.attr['dla']
+            new.attr['dlo'] = self.attr['dlo']
+        except:
+            new.attr['dla'] = (self.attr['lats'][-1]-self.attr['lats'][0])/(new.nlat-1)
+            new.attr['dlo'] = (self.attr['lons'][-1]-self.attr['lons'][0])/(new.nlon-1)
         # extraction
         if varss is None:
             list_vars = []
