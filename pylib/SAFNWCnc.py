@@ -46,7 +46,7 @@ class SAFNWC(geosat.PureSat):
         
         filename='S_NWC_'+typ+'_'+nam+'_'+region+'-'+VISIR+'_'+date.strftime("%Y%m%d")+'T'+date.strftime("%H%M")+'00Z.nc'      
         
-        print(filename)
+        #print(filename)
         try:
             self.time = re.search(typ+'(.+?)'+'_globeI-VISIR',filename).group(1)             
         except AttributeError:
