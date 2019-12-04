@@ -95,6 +95,7 @@ class ECMWF_pure(object):
         self.var={}
         self.attr={}
         self.d2d={}
+        self.d1d={}
         self.warning = []
 
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None)):
@@ -1147,6 +1148,7 @@ class ECMWF(ECMWF_pure):
                                   
     def _mkpscale(self):
         # Define the standard pressure scale for this vertical grid
+        # could also be defined as as d1d field
         self.attr['pscale'] = self.attr['am'] + self.attr['bm'] * 101325
 
     def _mkthet(self):
