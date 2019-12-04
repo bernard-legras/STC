@@ -63,7 +63,7 @@ elif 'ciclad' in socket.gethostname():
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
     sats_dir = '/data/legras/sats'
     root_dir = '/bdd/STRATOCLIM/data'
-    alt_root_dir = root_dir
+    alt_root_dir = '/data/legras/flexpart_in/SAFNWC'
     gridsat = '/bdd/FCDR/GridSat-B1'
 elif socket.gethostname() == 'satie':
     sats_dir = '/limbo/data/STC/sats'
@@ -122,7 +122,7 @@ class PureSat(object):
         self.sat = sat
 
     def show(self,field,clim=[190.,300.],txt=''):
-        ''' Shows the field in the satelliet geometry '''
+        ''' Shows the field in the satellite geometry '''
         if field not in self.var:
             print('undefined field')
             return
@@ -428,6 +428,9 @@ class GeoGrid(object):
                has been generated with it.
                TO DO: add a check here that read the mask and compares it to that in the lonlat.pkl
                file to be sure they match.
+               
+        For Full_AMA_SAF: msg1:     BB = [340,1856,306,3350]
+                          himawari: BB = [474,2750,444,3793]
         '''                 
         # get the lon lat grid from the satellite
         try:
@@ -506,7 +509,7 @@ class GridField(object):
         # Initializes var dictionary
         self.var={}
 
-    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True):
+    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True, xlocs=None):
         # test existence of key field
         if field not in self.var.keys():
             print ('undefined field')
@@ -518,7 +521,8 @@ class GridField(object):
         if 'FullAMA' in geogrid.gridtype:
             fig = plt.figure(figsize=[10, 6])
         else:
-            fig = plt.figure()
+            fig = plt.figure(figsize=[11,4])
+        fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         fs = 15
         # it is unclear how the trick with cm_lon works in imshow but it does
         # the web says that it is tricky to plot data accross dateline with cartopy
@@ -527,8 +531,6 @@ class GridField(object):
         # guess that we want to plot accross dateline 
         if geogrid.box_range[0,1]> 181: cm_lon = 180
         proj = ccrs.PlateCarree(central_longitude=cm_lon)
-        fig = plt.figure(figsize=[11,4])
-        fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         ax = plt.axes(projection = proj)
         if subgrid == None:
             plotted_field = self.var[field]
@@ -549,8 +551,8 @@ class GridField(object):
         # The grid adjusts automatically with the following lines
         # If crossing the dateline, superimposition of labels there
         # can be suppressed by specifying xlocs
-        xlocs = None
-        if cm_lon == 180: xlocs = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
+        
+        if (cm_lon == 180) & (xlocs == None): xlocs = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
         gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
         gl.xlabels_top = False
@@ -561,7 +563,7 @@ class GridField(object):
         gl.ylabel_style = {'size': fs}
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
         plt.title(txt,fontsize=fs)
-        # plot adjusted colorbar
+        # plot adjusted colorbar and show
         axpos = ax.get_position()
         pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
         pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
