@@ -40,7 +40,7 @@ delta_time = 5
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s","--segment",type=str,choices=["Jun.01","Jun.11","Jun.21","Jul.01","Jul.11","Jul.21","Aug.01","Aug.11","Aug.21","Sep.01","Sep.11","Sep.21","OctBeg"],help="segment to be processed")
+    parser.add_argument("-s","--segment",type=str,choices=["May.11","May.21","Jun.01","Jun.11","Jun.21","Jul.01","Jul.11","Jul.21","Aug.01","Aug.11","Aug.21","Sep.01","Sep.11","Sep.21","OctBeg"],help="segment to be processed")
     seg_dates = {'Jul.01':[datetime(2017,7,1,0),datetime(2017,7,11,0)],
                  'Jul.11':[datetime(2017,7,11,0),datetime(2017,7,21,0)],
                  'Jul.21':[datetime(2017,7,21,0),datetime(2017,8,1,0)],
@@ -53,6 +53,8 @@ def main():
                  'Sep.01':[datetime(2017,9,1,0),datetime(2017,9,11,0)],
                  'Sep.11':[datetime(2017,9,11,0),datetime(2017,9,21,0)],
                  'Sep.21':[datetime(2017,9,21,0),datetime(2017,10,1,0)],
+                 'May.21':[datetime(2017,5,21,0),datetime(2017,6,1,0)],
+                 'May.11':[datetime(2017,5,11,0),datetime(2017,5,21,0)],
                  'OctBeg':[datetime(2017,10,1,0),datetime(2017,10,3,0)]}
     
     seg = 'Jul.11'
