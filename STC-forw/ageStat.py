@@ -65,13 +65,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-t","--type",choices=["EAT","EAD","EAZ","EIZ","EID","EIZ-Return","EID-Return","EIZ-FULL","EID-FULL"],help="type")
 parser.add_argument("-d","--date",type=str,choices=["Jun-01","Jun-11","Jun-21","Jul-01","Jul-11","Jul-21","Aug-01","Aug-11","Aug-21"],help='run_date')
 parser.add_argument("-i","--inc",type=int,help='step inc for processing')
+parser.add_argument("-c","--core",type=str,choices=["y","n"],help="core AMA (y) or not (n)")
 
 # default values for the first start day
 year = 2017
 day = 1
-supertype = 'EAZ'
+supertype = 'EAD'
 step_inc = 6
 date = 'Jun-01'
+core = False
 
 # area_pix: area of the pixel in the projected SAFNWC map (in degree^2)
 area_pix = 0.1*0.1
@@ -80,6 +82,9 @@ args = parser.parse_args()
 if args.type is not None: supertype = args.type
 if args.date is not None: date = args.date
 if args.inc is not None: step_inc = args.inc
+if args.core is not None:
+    if args.core=='y': core=True
+    else: core=False
 
 # ages max in days
 age_max = 62
@@ -104,6 +109,8 @@ else:
 traj_dir = "/data/legras/flexout/STC/FORWBox-meanhigh"    
 out_dir = "/data/legras/STC/STC-FORWBox-meanhigh-OUT"
 file_out = join(out_dir,'ageStat-'+supertype+'-'+str(year)+'-'+date)
+if core:
+    file_out = join(out_dir,'ageStat-'+supertype+'-Core-'+str(year)+'-'+date)
 
 print("ageStat> process "+supertype+' '+date)
 run_dir = join(traj_dir,'FORW-'+supertype1+'-'+str(year)+'-'+date)
@@ -141,9 +148,12 @@ startime = pos0['ir_start'].copy()/3600
 # filtering the 30 August at 11:00
 if date == 'Aug-21':
     live[pos0['ir_start'] == 3600*227] = False
-#  filtering high lat / high alt
+#  filtering high lat / high alt (spurious sources above 360K at lat>40N)
 thet = pos0['t'] * (cst.p0/pos0['p'])**cst.kappa
 live[(thet>360) & (pos0['y']>=40)] = False
+# filtering out of the AMA core region if required
+if core:
+    live[(pos0['y']>40) | (pos0['y']<10) | (pos0['x']<20) | (pos0['x']>140)] = False
 del thet
 del pos0
 del ct
