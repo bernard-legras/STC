@@ -55,7 +55,14 @@ IDX_ORGN = 0
 class BlacklistError(Exception):
     pass
 
-blacklist = [datetime(2017,8,30,11),
+blacklist = [datetime(2017,9,27,8),
+    datetime(2017,9,16,8,40),
+    datetime(2017,9,16,8,30),
+    datetime(2017,9,12,14,20),
+    datetime(2017,9,12,14,15),
+    datetime(2017,9,12,14,0),
+    datetime(2017,9,12,13,0),
+    datetime(2017,8,30,11),
     datetime(2017,8,30,11,20),
     datetime(2017,8,30,11,45),
     datetime(2017,8,30,5,15),
@@ -84,7 +91,7 @@ def main():
     parser.add_argument("-m","--month",type=int,choices=1+np.arange(12),help="month")
     parser.add_argument("-d1","--day1",type=int,choices=1+np.arange(31),help="day1")
     parser.add_argument("-d2","--day2",type=int,choices=1+np.arange(31),help="day2")
-    parser.add_argument("-a","--advect",type=str,choices=["OPZ","EAD","EAZ","EID","EIZ"],help="source of advecting winds")
+    parser.add_argument("-a","--advect",type=str,choices=["OPZ","EAD","EAZ","EID","EIZ","EID-FULL","EIZ-FULL"],help="source of advecting winds")
     parser.add_argument("-s","--suffix",type=str,help="suffix for special cases")
     parser.add_argument("-q","--quiet",type=str,choices=["y","n"],help="quiet (y) or not (n)")
     #parser.add_argument("-c","--clean0",type=bool,help="clean part_000")
@@ -97,10 +104,15 @@ def main():
     # to be updated
     # Define main directories
     if 'ciclad' in socket.gethostname():
-            main_sat_dir = '/data/legras/flexpart_in/SAFNWC'
-            #SVC_Dir = '/bdd/CFMIP/SEL2'
-            traj_dir = '/data/akottayil/flexout/STC/BACK'
-            out_dir = '/data/akottayil/STC'
+        main_sat_dir = '/data/legras/flexpart_in/SAFNWC'
+        #SVC_Dir = '/bdd/CFMIP/SEL2'
+        traj_dir = '/data/akottayil/flexout/STC/BACK'
+        out_dir = '/data/legras/STC'
+    elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
+        main_sat_dir = '/data/legras/flexpart_in/SAFNWC'
+        #SVC_Dir = '/bdd/CFMIP/SEL2'
+        traj_dir = '/data/akottayil/flexout/STC/BACK'
+        out_dir = '/homedata/legras/STC'
     else:
          print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
          exit()
@@ -116,7 +128,7 @@ def main():
     # default values of parameters
     # date of the flight
     year=2017
-    month=7
+    month=7+1
     day1=1
     day2=10
     advect = 'EAD'
@@ -129,7 +141,7 @@ def main():
     super =''
     args = parser.parse_args()
     if args.year is not None: year=args.year
-    if args.month is not None: month=args.month
+    if args.month is not None: month=args.month+1
     if args.advect is not None: advect=args.advect
     if args.day1 is not None: day1 = args.day1
     if args.day2 is not None: day2 = args.day2
@@ -149,7 +161,7 @@ def main():
             super = 'super'+str(vshift)
 
     # Update the out_dir with the cloud type and the super paramater
-    out_dir = os.path.join(out_dir,'STC-BACK-OUT-SAF-'+super+cloud_type)
+    out_dir = os.path.join(out_dir,'SVC-BACK-OUT-SAF-'+super+cloud_type)
     try:
         os.mkdir(out_dir)
         os.mkdir(out_dir+'/out')
@@ -163,7 +175,7 @@ def main():
     # Manage the file that receives the print output
     if quiet:
         # Output file      
-        print_file = os.path.join(out_dir,'out','BACK-SVC-EAD-'+date_beg.strftime('%b-%Y-day%d-')+date_end.strftime('%d-D01')+'.out')
+        print_file = os.path.join(out_dir,'out','BACK-SVC-EID-FULL-'+date_beg.strftime('%b-%Y-day%d-')+date_end.strftime('%d-D01')+'.out')
         fsock = open(print_file,'w')
         sys.stdout=fsock
 
@@ -178,8 +190,8 @@ def main():
     if sdate == datetime(2017,8,2): sdate = datetime(2017,8,3,6)
 
     # Directories of the backward trajectories and name of the output file
-    ftraj = os.path.join(traj_dir,'BACK-SVC-EAD-'+date_beg.strftime('%b-%Y-day%d-')+date_end.strftime('%d-D01'))    
-    out_file2 = os.path.join(out_dir,'BACK-SVC-EAD-'+date_beg.strftime('%b-%Y-day%d-')+date_end.strftime('%d-D01')+'.hdf5')
+    ftraj = os.path.join(traj_dir,'BACK-SVC-EID-FULL-'+date_beg.strftime('%b-%Y-day%d-')+date_end.strftime('%d-D01'))    
+    out_file2 = os.path.join(out_dir,'BACK-SVC-EID-FULL-'+date_beg.strftime('%b-%Y-day%d-')+date_end.strftime('%d-D01')+'.hdf5')
 
     # Directories for the satellite cloud top files
     satdir ={'MSG1':os.path.join(main_sat_dir,'msg1','S_NWC'),\
@@ -209,7 +221,7 @@ def main():
                                  ((part0['flag']&I_CROSSED)!=0).sum())
     # check idx_orgn
     if part0['idx_orgn'] != 0:
-        print('MINCHIA, IDX_ORGN NOT 0 ASSTC-M55-OUT-SAF-super1silviahigh ASSUMED, CORRECTED WITH READ VALUE')
+        print('MINCHIA, IDX_ORGN NOT 0 AS ASSUMED, CORRECTED WITH READ VALUE')
         print('VALUE ',part0['idx_orgn'])
         IDX_ORGN = part0['idx_orgn']
 
