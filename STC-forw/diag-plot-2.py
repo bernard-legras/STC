@@ -14,7 +14,7 @@ The altitude where crossing from down to up displacement occurs is calculated
 and printed for each region and group of regions.
 
 Plots displacements and crossover properties for a set of regions
-['Ocean','AsiaLand','Tibet','All','Asia','AfricaArabia']
+['Ocean','Land','Tibet','All','Asia','AfricaArabia']
 
 1) display the cumul histogram of equal, above, below in the global domain for EID & EIZ
 
@@ -46,10 +46,11 @@ import collections
 from scipy.interpolate import Akima1DInterpolator
 from scipy.optimize import brentq
 import constants as cst
+from group import group
 #from numba import jit
 
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif') 
+#plt.rc('text', usetex=True)
+#plt.rc('font', family='serif') 
 
 #supertype = 'EID-FULL'
 #target = 'global'
@@ -64,7 +65,7 @@ hmax = 24*(age_max + 10)
 hinter = 24*(age_max_inter + 10)
 # read mask an initialize edges
 print ('open mask')
-with gzip.open(join('..','mkSTCmask','MaskCartopy2-STCforwfine.pkl'),'rb') as f: 
+with gzip.open(join('..','mkSTCmask','MaskCartopy2-STCfine.pkl'),'rb') as f: 
     mm =pickle.load(f) 
 xedge = np.arange(-10,160+0.5*mm['icx'],mm['icx'])
 yedge = np.arange(0,50+0.5*mm['icy'],mm['icx'])
@@ -73,6 +74,7 @@ maxv = 422.5
 binv = 20
 binvl = 5
 vcent = np.arange(325,421,(maxv-minv)/binv)
+savefig = False
 
 # %%
 diag = {}
@@ -83,17 +85,7 @@ diag['FullAMA'] = {}
 #hdisptheta['global'] = {}
 #hdisptheta['FullAMA'] = 0
 
-group = {}
-group['Land'] = ['IndianSub','SouthChina','Pen','Pakistan','Bangladesh']
-group['AsiaLand']  = group['Land']+['NorthChina','JapanKorea']
-group['Seas'] = ['BoB','SCSPhi']
-group['Ocean'] = group['Seas'] + ['IndianOcean','Indonesia','WestPacific','MidPacific']
-group['Tibet'] = ['TibetanPlateau',]
-group['AfricaArabia'] = ['CentralAfrica','GuineaGulf','NorthAfrica','RedSea','MiddleEast']
-group['Asia'] = group['Ocean']+group['AsiaLand']+['NorthAsia','WestAsia','Caspian'] + ['TibetanPlateau',]
-group['All'] = group['Asia'] + group['AfricaArabia'] + ['Europe','Atlantic','Mediterranea']
-
-supertypes = {'global':['EID-FULL','EIZ-FULL'],'FullAMA':['EID-FULL','EIZ-FULL','EAD','EAZ']}
+supertypes = {'global':['EID-FULL','EIZ-FULL'],'FullAMA':['EID-FULL','EIZ-FULL','EAD','EAZ','EAT']}
 hightypes = ['mh','sh']
 
 for target in ['global','FullAMA']:
@@ -143,23 +135,36 @@ for target in ['global','FullAMA']:
 
 #%%
 # find the crossings of the above and below curves for the different cases
+# save the results in a pkl file
+cross = {}
 for target in ['global','FullAMA']:
+    cross[target] = {}
     for supertype in supertypes[target]:
+        cross[target][supertype] = {}
         for hightype in hightypes:
+            cross[target][supertype][hightype] = {}
             for gr in group.keys():
                 amb = diag[target][supertype][hightype][gr]['above_prop'] - diag[target][supertype][hightype][gr]['below_prop']
                 fz = Akima1DInterpolator(vcent,amb)
                 t1 = 355
-                t2 = 375
+                t2 = 370
                 if gr=='Tibet':
                     if supertype == 'EAZ': t1 = 350
                     elif supertype == 'EIZ-FULL': t1 = 365
+                    elif supertype == 'EAT': t1 = 350
+                if gr=='AfricaArabia':
+                    if (supertype == 'EIZ-FULL') & (target == 'FullAMA'):
+                        t1 = 385
+                        t2 = 400
                 try:       
                     root = brentq(fz,t1,t2)
                     print(target,'\t',supertype,'\t','\t{:.2f} K\t'.format(root),hightype,'\t',gr)
                 except:
                     print('ERROR',target,supertype,hightype,gr,fz(350),fz(375))
-                   
+                    root = np.nan
+                cross[target][supertype][hightype][gr] = root
+with gzip.open('crossover.pkl','wb') as f:
+    pickle.dump(cross,f)
 #%% diag 
 #im=plt.imshow(np.log10(hdisptheta_raw[...,6]),extent=(minv,maxv,minv,maxv),origin='lower',cmap='jet')
 #plt.colorbar(im)
@@ -173,7 +178,7 @@ ff = 1/24
 fs = 16
 fig = plt.figure(figsize=(12,8))
 fig.suptitle(r'1] source $\Delta \theta \pm$ global  EID and EIZ',fontsize=fs)
-groups = ['Ocean','AsiaLand','Tibet','All','Asia','AfricaArabia']
+groups = ['Ocean','Land','Tibet','All','Asia','AfricaArabia']
 splt = 0
 target = 'global'
 for gr in groups:
@@ -195,7 +200,7 @@ plt.show()
     
 fig = plt.figure(figsize=(12,8))
 fig.suptitle(r'2] source $\Delta \theta \pm$ FullAMA  EID and EAD',fontsize=fs)
-groups = ['Ocean','AsiaLand','Tibet','All','Asia','AfricaArabia']
+groups = ['Ocean','Land','Tibet','All','Asia','AfricaArabia']
 splt = 0    
 target = 'FullAMA'
 for gr in groups:
@@ -228,7 +233,7 @@ ff = 1/24
 fs = 16
 fig = plt.figure(figsize=(12,8))
 fig.suptitle(r'3] source $\Delta \theta \pm$ ratios global  EID and EIZ',fontsize=fs)
-groups = ['Ocean','AsiaLand','Tibet','All','Asia','AfricaArabia']
+groups = ['Ocean','Land','Tibet','All','Asia','AfricaArabia']
 splt = 0
 target = 'global'
 for gr in groups:
@@ -249,7 +254,7 @@ plt.show()
 #%%    
 fig = plt.figure(figsize=(12,8))
 fig.suptitle(r'4] source $\Delta \theta \pm$ ratios FullAMA  EAZ and EAD',fontsize=fs)
-groups = ['Ocean','AsiaLand','Tibet','All','Asia','AfricaArabia']
+groups = ['Ocean','Land','Tibet','All','Asia','AfricaArabia']
 splt = 0    
 target = 'FullAMA'
 for gr in groups:
@@ -335,17 +340,17 @@ plt.show()
 # Total sources with respect to the contribution of Asia an Africa
 fig.suptitle(r'6] total sources All, Asia, AficaArabia',fontsize=fs)
 plt.semilogx(ff*diag[target]['EAZ']['sh']['All']['total'],vcent,'r',
-             ff*(diag[target]['EAZ']['sh']['Ocean']['total']+diag[target]['EAZ']['sh']['AsiaLand']['total']+diag[target]['EAZ']['sh']['Tibet']['total']),vcent,'b',
+             ff*diag[target]['EAZ']['sh']['Asia']['total'],vcent,'b',
              ff*diag[target]['EAZ']['sh']['AfricaArabia']['total'],vcent,'k',)
 plt.ylim(330,400)
 #%%
 # Total source per region
-fig = plt.figure(figsize=(12,12))
+fig = plt.figure(figsize=(7,21))
 fig.suptitle(r'7] total sources proportion per region',fontsize=fs)
 splt = 0
 for reg in mm['regcode'].keys():
     splt += 1
-    plt.subplot(5,5,splt)
+    plt.subplot(9,3,splt)
     plt.plot(diag[target]['EAZ']['sh']['total'][:,mm['regcode'][reg]]/diag[target]['EAZ']['sh']['All']['total'],vcent,'r')
     plt.ylim(330,410)
     plt.title('total '+reg)
@@ -354,24 +359,29 @@ plt.show()
 #%% special view Asia
 #%%    
 fig = plt.figure(figsize=(6,6))
-fig.suptitle(r'4spe] source $\Delta \theta \pm$ ratios FullAMA EAD and global EID',fontsize=fs) 
+#fig.suptitle(r'4spe] source $\Delta \theta \pm$ ratios FullAMA EAD and global EID',fontsize=fs) 
 fs=22
 gr = 'Asia'
 im = plt.plot(
        #diag[target]['EIZ-FULL']['sh'][gr]['equal'],vcent,'.c',
        #diag[target]['EIZ-FULL']['sh'][gr]['below'],vcent,'--c',
        #diag[target]['EIZ-FULL']['sh'][gr]['above'],vcent,'c',
-       diag['global']['EID-FULL']['sh'][gr]['equal_prop'],vcent,'.b',
+       diag['global']['EID-FULL']['sh'][gr]['equal_prop'],vcent,'Db',
        diag['global']['EID-FULL']['sh'][gr]['below_prop'],vcent,'--b',
        diag['global']['EID-FULL']['sh'][gr]['above_prop'],vcent,'b',
-       diag[target]['EAD']['sh'][gr]['equal_prop'],vcent,'.m',
-       diag[target]['EAD']['sh'][gr]['below_prop'],vcent,'--m',
-       diag[target]['EAD']['sh'][gr]['above_prop'],vcent,'m',
-       diag['FullAMA']['EID-FULL']['sh'][gr]['equal_prop'],vcent,'.r',
+       diag[target]['EAD']['sh'][gr]['equal_prop'],vcent,'Dk',
+       diag[target]['EAD']['sh'][gr]['below_prop'],vcent,'--k',
+       diag[target]['EAD']['sh'][gr]['above_prop'],vcent,'k',
+       diag['FullAMA']['EID-FULL']['sh'][gr]['equal_prop'],vcent,'Dr',
        diag['FullAMA']['EID-FULL']['sh'][gr]['below_prop'],vcent,'--r',
        diag['FullAMA']['EID-FULL']['sh'][gr]['above_prop'],vcent,'r',
-       linewidth=4,alpha=0.9 )
+       linewidth=5,markersize=7,alpha=0.8)
 plt.ylim(330,400)
+plt.ylabel('Potential temperature (K)',fontsize=fs)
+plt.xlabel('Proportion',fontsize=fs)
 plt.tick_params(labelsize=fs)
-plt.title(gr,fontsize=fs)   
+plt.title('Asia crossover',fontsize=fs)
+if savefig:
+    plt.savefig(join('figs-Box','Asia-crossover.pdf'),dpi=300,bbox_inches='tight')
+    plt.savefig(join('figs-Box','Asia-crossover.png'),dpi=300,bbox_inches='tight')
 plt.show()
