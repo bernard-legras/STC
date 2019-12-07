@@ -8,6 +8,11 @@ We use the reprocessed version which is produced on a truncated image.
 
 Notice that the part time is supposed to start at day+1 0h where day is the day of the flight.
 
+This code has been modified to introduce a blacklist and to shift the top of the clouds
+using the parameter vshift.
+
+It does not filter out the spurious contribution from high-latitude clouds.  
+
 Created on Sun Oct  8 14:03:20 2017
 
 @author: Bernard Legras
@@ -55,7 +60,14 @@ IDX_ORGN = 0
 class BlacklistError(Exception):
     pass
 
-blacklist = [datetime(2017,8,30,11),
+blacklist = [datetime(2017,9,27,8),
+    datetime(2017,9,16,8,40),
+    datetime(2017,9,16,8,30),
+    datetime(2017,9,12,14,20),
+    datetime(2017,9,12,14,15),
+    datetime(2017,9,12,14,0),
+    datetime(2017,9,12,13,0),
+    datetime(2017,8,30,11),
     datetime(2017,8,30,11,20),
     datetime(2017,8,30,11,45),
     datetime(2017,8,30,5,15),
