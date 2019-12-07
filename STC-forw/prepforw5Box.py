@@ -31,12 +31,12 @@ These four parameters define the period to process. The first and last days are
 included in the period from 0 UTC to the time of the same day.
 - cut: pressure cut in hPa, below which the clouds are not taken into consideration
 - cloud_type: determine which cloud types are retained from the SAF cloud classification
-Four choices are offered: high, meanhigh,'veryhigh'. 
+Three choices are offered: high, meanhigh,'veryhigh'. 
 High: cloud types 8, 9, 11, 12, 13, 14 are retained
 Meanhigh: cloud types 8, 9, 12, 13 are retained
 Veryhigh: cloud type 13 is retained
 Notice that the option silviahigh (cloud types 8, 9 and 13) is not defined here but
-can be used in te analysis by appropriate filtering.
+can be used in the analysis by appropriate filtering.
 The cloud type is stored in the flag
 # cloud type
 # 8  : High opaque clouds
