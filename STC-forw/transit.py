@@ -65,6 +65,9 @@ Fixing data error:
 A patch is applied to filter out the contribution of 30 August at 11:00 in the statistics.
 No filter for spurious high lat contributions at the moment.
 
+TODO: modify the calculation of mean age and so by direct 2D histograms using age and so
+as a weight (miltiplying the sstandard weight ww)
+
 @author: Bernard Legras
 """
 
@@ -77,6 +80,7 @@ import numpy as np
 #matplotlib.use('Qt4Agg') # anaconda spyder2 on Windows 10 
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+import matplotlib.colorbar as clb
 from cartopy import feature
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import cartopy.crs as ccrs
@@ -186,6 +190,7 @@ class transit(object):
         self.transit['count']=0
         self.transit['count_vh']=0
         self.transit['count_sh']=0
+        self.count = 0
         return
     
     def update(self,dat):
@@ -204,6 +209,9 @@ class transit(object):
         id1=dat['p']<5474.88
         altbaro[id1]=z3(0.01*dat['p'][id1])
         thet = dat['t']*(p00/dat['p'])**kappa
+        
+        # Increment the call counter
+        self.count += 1
         
         # Indexing of the vertical location with vedge
         print('digitizing')
@@ -258,6 +266,7 @@ class transit(object):
             idx0=np.clip(idx0,0,self.source['binx']-1)
             idy0=np.clip(idy0,0,self.source['biny']-1)
             # Determination of the weight according to the location
+            # The weight is the area (in degree^2) of the source cloud pixel
             # ACHTUNG ACHTUNG
             # This is OK by chance because the source domain starts from 0 and
             # the resolution of the grid is 1° but it will turn wrong if the origin
@@ -284,8 +293,12 @@ class transit(object):
             
             self.transit['count'] += len(yy_t)
             self.transit['count_vh'] += np.sum(vh)
-            # should add
-            # self.transit['count_sh'] += np.sum(vh)
+            self.transit['count_sh'] += np.sum(sh)
+            
+            # Notice that another way to get the age would be to make the 
+            # 2d histogram with the age*ww as weight. This procedure based on
+            # calculating an index by np.digitize is not required and actually
+            # might be a waste of cpu.
             
             np.add.at(self.transit['totage_t'][j,:,:],(idyt,idxt),age*ww)
             np.add.at(self.transit['totage_s'][j,:,:],(idy0,idx0),age*ww)
@@ -359,7 +372,10 @@ class transit(object):
 
     def complete(self):
         H_s=self.transit['hist_s']+0. # to avoid identification and unwished mod*
-        H_t=self.transit['hist_t']+0.
+        H_t=self.transit['hist_t']+0. # could be best replaced by a copy
+        # sum over the latitudes and longitudes in the domain, 
+        # [no cosine weighting here as the impact is already scaled by the area 
+        # of the source domain]
         self.transit['Hsum_s']=np.sum(H_s,axis=(1,2))
         self.transit['Hsum_t']=np.sum(H_t,axis=(1,2))
         Hsum_s=self.transit['Hsum_s']+0. # to avoid identification and unwished mod
@@ -370,10 +386,15 @@ class transit(object):
         self.transit['Hnorm_t']=H_t/Hsum_t[:,None,None]
         H_s[H_s==0]=1
         H_t[H_t==0]=1
+        # calculate the mean for the age and other quantities by dividing
+        # the accumulation with age in the weight by the accumulation 
+        # without the age (basically the count)
         for var in ['age','dz','z','dx','dy','dx2','dy2','thet','dthet']:
             self.transit['m'+var+'_s'] = self.transit['tot'+var+'_s']/H_s
             self.transit['m'+var+'_t'] = self.transit['tot'+var+'_t']/H_t
         if self.water_path: self.transit['mrv_t'] = self.transit['rv_t']/H_t
+        # repeat the operations for vh sources if these accumulations have 
+        # been calculated
         try:
             H_s_vh=self.transit['hist_s_vh']+0.
             H_t_vh=self.transit['hist_t_vh']+0.
@@ -385,6 +406,7 @@ class transit(object):
             Hsum_t_vh[Hsum_t_vh==0]=1
             self.transit['Hnorm_s_vh']=H_s_vh/Hsum_s_vh[:,None,None]
             self.transit['Hnorm_t_vh']=H_t_vh/Hsum_t_vh[:,None,None]
+            # To avoid
             H_s_vh[H_s_vh==0]=1
             H_t_vh[H_t_vh==0]=1
             for var in ['age','dz','z','dx','dy','dx2','dy2','thet','dthet']:
@@ -392,6 +414,8 @@ class transit(object):
                 self.transit['m'+var+'_t_vh'] = self.transit['tot'+var+'_t_vh']/H_t_vh
             if self.water_path: self.transit['mrv_t_vh'] = self.transit['rv_t_vh']/H_t_vh
         except: pass
+        # repeat the operations for sh sources if these accumulations have 
+        # been calculated
         try:
             H_s_sh=self.transit['hist_s_sh']+0.
             H_t_sh=self.transit['hist_t_sh']+0.                
@@ -442,7 +466,8 @@ class transit(object):
             try: self.transit['rv_t_sh'] += other.transit['rv_t_sh']
             except: pass 
                 
-    def chart(self,field,lev,vmin=0,vmax=0,back_field=None,txt="",fgp="",cumsum=False,show=True,dpi=300):
+    def chart(self,field,lev,vmin=None,vmax=None,back_field=None,txt="",fgp="",
+              cumsum=False,show=True,dpi=300,shrink=0.63,box=None,scale=None,mask=False):
         """ Plots a 2d array field with colormap between min and max.
         This array is extracted from a 3D field with level lev.
         Optionnaly, a background field is added as contours. This field is smoothed by default.
@@ -484,54 +509,84 @@ class transit(object):
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
         cm_lon =0
         # guess that we want to plot accross dateline (to be improved) 
-        if irange[0,1]> 200: cm_lon = 180
+        if irange[0,1]> 200: cm_lon = 180 
         proj = ccrs.PlateCarree(central_longitude=cm_lon)
         fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         ax = plt.axes(projection = proj)
-        if vmin==0:    
-            vmin=np.min(self.transit[field][lev,:,:])
-        if vmax==0:    
-            vmax=np.max(self.transit[field][lev,:,:])
+        # scale factor if needed
+        if scale is not None:
+            ff = 1/scale
+        else:
+            ff = 1       
+        if vmin==None:    
+            vmin=np.min(ff*self.transit[field][lev,:,:])
+        if vmax==None:    
+            vmax=np.max(ff*self.transit[field][lev,:,:])
+            if scale is not None:
+                vmax=np.floor(vmax)+1
         try:
             bounds=np.arange(vmin,vmax*(1+0.0001),(vmax-vmin)/mymap.N)
         except:
             print('ERROR in bounds vmin vmax',vmin,vmax)
         norm=colors.BoundaryNorm(bounds,mymap.N)
-        #print('chart')
-        #print(field,self.transit[field].shape,vmin,vmax,range)
+    
         #iax=ax.imshow(self.transit[field][lev,:,:],interpolation='nearest',extent=irange.flatten(),
         #               clim=[vmin,vmax],origin='lower',cmap=mymap,norm=norm,aspect=1.)
         # Plot of the background field if needed. This field is smoothed before plotting by default in order
         # to improv the appearance
-        if back_field is not None:            
+        if back_field is not None:
+            filtered_field = gaussian_filter(self.transit[back_field][lev,:,:],2)
             if cumsum:
                 # Here we plot levels for areas that contain a percentage of the sum
-                h,edges = np.histogram(self.transit[back_field][lev,:,:],bins=50)
+                # Here we calculate the histogram of the impact in 50 bins
+                h,edges = np.histogram(self.transit[back_field][lev,:,:],bins=200)
+                # centered values for the bins
                 cc = 0.5*(edges[:-1]+edges[1:])
-                ee = np.cumsum((cc*h/np.sum(cc*h))[::-1])[::-1]         
+                # cumulated sum of the normalized impact ordered from the largest 
+                # (in size) and weakest (in impact) 
+                # to the smallest (in size) and strongest (in impact)
+                ee = np.cumsum((cc*h/np.sum(cc*h))[::-1])[::-1]
+                # find the impact value for several proportions of the total impact
                 nl = [np.argmin(np.abs(ee-x)) for x in [0.9,0.7,0.5,0.3,0.1]]
-                CS=ax.contour(xcent,ycent,gaussian_filter(self.transit[back_field][lev,:,:],2),
+                nl95 = np.argmin(np.abs(ee-0.95))
+                print(nl)
+                print(edges[nl])
+                # plot the corresponding contours of the smoothed back_field
+                CS=ax.contour(xcent,ycent,filtered_field,
                               transform=proj,levels=edges[nl],linewidths=3)
-                strs = ['90%','70%','50%','30%','10%']                
+                strs = ['90%','70%','50%','30%','10%']             
                 fmt={}
                 for l,s in zip(CS.levels,strs):
                     fmt[l] = s
                 #plt.clabel(CS,CS.levels[::2],inline=True,fmt=fmt,fontsize=12)
                 plt.clabel(CS,inline=True,fmt=fmt,fontsize=fs)
             else:
-                CS=ax.contour(xcent,ycent,gaussian_filter(self.transit[back_field][lev,:,:],2),
+                CS=ax.contour(xcent,ycent,filtered_field,
                               transform=proj,linewidths=3)                
                 plt.clabel(CS)
         # Plot of the main field
-        iax=ax.pcolormesh(xedge,yedge,self.transit[field][lev,:,:],transform=proj,
+        buf = ff*self.transit[field][lev,:,:]
+        if mask:
+            if not cumsum:
+                print('cumsum not set, mask impossible')
+            else:
+                buf[filtered_field < edges[nl95]] = np.nan
+        iax=ax.pcolormesh(xedge,yedge,buf,transform=proj,
                        clim=[vmin,vmax],cmap=mymap,norm=norm)
-        ax.add_feature(feature.NaturalEarthFeature(
-            category='cultural',
-            name='admin_1_states_provinces_lines',
-            scale='50m',
-            facecolor='none'))
+        # This produces nothong: to be fixed
+        #ax.add_feature(feature.NaturalEarthFeature(
+        #   category='cultural',
+        #    name='admin_1_states_provinces_lines',
+        #   scale='50m',
+        #    facecolor='none'))
+        # Plot coastline
         ax.coastlines('50m')
         #ax.add_feature(feature.BORDERS)
+
+        # Plot a box if required
+        if box is not None:
+            ax.plot([box[0],box[2],box[2],box[0],box[0]],[box[1],box[1],box[3],box[3],box[1]],'--',linewidth=4,color='yellow')
+        
         # The grid adjusts automatically with the following lines
         # If crossing the dateline, superimposition of labels there
         # can be suppressed by specifying xlocs
@@ -548,14 +603,24 @@ class transit(object):
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
         # Eliminate white borders
         plt.xlim(xedge[0],xedge[-1])
-        plt.ylim(yedge[0],yedge[-1])
+        # Trunacte global plots to 60S
+        if ('global' in txt) & ('target' in txt):
+            ax.set_ylim((-60,90))
+        else:
+            plt.ylim(yedge[0],yedge[-1])
         plt.title(txt,fontsize=fs)
         # plot adjusted colorbar
-        axpos = ax.get_position()
-        pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
-        pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
-        cbar=fig.colorbar(iax,cax=pos_cax)
+#     This method generates too high colorbars        
+#        axpos = ax.get_position()
+#        pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
+#        pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
+#        cbar=fig.colorbar(iax,cax=pos_cax)
+        # we do not understand exactly how these various parameters interact but the result is OK
+        cax,kw = clb.make_axes(ax,location='right',pad=0.02,shrink=shrink,fraction=0.10,aspect=12)
+        cbar = fig.colorbar(iax,cax=cax,**kw)
         cbar.ax.tick_params(labelsize=fs)
+        # command to add label on the colorbar
+        # cbar.set_label('...',size=,rotation=-90,verticalalignment='bottom')
         if len(fgp)>0:
             plt.savefig(join('figs','chart-'+fgp+'.png'),dpi=dpi,bbox_inches='tight')
         if show:
@@ -617,8 +682,8 @@ class transit(object):
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
         gl.xlabels_top = False
         gl.ylabels_right = False
-        #gl.xformatter = LONGITUDE_FORMATTER
-        #gl.yformatter = LATITUDE_FORMATTER
+        gl.xformatter = LONGITUDE_FORMATTER
+        gl.yformatter = LATITUDE_FORMATTER
         gl.xlabel_style = {'size': fs}
         gl.ylabel_style = {'size': fs}
         if len(fgp)>0:
@@ -664,11 +729,12 @@ class transit(object):
         elif self.vertype == 'theta':
             plt.ylabel('pot temperature (K)',fontsize=18)
         plt.title(txt+" lat="+str(lat),fontsize=18)
-        cax = fig.add_axes([0.91, 0.21, 0.03, 0.6])
-        cbar = fig.colorbar(iax,cax=cax)
+        #cax = fig.add_axes([0.91, 0.21, 0.03, 0.6])
+        #cbar = fig.colorbar(iax,cax=cax)
+        cbar = fig.colorbar(iax)
         cbar.ax.tick_params(labelsize=18)
         if len(fgp)>0:
-            plt.savefig(join('figs','chartv-'+fgp+'.png'),bbox_inches='tight')
+            plt.savefig(join('figs','chartv-'+fgp+'.png'),bbox_inches='tight',dpi=300)
         #fig.suptitle("txt"+" lat="+str(lat))
         if show:
             plt.show()
