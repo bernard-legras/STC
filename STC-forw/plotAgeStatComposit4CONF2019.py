@@ -82,6 +82,13 @@ supertypes = ["EAZ","EIZ","EIZ-Return","EIZ-FULL","EAD","EID","EID-Return","EID-
 #hightypes = ['sh','mh']
 hightypes = ['sh',]
 
+# parameter for  using core clouds and core analysis (only for EAD at the moment)
+core = False
+if core:
+    cc = 'core'
+else:
+    cc = ''
+
 step = 6
 hmax = 1728
 # 62 days
@@ -100,8 +107,8 @@ trea = {'EAZ':'ERA5 kinematic','EAD':'ERA5 diabatic',
         'EIZ':'ERA-I kinematic','EID':'ERA-I diabatic'}
 trea_short = {'EAZ':'ERA5 kin','EAD':'ERA5 dia',
         'EIZ':'ERA-I kin','EID':'ERA-I dia'}
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
+#plt.rc('text', usetex=True)
+#plt.rc('font', family='serif')
 dpi = 300
 
 args = parser.parse_args()
@@ -135,8 +142,10 @@ for supertype in supertypes:
     for date in dates:
         print('')
         print('Processing '+date+' for '+supertype)         
-        # get the histograms and mean data calculated by checkmean.py from the part files
+        # get the histograms and mean data calculated by ageStat.py from the part files
         file_out = os.path.join(out_dir,'ageStat-'+supertype+'-2017-'+date)
+        if core & (supertype == 'EAD'):
+            file_out = os.path.join(out_dir,'ageStat-'+supertype+'-Core-2017-'+date)
         print('reading',file_out )
         with gzip.open(file_out,'rb') as f:
            [_,histog,_,_] = pickle.load(f)
@@ -147,13 +156,13 @@ for supertype in supertypes:
 
 #%%        
 # need to load the true source distribution
-with gzip.open(os.path.join(forw_dir,'source_dist.pkl'),'rb') as f:
+with gzip.open(os.path.join(forw_dir,'source_dist_updated.pkl'),'rb') as f:
         source_dist = pickle.load(f)
 
 # insert the source distribution       
 for hightype in hightypes:
     for supertype in ['EAZ','EAD','EIZ','EID']:
-        result[hightype][supertype]['histog'] = np.insert(result[hightype][supertype]['histog'],0,source_dist['sh'],axis=0)
+        result[hightype][supertype]['histog'] = np.insert(result[hightype][supertype]['histog'],0,source_dist['sh'+cc],axis=0)
 
 #%% 1) Plot of the age/thet histogram
 #for hightype in hightypes:
@@ -179,6 +188,9 @@ degree = 6372 * 2 * np.pi / 360
 ff_s = (1/24) * degree**2
 fst = 16
 fs  =20
+show_slope = True
+lt1 = 94   # index for theta = 369.5 K
+lt2 = 144  # index for theta = 419.5 K
 
 for hightype in hightypes:
     fig = plt.figure(figsize=(9,9))
@@ -191,17 +203,28 @@ for hightype in hightypes:
         im = plt.imshow(ff_s*result[hightype][supertype]['histog'][0:249,:].T,
                    extent=(0.,62,275,700),origin='lower',aspect='auto',cmap=mymap,
                    norm = LogNorm(vmin=10,vmax=5e7))
-        plt.ylim(320,440)
+        if show_slope:
+            hh = result[hightype][supertype]['histog'][0:249,:].copy()
+            # factor 0.25 because the sampling step is 6h
+            ss = 0.25*np.sum(hh,axis=0)
+            hh = hh / ss[np.newaxis,:]
+            # 0.25 is 6h
+            # The offset 30 is here to avoid capturing a wrong max at high altitude in EAD and EIZ
+            [slope,org] = np.polyfit(ages[30+np.argmax(hh[30:,lt1:lt2+1],axis=0)],theta[lt1:lt2+1],1)
+            age1 = (theta[lt1] - org)/slope
+            age2 = (theta[lt2] - org)/slope
+            plt.plot([age1,age2],[theta[lt1],theta[lt2]])
+        plt.ylim(320,420)
         plt.xlim(0,62)
         plt.tick_params(labelsize=fst)
         #plt.colorbar()
         plt.title(trea[supertype],fontsize=fs)      
-        if n in [1,3]: plt.ylabel('potential temperature (K)',fontsize=fs)
-        if n in [3,4]: plt.xlabel('age (day)',fontsize=fs)
+        if n in [1,3]: plt.ylabel(r'Potential temperature (K)',fontsize=fs)
+        if n in [3,4]: plt.xlabel(r'Age (day)',fontsize=fs)
         n += 1
     cax = fig.add_axes([0.17,-0.04,0.67,0.05])
     cbar = fig.colorbar(im,cax,orientation='horizontal')
-    cbar.set_label(r'cumulative impact per age (day km$^2$ K$^{-1}$)',labelpad=-1,size=fs)
+    cbar.set_label(r'Cumulative impact per age (day km$^2$ K$^{-1}$)',labelpad=-1,size=fs)
     cbar.ax.tick_params(labelsize=fs)
     if figpdf:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethethist-composit-ACP.png'),bbox_inches='tight',dpi=dpi)
@@ -211,7 +234,7 @@ for hightype in hightypes:
 #%% 1 bis ACP) diagnostics on this histogram
     # integral of source dist over the potential temperature
     d_theta = 5
-    SS = ff_s*np.sum(source_dist['sh']) * d_theta
+    SS = ff_s*np.sum(source_dist['sh'+cc]) * d_theta
     tc = 140
     for hightype in hightypes:
         impact = {}
@@ -254,7 +277,7 @@ for hightype in hightypes:
         plt.xlabel('probability of hiting the level',fontsize=fs)
         plt.ylabel('potential temperature (K)',fontsize=fs)
         plt.tick_params(labelsize=fs)
-        plt.ylim(320,440)
+        plt.ylim(320,420)
         plt.xlim(1.e-3,2)
         plt.show()
     
@@ -280,7 +303,7 @@ for hightype in hightypes:
 #        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethetnormhist-composit'))
 #    plt.show()
     
-#%% 2ACP) Plot of the age/thet histogram, normalized for each level
+#%% 2ACP) Plot of the age/thet histogram, normalized for each level by integrating in time
 lt1 = 94   # index for theta = 369.5 K
 lt2 = 144  # index for theta = 419.5 K
 for hightype in hightypes:
@@ -289,8 +312,9 @@ for hightype in hightypes:
     n = 1
     for supertype in ['EAZ','EAD','EIZ','EID']:
         plt.subplot(2,2,n)
-        hh = result[hightype][supertype]['histog'][0:249,:]
-        ss = np.sum(hh,axis=0)
+        hh = result[hightype][supertype]['histog'][0:249,:].copy()
+        # factor 0.25 because the sampling step is 6h
+        ss = 0.25*np.sum(hh,axis=0)
         hh = hh / ss[np.newaxis,:]
         im = plt.imshow(hh.T,norm = LogNorm(vmin=1e-6,vmax=0.1),
                    extent=(0.,62,275,700),origin='lower',aspect='auto',cmap=mymap)
@@ -302,16 +326,17 @@ for hightype in hightypes:
         plt.plot([age1,age2],[theta[lt1],theta[lt2]])
         plt.ylim(320,420)
         plt.xlim(0.,62)
+        plt.tick_params(labelsize=fst)
         plt.title(trea[supertype],fontsize=fs)
         print(supertype,slope)
         
-        if n in [1,3]: plt.ylabel('potential temperature (K)',fontsize=fs)
-        if n in [3,4]: plt.xlabel('age (day)',fontsize=fs)
+        if n in [1,3]: plt.ylabel(r'Potential temperature (K)',fontsize=fs)
+        if n in [3,4]: plt.xlabel(r'Age (day)',fontsize=fs)
         n += 1
     cax = fig.add_axes([0.17,-0.04,0.67,0.05])
     cbar = fig.colorbar(im,cax,orientation='horizontal')
-    cbar.set_label(r'normalized age spectrum per level (day$^{-1}$)',labelpad=-1,size=fs)
-    cbar.ax.tick_params(labelsize=fst)
+    cbar.set_label(r'Normalized age spectrum per level (day$^{-1}$)',labelpad=-1,size=fs)
+    cbar.ax.tick_params(labelsize=fs)
     if figpdf:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethetnormhist-composit-ACP.png'),bbox_inches='tight',dpi=dpi)
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethetnormhist-composit-ACP.pdf'),bbox_inches='tight',dpi=dpi)
@@ -422,8 +447,8 @@ for hightype in hightypes:
         plt.semilogy(ageaxis,total,'k',ageaxis,toprange,'r',
                      ageaxis,botrange,'b',ageaxis,midrange,'g',linewidth=4)
         
-        if n in [1,3]: plt.ylabel(r'cumulative impact (day$^2$ km$^2$)',fontsize=fs)
-        if n in [3,4]: plt.xlabel(r'age (day)',fontsize=fs)
+        if n in [1,3]: plt.ylabel(r'Cumulative impact (day$^2$ km$^2$)',fontsize=fs)
+        if n in [3,4]: plt.xlabel(r'Age (day)',fontsize=fs)
         plt.tick_params(labelsize=fst)
         plt.ylim(1000,3e8)
         # Calculate the slope of the curves during the second half and fit a curve
@@ -446,7 +471,7 @@ for hightype in hightypes:
         #else:
         #    plt.ylim(5*10**3,2*10**6)
         
-        plt.title('{} t:{:3.1f} m:{:3.1f} b:{:3.1f}'.format(trea_short[supertype],-1/total_slope,-1/midrange_slope,-1/botrange_slope),fontsize=fs)
+        plt.title(r'{} t:{:3.1f} m:{:3.1f} b:{:3.1f}'.format(trea_short[supertype],-1/total_slope,-1/midrange_slope,-1/botrange_slope),fontsize=fs)
         n += 1
         
     if figpdf:
@@ -458,9 +483,6 @@ for hightype in hightypes:
 # We only have data at 6h but that should not be too different in terms of vertical distribution
 # By construction, the distribution of sources is the same for all runs
     # We use now the source distribution calculated directly from part_000 data in sources-stat.py
-
-with gzip.open(os.path.join(forw_dir,'source_dist.pkl'),'rb') as f:
-    source_dist = pickle.load(f)
 
 #for hightype in hightypes:
 #    fig = plt.figure(figsize=(14,7))
@@ -522,24 +544,24 @@ for hightype in hightypes:
     n = 1
     for supertype in ['EAZ','EAD','EIZ','EID']:
         plt.subplot(2,2,n)
-        hh = result[hightype][supertype]['histog'][0:249,:]
-        ss = np.sum(hh,axis=0)
+        hh = result[hightype][supertype]['histog'][0:249,:].copy()
+        ss = 0.25*np.sum(hh,axis=0)
         hh = hh / ss[np.newaxis,:]
-        agemean = np.sum(hh*ageaxis[:,np.newaxis],axis=0)
+        agemean = 0.25*np.sum(hh*ageaxis[:,np.newaxis],axis=0)
         agemode = ageaxis[np.argmax(hh,axis=0)]
         plt.plot(ageaxis,hh[:,94],'b',ageaxis,hh[:,104],'r',ageaxis,hh[:,124],'k',linewidth=5)
-        plt.scatter(agemean[94],0.015,c='b',marker='v',s=128)
-        plt.scatter(agemean[104],0.015,c='r',marker='v',s=128)
-        plt.scatter(agemean[124],0.015,c='k',marker='v',s=128)
-        plt.scatter(agemode[94],0.013,c='b',marker='D',s=96)
-        plt.scatter(agemode[104],0.013,c='r',marker='D',s=96)
-        plt.scatter(agemode[124],0.013,c='k',marker='D',s=96)
+        plt.scatter(agemean[94],0.065,c='b',marker='v',s=128)
+        plt.scatter(agemean[104],0.065,c='r',marker='v',s=128)
+        plt.scatter(agemean[124],0.065,c='k',marker='v',s=128)
+        plt.scatter(agemode[94],0.053,c='b',marker='D',s=96)
+        plt.scatter(agemode[104],0.053,c='r',marker='D',s=96)
+        plt.scatter(agemode[124],0.053,c='k',marker='D',s=96)
         #plt.plot([agemean[94],],[0.015,],'bv',[agemean[104],],[0.015,],'rv',[agemean[124],],[0.015,],'kv',linewidth=12)
         plt.title(trea[supertype],fontsize=fs)
         plt.tick_params(labelsize=fst)
-        plt.ylim(0,0.016)
-        if n in [1,3]: plt.ylabel('cumulated age spectrum (day$^{-1}$)',fontsize=fs)
-        if n in [3,4]: plt.xlabel('age (day)',fontsize=fs)
+        plt.ylim(0,0.07)
+        if n in [1,3]: plt.ylabel('Normalized age spectrum (day$^{-1}$)',fontsize=fs)
+        if n in [3,4]: plt.xlabel('Age (day)',fontsize=fs)
         n += 1
     if figpdf:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agehistog3levels-composit-ACP.png'),bbox_inches='tight',dpi=dpi)
@@ -549,8 +571,8 @@ for hightype in hightypes:
 #%% 7ACP) Comparison of the histograms for EAZ, EAD, EID, EIZ, EID-Return, EIZ-Return
 # superimposed to the source curve    
 # Set TeX to write the labels and annotations
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
+plt.rc('text', usetex=False)
+#plt.rc('font', family='sansserif')
 
 # normalization factor 1/24 * 1/4 (to convert units of previous time factor in
 # day and to multiply per the time integration interval 6h and the inverse of the layer
@@ -558,34 +580,43 @@ plt.rc('font', family='serif')
 ff = (1/24) * (1/4) * degree**2
 # for the source distribution, the Delta t factor is not used
 ff_s = (1/24)  * degree**2
-fs = 22
+fs = 14
 for hightype in hightypes:
-    fig,ax = plt.subplots(figsize=(9,9))
+    hightcore = hightype+cc
+    fig,ax = plt.subplots(figsize=(5,5))
     ax.semilogx(ff*np.sum(result[hightype]['EIZ']['histog'][0:249,:],axis=0),thetaxis,'--r',
                 ff*np.sum(result[hightype]['EID']['histog'][0:249,:],axis=0),thetaxis,'r',
                 ff*np.sum(result[hightype]['EAZ']['histog'][0:249,:],axis=0),thetaxis,'--b',
                 ff*np.sum(result[hightype]['EAD']['histog'][0:249,:],axis=0),thetaxis,'b',
-                linewidth=6)
-    ax.set_ylabel(r'potential temperature $\theta$ (K)',fontsize=fs)
-    ax.set_xlabel(r'target cumulative impact distribution (day$^2$ km$^2$ K$^{-1}$)',fontsize=fs)
-    ax.set_ylim(320,440)
+                linewidth=5)
+    ax.set_ylabel(r'Potential temperature $\theta$ (K)',fontsize=fs)
+    ax.set_xlabel(r'Target cumulative impact (day$^2$ km$^2$ K$^{-1}$)',fontsize=fs)
+    ax.set_ylim(320,420)
     ax.set_xlim(1e5,5e8)
     ax.tick_params(labelsize=fs) 
+    # calculation of a fit for the EAD and EID curves between 370 and 480 K and addition of this fitto the figure
+    slope1,x01 = np.polyfit(thetaxis[95:135],np.log(ff*np.sum(result[hightype]['EAD']['histog'][0:249,95:135],axis=0)),1)
+    slope2,x02 = np.polyfit(thetaxis[95:135],np.log(ff*np.sum(result[hightype]['EID']['histog'][0:249,95:135],axis=0)),1)
+    print('slopes',1/slope1,1/slope2)
+    ax.semilogx(np.exp(x01)*np.exp(slope1*thetaxis[95:135]),thetaxis[95:135],'b',
+                        np.exp(x02)*np.exp(slope2*thetaxis[95:135]),thetaxis[95:135],'r',
+                        linewidth = 24, alpha = 0.3)
     # superimpose the source curve in separate axis (same log range)
     ax2 = ax.twiny()
-    ax2.set_xlabel(r'source distribution (day km$^2$ K$^{-1}$)',fontsize=fs,color='g')
-    ax2.semilogx(ff_s*source_dist[hightype],thetaxis,'g',linewidth=8,alpha=0.5)
+    ax2.set_xlabel(r'High cloud distribution (day km$^2$ K$^{-1}$)',fontsize=fs,color='g')
+    ax2.semilogx(ff_s*source_dist[hightcore],thetaxis,'g',linewidth=8,alpha=0.5)
     ax2.tick_params(axis='x',labelcolor='g',labelsize=fs)
     ax2.set_xlim(1e4,5e8)
-    ax.legend([r'\textit{ERA-I kin}',r'\textbf{ERA-I dia}',
-               r'\textit{ERA5 kin}',r'\textbf{ERA5 dia}'],
-               fontsize=fs,loc='upper right')
+    ax.legend([r'$\it ERA$-$\itI~kin$',r'$\bf ERA$-$\bfI~dia$',
+               r'${\it ERA5~kin}$',r'${\bf ERA5~dia}$'],
+               fontsize=fs,loc='centerleft')
     # plt.title('Cumulative impact in the AMA region as a function of altitude',fontsize=fs)
     # plot horizontal line at modal max of sources
-    ax2.plot([1e4,5e8],[thetaxis[np.argmax(source_dist[hightype])],
-                    thetaxis[np.argmax(source_dist[hightype])]],'g')
-    ax2.annotate(r'$\theta$ = 349.5 K',(1.50e4,351),fontsize=fs)
-    print('theta for max source',thetaxis[np.argmax(source_dist[hightype])])
+    ax2.plot([1e4,5e8],[thetaxis[np.argmax(source_dist[hightcore])],
+                    thetaxis[np.argmax(source_dist[hightcore])]],'g')
+    ax2.annotate(r'$\theta$ = 349.5 K',(1.50e4,344),fontsize=fs)
+    print('theta for max source',thetaxis[np.argmax(source_dist[hightcore])])
+    
     if figpdf:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-age-compar-impact-profile-composit-ACP.png'),bbox_inches='tight',dpi=dpi)
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-age-compar-impact-profile-composit-ACP.pdf'),bbox_inches='tight',dpi=dpi)
@@ -594,10 +625,12 @@ for hightype in hightypes:
 #%% 7bisACP) Plot of the proportion of parcels above a given level relative to the same proportion in the sources
 # Calculation of the proportion for the sources
 fs = 22  
+plt.rc('text', usetex=True)
 
 for hightype in hightypes:
-    source_above = np.flip(np.cumsum(np.flip(source_dist[hightype]))/np.sum(source_dist[hightype]))
-    source_below = np.cumsum(source_dist[hightype])/np.sum(source_dist[hightype])
+    hightcore = hightype+cc
+    source_above = np.flip(np.cumsum(np.flip(source_dist[hightcore]))/np.sum(source_dist[hightcore]))
+    source_below = np.cumsum(source_dist[hightcore])/np.sum(source_dist[hightcore])
     target_above = {}
     target_below = {}
     fig,ax = plt.subplots(figsize=(9,9))
@@ -616,17 +649,17 @@ for hightype in hightypes:
     ax.plot(np.ones(len(thetaxis)),thetaxis,'k')
     ax.set_ylabel('target potential temperature (K)',fontsize=fs)
     ax.set_xlabel('target/source cumulative ratio distribution',fontsize=fs)
-    ax.set_ylim(320,440)
-    ax.set_xlim(0,14)
+    ax.set_ylim(320,420)
+    ax.set_xlim(0,150)
     ax.tick_params(labelsize=fs)
     # superimpose the source curve
     ax2 = ax.twiny()
-    ax2.semilogx(ff_s*source_dist[hightype],thetaxis,'g',linewidth=8,alpha=0.5)
+    ax2.semilogx(ff_s*source_dist[hightcore],thetaxis,'g',linewidth=8,alpha=0.5)
     ax2.tick_params(axis='x',labelcolor='g',labelsize=fs)
     ax2.set_xlabel('source distribution (day km$^2$ K$^{-1}$)',fontsize=fs,color='g')
     ax2.set_xlim(1e4,5e8)
-    ax2.plot([1e4,5e8],[thetaxis[np.argmax(source_dist[hightype])],
-                    thetaxis[np.argmax(source_dist[hightype])]],'g')
+    ax2.plot([1e4,5e8],[thetaxis[np.argmax(source_dist[hightcore])],
+                    thetaxis[np.argmax(source_dist[hightcore])]],'g')
     ax2.annotate(r'$\theta$ = 349.5 K',(15e4,351),fontsize=fs)
     ax.legend([r'\textbf{ERA5 kin}',r'\textit{ERA5 dia}',
                 r'\textbf{ERA-I kin}',r'\textit{ERA-I dia}'],
@@ -638,4 +671,68 @@ for hightype in hightypes:
     if figpdf:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-age-compar-impact-ratio-composit-ACP.png'),bbox_inches='tight',dpi=dpi)
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-age-compar-impact-ratio-composit-ACP.pdf'),bbox_inches='tight',dpi=dpi)  
-    plt.show() 
+    plt.show()
+    
+#%% analysis of diffusion
+alpha = 1/13.3
+AA = {'EAD':1.07,'EAZ':1.11,'EIZ':0.98,'EID':1.35}
+for supertype in['EAD','EAZ','EID','EIZ']:
+    # analysis as a function of the vertical coordinate theta by summing over time
+    hht = result['sh'][supertype]['histog'][0:249,74:140].copy()
+    thets = thetaxis[74:140]
+    # sum over time
+    sst = np.sum(hht,axis=0)
+    # max along the time axis 
+    hhtmax = np.max(hht,axis=0)
+    # normalizing each histogram for a given theta
+    hht /= sst[np.newaxis,:]
+    fig = plt.figure(figsize=(12,6))
+    plt.subplot(2,4,1)
+    # mean age for theta values
+    agemean = np.sum(hht*ageaxis[:,np.newaxis],axis=0)
+    agemode = ageaxis[np.argmax(hht,axis=0)]
+    plt.plot(agemean,thets,agemode,thets)
+    plt.ylim(370,400)
+    plt.title(supertype+' mean and mode (t)')
+    plt.subplot(2,4,2)
+    var2age = np.sum(hht*ageaxis[:,np.newaxis]**2,axis=0) - agemean**2
+    [b,a] = np.polyfit(agemean[10:30],var2age[10:30],1)
+    dcor = (0.5*AA[supertype]**2 * b)/(1 - 2*alpha*b)
+    print('diff1 '+supertype,0.5*b,dcor)
+    plt.plot(agemean,var2age,agemean,a + b*agemean)
+    plt.title(supertype+' age: var vs mean' )
+    plt.subplot(2,4,3)
+    tags=[5,10,15,20,25,30,35,40]
+    for tag in tags:
+        plt.plot(ageaxis,hht[:,tag])
+    plt.subplot(2,4,4)
+    plt.plot(hhtmax[20:50]*np.exp(alpha*agemode[20:50])*np.sqrt(agemode[20:50]),thets[20:50])
+   
+    # analysis as a function of time by summing over theta
+    # this method does not work possibly for lack of separation in kinematic
+    hhp = result['sh'][supertype]['histog'][0:249,74:140].copy()
+    thets = thetaxis[74:140]
+    ssp = np.sum(hhp,axis=1)
+    hhpmax = np.max(hhp,axis=1)
+    hhp /= ssp[:,np.newaxis]
+    plt.subplot(2,4,5)
+    thetmean = np.sum(hhp*thets[np.newaxis,:],axis=1)
+    thetmode = thets[np.argmax(hh,axis=1)]
+    plt.plot(ageaxis,thetmean,ageaxis,thetmode)
+    plt.title(supertype+' mean and mode (thet)')
+    plt.subplot(2,4,6)
+    var2thet = np.sum(hhp*thets[np.newaxis,:]**2,axis=1) - thetmean**2
+    [b,a] = np.polyfit(ageaxis[10:60],var2thet[10:60],1)
+    print('diff2 '+supertype,0.5*b)
+    plt.plot(ageaxis,var2thet,ageaxis,a + b*ageaxis)
+    plt.subplot(2,4,7)
+    tags=[5,10,20,30,40,50,60,70,80,100,140,160,180,200,220,240]
+    for tag in tags:
+        plt.plot(hhp[tag,:],thets)
+    plt.subplot(2,4,8)
+    print('hhpmax0 '+supertype,hhpmax[0])
+    plt.plot(ageaxis,hhpmax*np.exp(alpha*ageaxis)*np.sqrt(ageaxis))
+    if figpdf:
+        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-'+supertype+'-diffus-anal-ACP.png'),bbox_inches='tight',dpi=dpi)
+        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-'+supertype+'-diffus-anal-ACP.pdf'),bbox_inches='tight',dpi=dpi)  
+    plt.show()    
