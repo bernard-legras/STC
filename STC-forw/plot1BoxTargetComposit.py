@@ -134,7 +134,7 @@ for stream in ['Jul-11','Jul-21','Aug-01','Aug-11','Aug-21']:
         run_name = names[supertype]+' '+target
      
     thet = {3:'340',4:'345',5:'350',6:'355',7:'360',8:'365',9:'370',10:'375',11:'380',13:'390',15:'400',17:'410',19:'420'}
-    vmm = {3:1,4:1,5:1,6:1,7:1,8:0.75,9:0.25,10:0.2,11:0.125,13:0.06,15:0.025,17:0.015,19:0.01}
+    vmm = {3:1,4:1,5:1,6:1,7:1,8:0.5,9:0.25,10:0.2,11:0.12,13:0.06,15:0.025,17:0.012,19:0.006}
     cosf = np.cos(np.radians(pile.target['ycent']))
     degree = 6372 * 2 * np.pi / 360
     area = degree**2    
@@ -148,10 +148,11 @@ for stream in ['Jul-11','Jul-21','Aug-01','Aug-11','Aug-21']:
                    fgp=run_name+'-target-'+thet[lev]+'K'+suffix2,show=show,vmin=0,vmax=vmm[lev])
 
 #%% Plot of gsum for the various levels (420K not shown)
-dates = [datetime(2017,7,16),datetime(2017,7,26),datetime(2017,8,6),datetime(2017,8,16),datetime(2017,8,26)]
-#fig=plt.figure(figsize=(6,4))
-for lev in [3,4,5,6,7,8,9,10,11,13,15,17]:
-    aa = np.empty(5)
+dates = [datetime(2017,7,11), datetime(2017,7,21), datetime(2017,8,1), datetime(2017,8,11), datetime(2017,8,21)]
+
+fig=plt.figure(figsize=(6,4))
+for lev in [3,5,6,7,8,9,10,11,13,15,17]:
+    aa = np.empty(len(dates))
     i = 0
     for stream in gsum.keys():
         aa[i] = gsum[stream][lev]
@@ -160,14 +161,17 @@ for lev in [3,4,5,6,7,8,9,10,11,13,15,17]:
         plt.plot(dates,aa,lw=4)
     else:
         plt.plot(dates,aa,'--',lw=4)
-plt.legend(('340K','345','350K','355K','360K','365','370K','375K','380K','390K','400K','410K'))
+plt.legend(('340K','350K','355K','360K','365','370K','375K','380K','390K','400K','410K'))
 plt.title('cumulated impact per level',fontsize=16)
 fig.autofmt_xdate()
+plt.savefig(os.path.join('figs-Box','cumulated_impact.pdf'),dpi=300)
+plt.savefig(os.path.join('figs-Box','cumulated_impact.png'),dpi=300)
 plt.show()
 #%%
 
 j = 0
-for lev in [3,4,5,6,7,8,9,10,11,13,15,17]:
+fig=plt.figure(figsize=(6,4))
+for lev in [3,5,6,7,8,9,10,11,13,15,17]:
     aa = np.empty(5)
     i = 0
     for stream in gsum.keys():
@@ -179,10 +183,12 @@ for lev in [3,4,5,6,7,8,9,10,11,13,15,17]:
     else:
         plt.plot(dates,aa,'--',lw=4)
     j += 1
-plt.legend(('340K','345','350K','355K','360K','365','370K','375K','380K','390K','400K','410K'),
+plt.legend(('340K','350K','355K','360K','365','370K','375K','380K','390K','400K','410K'),
            loc='upper right')
 plt.title('normalized shifted cumulated impact per level',fontsize=16)
 fig.autofmt_xdate()
+plt.savefig(os.path.join('figs-Box','shifted_cumulated_impact.pdf'),dpi=300)
+plt.savefig(os.path.join('figs-Box','shifted_cumulated_impact.png'),dpi=300)
 plt.show()
 #%%
 pickle.dump(gsum,open('gsum.pkl','wb'))
