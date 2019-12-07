@@ -47,6 +47,7 @@ from os.path import join
 import socket
 import constants as cst
 from numba import njit
+from group import group
 
 #%%
 @njit
@@ -62,11 +63,11 @@ age_max = 62
 age_max_inter = 30
 # family: association of supertype with target parameter
 family = {1:['EID-FULL','global'],2:['EIZ-FULL','global'],3:['EAD','FullAMA'],4:['EAZ','FullAMA'], \
-          5:['EID-FULL','FullAMA'],6:['EIZ-FULL','FullAMA']}
+          5:['EID-FULL','FullAMA'],6:['EIZ-FULL','FullAMA'],7:['EAT','FullAMA']}
 
 # read mask an initialize edges at 0.25° resolution
 print ('open mask')
-with gzip.open(join('..','mkSTCmask','MaskCartopy2-STCforwfine.pkl'),'rb') as f: 
+with gzip.open(join('..','mkSTCmask','MaskCartopy2-STCfine.pkl'),'rb') as f: 
     mm =pickle.load(f) 
 xedge = np.arange(-10,160+0.5*mm['icx'],mm['icx'])
 yedge = np.arange(0,50+0.5*mm['icy'],mm['icx'])
@@ -92,7 +93,9 @@ elif  socket.gethostname() in ['gort','satie']:
 
 hightypes = ['mh','sh']
 
-for ff in family:
+#for ff in family:
+#for ff in [3,5,1,4,7]:
+for ff in [2,6]:
     supertype = family[ff][0]
     target = family[ff][1]
     print(supertype,target)
@@ -194,11 +197,7 @@ for ff in family:
     
     #%% Grouping of the regions into blocks and cumulating the previous dignostics
     # into these blocks
-    group = {}
-    group['Land']  = ['IndianSub','SouthChina','Pen','Pakistan','Bangladesh']
-    group['Seas'] = ['BoB','SCSPhi']
-    group['Ocean'] = group['Seas'] + ['IndianOcean','Indonesia','WestPacific']
-    group['Tibet'] = ['TibetanPlateau',]
+    
     for hightype in hightypes:
         for gr in group.keys():
             diag[hightype][gr] = {}
