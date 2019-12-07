@@ -9,7 +9,10 @@ The output from this calculation can be used together with that of ageStat
 to produce a plot of the histogram that includes age 0.
 The calculations produces an histogram for the unions of all the streams
 It uses as input the part_000 files contained in STC-FORWBox-meanhigh-initial.
-The calculation is only performed for sh cloud tops.
+The calculation is performed for mh and sh cloud tops.
+
+The spurious data of 21 August at 11 are removed for sh clouds only.
+No high latitude filter is applied inconsistently to ageStat
 
 Pruduces a file source_dist.pkl
 
@@ -70,7 +73,7 @@ for stream in streams:
      # extract the silviahigh selector
     ct = pos0['flag'] >> 24
     silviahigh = (ct == 9) | (ct == 13) | (ct == 8)
-    # filtering the 30 August at 11:00
+    # filtering the 30 August at 11:00 for silviahigh
     if stream == 'Aug-21':
         silviahigh = silviahigh & ~(pos0['ir_start'] == 3600*227)   
     source_dist['mh'] += np.histogram(theta0,bins=nbins,range=range_theta,weights=area_pix*np.cos(np.deg2rad(y0)))[0]
