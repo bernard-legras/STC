@@ -32,6 +32,7 @@ import matplotlib.pyplot as plt
 from io107 import readpart107
 import constants as cst
 import socket
+from group import group
 
 streams = ["Jun-01","Jun-11","Jun-21","Jul-01","Jul-11","Jul-21","Aug-01","Aug-11","Aug-21"]
 #streams = ['Jul-21',]
@@ -62,7 +63,7 @@ source_dist['nbins'] = nbins
 source_dist['range'] = range_theta
 source_dist['thetac'] = np.arange(275.5,700.5)
 
-with gzip.open(join('..','mkSTCmask','MaskCartopy2-STCforwfine.pkl'),'rb') as f: 
+with gzip.open(join('..','mkSTCmask','MaskCartopy2-STCfine.pkl'),'rb') as f: 
     mm =pickle.load(f)
     
 regcode = mm['regcode']
@@ -72,16 +73,6 @@ xlon0 = -10
 ylat0 = 0
 nlon = mm['nlons']
 nlat = mm['nlats']
-
-group = {}
-group['Land'] = ['IndianSub','SouthChina','Pen','Pakistan','Bangladesh']
-group['AsiaLand']  = group['Land']+['NorthChina','JapanKorea']
-group['Seas'] = ['BoB','SCSPhi']
-group['Ocean'] = group['Seas'] + ['IndianOcean','Indonesia','WestPacific','MidPacific']
-group['Tibet'] = ['TibetanPlateau',]
-group['AfricaArabia'] = ['CentralAfrica','GuineaGulf','NorthAfrica','RedSea','MiddleEast']
-group['Asia'] = group['Ocean']+group['AsiaLand']+['NorthAsia','WestAsia','Caspian'] + ['TibetanPlateau',]
-group['All'] = group['Asia'] + group['AfricaArabia'] + ['Europe','Atlantic','Mediterranea']
 
 #%%
 for reg in regcode.keys():
@@ -106,10 +97,13 @@ for stream in streams:
     silviahigh = (ct == 9) | (ct == 13) | (ct == 8)
     # filtering the 30 August at 11:00
     if stream == 'Aug-21':
-        silviahigh = silviahigh & ~(pos0['ir_start'] == 3600*227) 
+        silviahigh = silviahigh & ~(pos0['ir_start'] == 3600*227)     
+    #  filtering high lat / high alt (spurious sources above 360K at lat>40N)
+    # and European region
+    bad = ((theta0>360) & (y0>=40)) | ((theta0>360) & (y0>=35) & (x0<40)) 
     
     for reg in regcode.keys():
-        selec = (reg_source==regcode[reg]) & silviahigh
+        selec = (reg_source==regcode[reg]) & silviahigh & ~bad
         source_dist[reg] += np.histogram(theta0[selec],bins=nbins,range=range_theta,weights=area_pix*np.cos(np.deg2rad(y0[selec])))[0]
 
 for gr in group.keys():
@@ -125,7 +119,9 @@ with gzip.open(join(forw_dir,'source_dist_reg.pkl'),'wb') as f:
 with gzip.open(join(forw_dir,'source_dist_reg.pkl'),'rb') as f:
     source_dist = pickle.load(f)
 
-#%% stats sur les sources
+#%% stats sur les sources 
+# listing the mean source altitude, the altitude of the max source, 
+# the proportion from the region among the total, and the proportion among total Asia    
 gd_total = np.sum(source_dist['All'])
 asia_total = np.sum(source_dist['Asia'])
 for reg in list(regcode.keys()) + list(group.keys()):
@@ -135,6 +131,7 @@ for reg in list(regcode.keys()) + list(group.keys()):
     print('{:16} {:6.2f}K  {:6.2f}K {:5.1f}% {:5.1f}%'.format(reg,m0,m1,100*ss/gd_total,100*ss/asia_total))
 
 #%%
+# plot of the filtered distribution of clouds
 fs = 16
 ff_s = 1/24
 fig,ax = plt.subplots(figsize=(8,8))
@@ -147,18 +144,18 @@ ax.set_ylabel(r'potential temperature $\theta$ (K)',fontsize=fs)
 ax.tick_params(labelsize=fs) 
 plt.show()
 
-#%% Using the crossover and LZRH data, estimate the proportion of sources located
+#%% Using the crossover and LZRH data, estimate the proportion of clouds located
 # above
 
-# data from the LZRH and crossover estimations using EAD simulation sfor the crossover
+# data from the LZRH and crossover estimations using EAD simulation for the LZRH
 # (MonthlyMeans/python/SRIP/MMBoxexNAll-Spe-CONF2019-2CICE.py  and diag-plot-2.py)
-LZRH = {'TibetanPlateau':364.92,'AsiaLand':365.93,'Ocean':358.423,'Seas':354.92,'Asia':363.33}
-CrossEAD = {'TibetanPlateau':364.16,'AsiaLand':365.41,'Ocean':362.5,'Seas':362.13,'Asia':363.90}
-CrossEID = {'TibetanPlateau':363.1,'AsiaLand':361.9,'Ocean':359.1,'Seas':358.4,'Asia':361.9}
+# LZRH removed as it is not used in the sequel
+CrossEAD = {'TibetanPlateau':364.17,'Land':364.41,'Ocean':362.48,'Seas':362.13,'Asia':363.88}
+CrossEID = {'TibetanPlateau':363.14,'Land':361.84,'Ocean':358.50,'Seas':357.72,'Asia':361.72}
 upward_ratio = {}
 print('\nupward ratio for regional EAD crossover')
-for reg in ['Asia','AsiaLand','Ocean','Seas','TibetanPlateau']:
-    # proportion of sources above the local crossover
+for reg in ['Asia','Land','Ocean','Seas','TibetanPlateau']:
+    # proportion of sources above the regional crossover
     selec = source_dist['thetac']>CrossEAD[reg]
     if reg == 'Asia':
         upward_ratio['Asia'] = np.sum(source_dist[reg][selec])/np.sum(source_dist[reg])
@@ -168,7 +165,7 @@ for reg in ['Asia','AsiaLand','Ocean','Seas','TibetanPlateau']:
         factor = upward_ratio[reg] / upward_ratio['Asia']
         print('{:16} upward ratio {:6.4f} {:6.2f}'.format(reg,upward_ratio[reg],factor))
 print('\nupward ratio for mean EAD crossover')
-for reg in ['Asia','AsiaLand','Ocean','Seas','TibetanPlateau']:
+for reg in ['Asia','Land','Ocean','Seas','TibetanPlateau']:
     # proportion of sources above the mean Asia crossover
     selec = source_dist['thetac']>CrossEAD['Asia']
     if reg == 'Asia':
@@ -179,7 +176,7 @@ for reg in ['Asia','AsiaLand','Ocean','Seas','TibetanPlateau']:
         factor = upward_ratio[reg] / upward_ratio['Asia']
         print('{:16} upward ratio {:6.4f} {:6.2f}'.format(reg,upward_ratio[reg],factor))
 print('\nupward ratio for regional EID crossover')
-for reg in ['Asia','AsiaLand','Ocean','Seas','TibetanPlateau']:
+for reg in ['Asia','Land','Ocean','Seas','TibetanPlateau']:
     # proportion of sources above the local crossover
     selec = source_dist['thetac']>CrossEID[reg]
     if reg == 'Asia':
@@ -189,8 +186,8 @@ for reg in ['Asia','AsiaLand','Ocean','Seas','TibetanPlateau']:
         upward_ratio[reg] = np.sum(source_dist[reg][selec])/np.sum(source_dist[reg])
         factor = upward_ratio[reg] / upward_ratio['Asia']
         print('{:16} upward ratio {:6.4f} {:6.2f}'.format(reg,upward_ratio[reg],factor))
-print('\nupward ratio for mean EAD crossover')
-for reg in ['Asia','AsiaLand','Ocean','Seas','TibetanPlateau']:
+print('\nupward ratio for mean EID crossover')
+for reg in ['Asia','Land','Ocean','Seas','TibetanPlateau']:
     # proportion of sources above the mean Asia crossover
     selec = source_dist['thetac']>CrossEID['Asia']
     if reg == 'Asia':
