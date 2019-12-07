@@ -3,7 +3,7 @@
 """
 Created on Fri Dec 23 09:57:27 2016
 
-This script generates the part_000 file containing parcels on a given pressure 
+This script generates the part_000 file containing parcels on a given potential temperature 
 for a backward run. The parcels are generated on a one degree centered grid in the 
 target_range which is also used for the analysis of forward runs from convection.  
 The parcels are launched every 15 minutes which means 816000 parcels per day in the 
