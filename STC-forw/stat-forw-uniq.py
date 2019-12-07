@@ -180,6 +180,10 @@ print("stat-forw-uniq > date "+ date,np.sum(sources['veryhigh']),np.sum(sources[
 # kill the sources of 30 August 2017 at 11h (227h)
 if date == 'Aug-21':
     sources['live'][sources['ir_start'] == 3600*227] = False
+#  filtering high lat / high alt (spurious sources above 360K at lat>40N)
+sources['live'][(sources['thet']>360) & (sources['y']>=40)] = False
+# additional filtering in the European region 
+sources['live'][(sources['thet']>360) & (sources['y']>=35) & (sources['x']<40)] = False    
 
 # Loop on steps
 for step in range(step_start,hmax + step_inc ,step_inc):
@@ -237,11 +241,20 @@ for step in range(step_start,hmax + step_inc ,step_inc):
         if step <= hinter: data_inter['rv_t'] = sources['rv_s'][idxsel_inter]
     pile.update(data)
     data.clear()
-    pile.transit['count'] +=1
+# ERROR =============================================================================
+#     # this is an error that persisted in all calculations
+#     # it has no impact since 1) pile.transit['count'] is incremented in transit with a large number
+#     # which is the number of active parcels, and 2) this quantity is never used
+#     pile.transit['count'] +=1
+#     a counter of the calls is now included in transit as self.count and incremented in update    
+# ERROR =============================================================================
     if step <= hinter:
         pile_inter.update(data_inter)
         data_inter.clear()
-        pile_inter.transit['count'] +=1
+# ERROR =============================================================================
+#          pile_inter.transit['count'] +=1
+# ERROR =============================================================================
+    
     #pickle.dump(pile,gzip.open(pile_sav_name,'wb',pickle.HIGHEST_PROTOCOL))
     print('Memory used: '+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)+' (kb)')
     if step == hinter:
