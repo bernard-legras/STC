@@ -73,7 +73,7 @@ vert = 'theta'
 target = 'FullAMA'
 
 # ages max in days
-age_max = 62
+age_max = 40
 step_inc = 6
 #step_start=240
 #step_end=240
@@ -157,6 +157,10 @@ for date in preDates[stream]:
     # kill the sources of 30 August 2017 at 11h (227h)
     if date == 'Aug-21':
         sources['live'][sources['ir_start'] == 3600*227] = False
+    #  filtering high lat / high alt (spurious sources above 360K at lat>40N)
+    sources['live'][(sources['thet']>360) & (sources['y']>=40)] = False
+    # additional filtering in the European region 
+    sources['live'][(sources['thet']>360) & (sources['y']>=35) & (sources['x']<40)] = False  
 
     # Loop on steps
     dd1 = day1 - trueDates[date][0]
@@ -164,7 +168,10 @@ for date in preDates[stream]:
     step1 = min(int(dd1.total_seconds()/3600),hmax)
     step2 = min(int(dd2.total_seconds()/3600),hmax)
     for step in range(step1,step2,step_inc):
-        print("stat-forw> date", date," step ",str(step))
+        if step ==0: 
+            print("stat-forw-target> date",date,"skip step 0")
+            continue
+        print("stat-forw-target> date", date," step ",str(step))
         # Read the nactive parcels at current step
         data = io107.readpart107(step,run_dir,quiet=True)
         # Get the list of indexes for the active parcels after removing the offset
@@ -187,9 +194,15 @@ for date in preDates[stream]:
         # Selecting parcels which are both of age less than age_max (in days) and have never left the FullAMA box
         # selage is a boolean array of dimension nactive
         selage = np.all([data['age'] <= age_max, sources['live'][idxsel] == True],axis=0)
-        if np.all(selage) != True:
+        if np.sum(selage) == 0:
+            print('step beyond limiting age, no selected parcels, skipped')
+            continue
+        if np.sum(selage) < len(selage):
+            print('selected parcels',np.sum(selage),'out of',len(selage))
             for var in ('x','y','p','t','age'):
                 data[var] = data[var][selage]
+        else:
+            print('all',len(selage),'parcels selected')
         idxsel = idxsel[selage]
         data['x0'] = sources['x'][idxsel]
         data['y0'] = sources['y'][idxsel]
@@ -205,7 +218,6 @@ for date in preDates[stream]:
             data['rv_t'] = sources['rv_s'][idxsel]   
         pile.update(data)
         data.clear()
-        pile.transit['count'] +=1
     #pickle.dump(pile,gzip.open(pile_sav_name,'wb',pickle.HIGHEST_PROTOCOL))
     print('Memory used: '+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)+' (kb)')
     sources.clear()
