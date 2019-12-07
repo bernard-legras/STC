@@ -54,19 +54,20 @@ vert = baro is not considered here
 
 The parcels launched from the erroneous image on 30 August at 11 are eliminated.
 
+8 October 2019: removal of spurious high altitude sources at high latitudes and Europe
+not actually exploited yet
+
 @author: Bernard Legras
 """
 
 import os
 import numpy as np
-#import matplotlib.pyplot as plt
 #from datetime import datetime, timedelta
 import gzip, pickle
 import sys
 import resource
 import argparse
-#from subprocess import call
-#import transit as tt
+import socket
 import io107
 from satratio import satratio
 from zISA import z1,z2
@@ -147,7 +148,10 @@ print('target',target)
 #traj_dir = "/data/legras/flexout/STC/FORW"+saf    
 #out_dir = "/data/legras/STC/STC-FORW"+saf+"-OUT"
 traj_dir = "/data/legras/flexout/STC/FORWBox-meanhigh"    
-out_dir = "/data/legras/STC/STC-FORWBox-meanhigh-OUT"
+if 'ciclad' in socket.gethostname():
+    out_dir = "/data/legras/STC/STC-FORWBox-meanhigh-OUT"
+elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
+    out_dir = "/homedata/legras/STC/STC-FORWBox-meanhigh-OUT"
 
 #### Restart from sav of the previous run if interrupted 
 #pile=pickle.load(gzip.open('pile2-sav-R.pkl','rb'))
@@ -206,7 +210,7 @@ print("history-forw-uniq > date "+ date,np.sum(sources['veryhigh']),np.sum(sourc
 # prepair for the histogram
 # read mask and initialize edges
 # this mask has resolution 0.25°
-with gzip.open(os.path.join('..','mkSTCmask','MaskCartopy2-STCforwfine.pkl'),'rb') as f: 
+with gzip.open(os.path.join('..','mkSTCmask','MaskCartopy2-STCfine.pkl'),'rb') as f: 
     mm =pickle.load(f) 
 xedge = np.arange(-10,160+0.5*mm['icx'],mm['icx'])
 yedge = np.arange(0,50+0.5*mm['icy'],mm['icx'])
@@ -228,6 +232,11 @@ lev0 = np.clip(lev0,0,binv-1)
 # kill the sources of 30 August 2017 at 11h (227h)
 if date == 'Aug-21':
     sources['live'][sources['ir_start'] == 3600*227] = False
+#  filtering high lat / high alt (spurious sources above 360K at lat>40N)
+sources['live'][(sources['theta']>360) & (sources['y']>=40)] = False
+# additional filtering in the European region 
+sources['live'][(sources['theta']>360) & (sources['y']>=35) & (sources['x']<40)] = False
+
 
 # Loop on steps
 for step in range(step_start,hmax + step_inc ,step_inc):
@@ -296,7 +305,7 @@ for step in range(step_start,hmax + step_inc ,step_inc):
     #pickle.dump(pile,gzip.open(pile_sav_name,'wb',pickle.HIGHEST_PROTOCOL))
     print('Memory used: '+str(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)+' (kb)')
     del data
-sys.stdout.flush()
+    sys.stdout.flush()
 # save the pile to restart the run if needed
 pickle.dump(sources,gzip.open(history_stream,'wb',pickle.HIGHEST_PROTOCOL))
     
