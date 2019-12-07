@@ -60,7 +60,9 @@ in theta in the source space,
 plot_dxy: mean displacement calculated from the source and from the target for
 impacts at 340K, 360K, 380K and 400K
 
-The corlormpas are not normalized
+The corlormaps are not normalized
+
+Trouble: this script needs to run each time with a fresh kernel on spyder
 
 @author: Bernard Legras
 """
@@ -86,12 +88,15 @@ parser.add_argument("-a","--all",type=str,choices=["All","Allx","All6","All7","A
 #year = 2017
 #month = 7
 #day = 1
-supertype = 'EAD'
+supertype = 'EID-FULL'
+#supertype = 'EAD'
 hmax = 1728
 quiet = False
 vert = 'theta' # do not change
 # 'FullAMA' or 'global'
+#target = 'FullAMA'
 target = 'global'
+plotMontgo = True
 hightype = 'sh'
 nerd = True # do not change
 water_path = True # does not apply
@@ -99,25 +104,13 @@ All = "-All"
 # Choice of what is plotted (these parameters are not passed as arguments yet)
 show=True
 plot_hist = True
-plot_mage = False
-plot_mthet = False
-plot_mz = False # do not change
-plt_dxy = False
-
-#here we define temporary values of interactive parameters
-# supertype
-supertype = 'EID-FULL'
-# target
-target = "global"
-# hmax
-hmax = 1728
-# plot_hist
-# plot_mage
+plot_hist_norm = True
 plot_mage = True
-# plot_mthet
 plot_mthet = True
-# plot_dxy
+plot_mz = False # do not change
 plot_dxy = True
+make_file = False
+SPE = True
 
 args = parser.parse_args()
 if args.hmax is not None: hmax = args.hmax
@@ -214,6 +207,17 @@ ff_s = 6/(5*np.cos(np.radians(pile.source['ycent'])))/576
 pile.transit['hist_s'+suffix] *= ff_s[np.newaxis,:,np.newaxis]
 pile.transit['hist_t'+suffix] *= ff_t[np.newaxis,:,np.newaxis]
 
+#%%
+# Let us calculate a scale factor that would set the density to one if the 
+# cumulated impact was distributed evenly over the FullAMA region
+# This value would be: cumulated impact * mesh area / FullAMA area (like done
+# for the trajstat analysis of the forecast trajectories)
+cosint_t = np.sum(np.cos(np.radians(pile.target['ycent'])))*len(pile.target['xcent'])
+cosint_s = np.sum(np.cos(np.radians(pile.source['ycent'])))*len(pile.source['xcent'])
+d0_t = np.sum(pile.transit['hist_t'+suffix]*np.cos(np.radians(pile.target['ycent']))[np.newaxis,:,np.newaxis],axis=(1,2))/cosint_t
+d0_s = np.sum(pile.transit['hist_s'+suffix]*np.cos(np.radians(pile.source['ycent']))[np.newaxis,:,np.newaxis],axis=(1,2))/cosint_s 
+
+#%%
 names = {"EAD":"ERA5 diabatic","EAZ":"ERA5 kinematic",
          "EIZ":"ERA-I kinematic","EID":"ERA-I diabatic",
          "EIZ-FULL":"ERA-I kinematic","EID-FULL":"ERA-I diabatic"}
@@ -222,6 +226,20 @@ if nerd:
     run_name = run_type
 else:
     run_name = names[supertype]+' '+target
+
+# set the shrink factor for nice appearance of the colorbar (fix the problem in a bad way)
+# set the bounding box for global plots
+if target=='global': 
+    shrink = 0.895
+    box = [-10,0,160,50]
+else: 
+    shrink = 0.63
+    box = None
+
+#%% Output for CONF 2019 comparisons
+if make_file:
+    with gzip.open(run_name+'.pkl','wb') as f:
+        pickle.dump([pile.transit['hist_t_sh'],pile.target],f)
     
 #%%
 # deactivated plots as the barotropic perspective does not present any real interest
@@ -267,16 +285,15 @@ if vert == 'baro':
 #%%
 elif vert == 'theta':
     if plot_hist:
-        pile.chart('hist_t'+suffix,1,txt=run_name+' target 330 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-330K'+suffix2,show=show)
-        pile.chart('hist_t'+suffix,3,txt=run_name+' target 340 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-340K'+suffix2,show=show)
-        pile.chart('hist_t'+suffix,5,txt=run_name+' target 350 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-350K'+suffix2,show=show)
-        pile.chart('hist_t'+suffix,7,txt=run_name+' target 360 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-360K'+suffix2,show=show)
-        pile.chart('hist_t'+suffix,9,txt=run_name+' target 370 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-370K'+suffix2,show=show)
-        pile.chart('hist_t'+suffix,11,txt=run_name+' target 380 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-380K'+suffix2,show=show)
-        #print('380K',np.sum(pile.transit['hist_t'+suffix][11,:,:]),np.sum(pile.transit['hist_s'+suffix][11,:,:]))
-        pile.chart('hist_t'+suffix,13,txt=run_name+' target 390 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-390K'+suffix2,show=show)
-        pile.chart('hist_t'+suffix,15,txt=run_name+' target 400 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-400K'+suffix2,show=show)
-        pile.chart('hist_t'+suffix,19,txt=run_name+' target 420 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-420K'+suffix2,show=show)    
+        pile.chart('hist_t'+suffix,1,txt=run_name+' target 330 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-330K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,3,txt=run_name+' target 340 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-340K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,5,txt=run_name+' target 350 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-350K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,7,txt=run_name+' target 360 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-360K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,9,txt=run_name+' target 370 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-370K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,11,txt=run_name+' target 380 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-380K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,13,txt=run_name+' target 390 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-390K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,15,txt=run_name+' target 400 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-400K'+suffix2,show=show,shrink=shrink,box=box)
+        pile.chart('hist_t'+suffix,19,txt=run_name+' target 420 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-420K'+suffix2,show=show,shrink=shrink,box=box)    
         pile.chart('hist_s'+suffix,1,txt=run_name+' source of 330 K '+ht+' : conv source density (day$^2$ K$^{-1}$)',fgp=run_type+'-source-330K'+suffix2,show=show)
         pile.chart('hist_s'+suffix,3,txt=run_name+' source of 340 K '+ht+' : conv source density (day$^2$ K$^{-1}$)',fgp=run_type+'-source-340K'+suffix2,show=show)
         pile.chart('hist_s'+suffix,5,txt=run_name+' source of 350 K '+ht+' : conv source density (day$^2$ K$^{-1}$)',fgp=run_type+'-source-350K'+suffix2,show=show)
@@ -290,46 +307,93 @@ elif vert == 'theta':
         pile.chartv('hist_t'+suffix,35,txt=run_name+' target 35N '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-35N'+suffix2,show=show)
         pile.chartv('hist_t'+suffix,25,txt=run_name+' target 25N '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-25N'+suffix2,show=show)   
     #%%
+    if plot_hist_norm:
+        # read the Montgomery potential which is used as a background
+        if plotMontgo:
+            with gzip.open(os.path.join('..','..','MonthlyMeans','python','MEANMM.pkl'),'rb') as f:
+                MEANM = pickle.load(f)
+            pile.transit['M'] = MEANM.var['M'][:,range(1,101,2),:][...,range(1,341,2)]
+            back_field = 'M'
+        else:
+            back_field = None
+        maxd = {}
+        maxd['FullAMA'] = {330:(None,None),340:(None,10),350:(3,10),360:(4,20),370:(4,30),380:(4,30),390:(4,30),400:(4,30),420:(4,30)}
+        maxd['global'] =  {330:(None,None),340:(6,6),350:(6,6),360:(10,10),370:(10,12),380:(6,12),390:(6,12),400:(6,12),420:(6,12)}
+        # normalisation of the hist_t and hist_s by the mean over the FullAMA box
+        
+        pile.chart('hist_t'+suffix,1,txt=run_name+' target 330 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-330K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[1],vmin=0,vmax=maxd[target][330][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,3,txt=run_name+' target 340 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-340K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[3],vmin=0,vmax=maxd[target][340][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,5,txt=run_name+' target 350 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-350K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[5],vmin=0,vmax=maxd[target][350][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,7,txt=run_name+' target 360 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-360K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[7],vmin=0,vmax=maxd[target][360][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,9,txt=run_name+' target 370 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-370K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[9],vmin=0,vmax=maxd[target][370][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,11,txt=run_name+' target 380 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-380K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[11],vmin=0,vmax=maxd[target][380][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,13,txt=run_name+' target 390 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-390K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[13],vmin=0,vmax=maxd[target][390][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,15,txt=run_name+' target 400 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-400K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[15],vmin=0,vmax=maxd[target][400][0],back_field=back_field)
+        pile.chart('hist_t'+suffix,19,txt=run_name+' target 420 K '+ht+' : equal conv impact density',fgp=run_type+'-target-norm-420K'+suffix2,show=show,shrink=shrink,box=box,scale=d0_t[19],vmin=0,vmax=maxd[target][420][0],back_field=back_field)    
+        pile.chart('hist_s'+suffix,1,txt=run_name+' source of 330 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-330K'+suffix2,show=show,scale=d0_s[1],vmin=0,vmax=maxd[target][330][1])
+        pile.chart('hist_s'+suffix,3,txt=run_name+' source of 340 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-340K'+suffix2,show=show,scale=d0_s[3],vmin=0,vmax=maxd[target][340][1])
+        pile.chart('hist_s'+suffix,5,txt=run_name+' source of 350 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-350K'+suffix2,show=show,scale=d0_s[5],vmin=0,vmax=maxd[target][350][1])
+        pile.chart('hist_s'+suffix,7,txt=run_name+' source of 360 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-360K'+suffix2,show=show,scale=d0_s[7],vmin=0,vmax=maxd[target][360][1])
+        pile.chart('hist_s'+suffix,9,txt=run_name+' source of 370 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-370K'+suffix2,show=show,scale=d0_s[9],vmin=0,vmax=maxd[target][370][1])
+        pile.chart('hist_s'+suffix,11,txt=run_name+' source of 380 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-380K'+suffix2,show=show,scale=d0_s[11],vmin=0,vmax=maxd[target][380][1])
+        pile.chart('hist_s'+suffix,13,txt=run_name+' source of 390 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-390K'+suffix2,show=show,scale=d0_s[13],vmin=0,vmax=maxd[target][390][1])
+        pile.chart('hist_s'+suffix,15,txt=run_name+' source of 400 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-400K'+suffix2,show=show,scale=d0_s[15],vmin=0,vmax=maxd[target][400][1])
+        pile.chart('hist_s'+suffix,19,txt=run_name+' source of 420 K '+ht+' : equal conv source density',fgp=run_type+'-source-norm-420K'+suffix2,show=show,scale=d0_s[19],vmin=0,vmax=maxd[target][420][1])
+    #%%
     if plot_mage:
+        if supertype == 'EAD':
+            vmin = {330:None,340:4,350:0,360:0,370:9,380:17,390:23,400:35,420:None}
+            vmax = {330:None,340:14,350:10,360:10,370:19,380:27,390:33,400:45,420:None}
+        else:
+            vmin = {330:None,340:None,350:None,360:None,370:None,380:None,390:None,400:None,420:None}
+            vmax = vmin
         pile.chartv('mage_t'+suffix,30,txt=run_name+' mean age target 30N '+ht+' (day)',fgp=run_type+'-mage-target-30N'+suffix2,show=show)
         pile.chartv('mage_t'+suffix,35,txt=run_name+' mean age target 35N '+ht+' (day)',fgp=run_type+'-mage-target-35N'+suffix2,show=show)
         pile.chartv('mage_t'+suffix,25,txt=run_name+' mean age target 25N '+ht+' (day)',fgp=run_type+'-mage-target-25N'+suffix2,show=show)
-        pile.chart('mage_t'+suffix,1,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 330 K '+ht+' (day)',fgp=run_type+'-mage-target-330K'+suffix2,show=show)
-        pile.chart('mage_t'+suffix,3,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 340 K '+ht+' (day)',fgp=run_type+'-mage-target-340K'+suffix2,show=show)
-        pile.chart('mage_t'+suffix,5,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 350 K '+ht+' (day)',fgp=run_type+'-mage-target-350K'+suffix2,show=show) 
-        pile.chart('mage_t'+suffix,7,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 360 K '+ht+' (day)',fgp=run_type+'-mage-target-360K'+suffix2,show=show)
-        pile.chart('mage_t'+suffix,9,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 370 K '+ht+' (day)',fgp=run_type+'-mage-target-370K'+suffix2,show=show)
-        pile.chart('mage_t'+suffix,11,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 380 K '+ht+' (day)',fgp=run_type+'-mage-target-380K'+suffix2,show=show)
-        pile.chart('mage_t'+suffix,13,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 390 K '+ht+' (day)',fgp=run_type+'-mage-target-390K'+suffix2,show=show) 
-        pile.chart('mage_t'+suffix,15,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 400 K '+ht+' (day)',fgp=run_type+'-mage-target-400K'+suffix2,show=show)
-        pile.chart('mage_t'+suffix,19,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 420 K '+ht+' (day)',fgp=run_type+'-mage-target-420K'+suffix2,show=show)
+        pile.chart('mage_t'+suffix,1,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 330 K '+ht+' (day)',fgp=run_type+'-mage-target-330K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[330],vmax=vmax[330])
+        pile.chart('mage_t'+suffix,3,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 340 K '+ht+' (day)',fgp=run_type+'-mage-target-340K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[340],vmax=vmax[340])
+        pile.chart('mage_t'+suffix,5,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 350 K '+ht+' (day)',fgp=run_type+'-mage-target-350K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[350],vmax=vmax[350]) 
+        pile.chart('mage_t'+suffix,7,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 360 K '+ht+' (day)',fgp=run_type+'-mage-target-360K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[360],vmax=vmax[360])
+        pile.chart('mage_t'+suffix,9,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 370 K '+ht+' (day)',fgp=run_type+'-mage-target-370K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[370],vmax=vmax[370])
+        pile.chart('mage_t'+suffix,11,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 380 K '+ht+' (day)',fgp=run_type+'-mage-target-380K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[380],vmax=vmax[380])
+        pile.chart('mage_t'+suffix,13,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 390 K '+ht+' (day)',fgp=run_type+'-mage-target-390K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[390],vmax=vmax[390]) 
+        pile.chart('mage_t'+suffix,15,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 400 K '+ht+' (day)',fgp=run_type+'-mage-target-400K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[400],vmax=vmax[400])
+        pile.chart('mage_t'+suffix,19,back_field='hist_t'+suffix,cumsum=True,txt=run_name+' mean age target 420 K '+ht+' (day)',fgp=run_type+'-mage-target-420K'+suffix2,show=show,shrink=shrink,mask=True,vmin=vmin[420],vmax=vmax[420])
     #%%
-        pile.chart('mage_s'+suffix,1,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 330 K '+ht+' (day)',fgp=run_type+'-mage-source-330K'+suffix2,show=show)
-        pile.chart('mage_s'+suffix,3,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 340 K '+ht+' (day)',fgp=run_type+'-mage-source-340K'+suffix2,show=show)
-        pile.chart('mage_s'+suffix,5,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 350 K '+ht+' (day)',fgp=run_type+'-mage-source-350K'+suffix2,show=show) 
-        pile.chart('mage_s'+suffix,7,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 360 K '+ht+' (day)',fgp=run_type+'-mage-source-360K'+suffix2,show=show)
-        pile.chart('mage_s'+suffix,9,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 370 K '+ht+' (day)',fgp=run_type+'-mage-source-370K'+suffix2,show=show)
-        pile.chart('mage_s'+suffix,11,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 380 K '+ht+' (day)',fgp=run_type+'-mage-source-380K'+suffix2,show=show)
-        pile.chart('mage_s'+suffix,13,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 390 K '+ht+' (day)',fgp=run_type+'-mage-source-390K'+suffix2,show=show) 
-        pile.chart('mage_s'+suffix,15,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 400 K '+ht+' (day)',fgp=run_type+'-mage-source-400K'+suffix2,show=show)
-        pile.chart('mage_s'+suffix,19,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 420 K '+ht+' (day)',fgp=run_type+'-mage-source-420K'+suffix2,show=show)
+        if supertype == 'EAD':
+            vmin = {330:5,340:0,350:1,360:2,370:7,380:7,390:20,400:25,420:None}
+            vmax = {330:25,340:20,350:11,360:12,370:17,380:27,390:40,400:45,420:None}
+        else:
+            vmin = {330:None,340:None,350:None,360:None,370:None,380:None,390:None,400:None,420:None}
+            vmax = vmin
+        pile.chart('mage_s'+suffix,1,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 330 K '+ht+' (day)',fgp=run_type+'-mage-source-330K'+suffix2,show=show,mask=True,vmin=vmin[330],vmax=vmax[330])
+        pile.chart('mage_s'+suffix,3,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 340 K '+ht+' (day)',fgp=run_type+'-mage-source-340K'+suffix2,show=show,mask=True,vmin=vmin[340],vmax=vmax[340])
+        pile.chart('mage_s'+suffix,5,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 350 K '+ht+' (day)',fgp=run_type+'-mage-source-350K'+suffix2,show=show,mask=True,vmin=vmin[350],vmax=vmax[350]) 
+        pile.chart('mage_s'+suffix,7,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 360 K '+ht+' (day)',fgp=run_type+'-mage-source-360K'+suffix2,show=show,mask=True,vmin=vmin[360],vmax=vmax[360])
+        pile.chart('mage_s'+suffix,9,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 370 K '+ht+' (day)',fgp=run_type+'-mage-source-370K'+suffix2,show=show,mask=True,vmin=vmin[370],vmax=vmax[370])
+        pile.chart('mage_s'+suffix,11,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 380 K '+ht+' (day)',fgp=run_type+'-mage-source-380K'+suffix2,show=show,mask=True,vmin=vmin[380],vmax=vmax[380])
+        pile.chart('mage_s'+suffix,13,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 390 K '+ht+' (day)',fgp=run_type+'-mage-source-390K'+suffix2,show=show,mask=True,vmin=vmin[390],vmax=vmax[390]) 
+        pile.chart('mage_s'+suffix,15,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 400 K '+ht+' (day)',fgp=run_type+'-mage-source-400K'+suffix2,show=show,mask=True,vmin=vmin[400],vmax=vmax[400])
+        pile.chart('mage_s'+suffix,19,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean age source 420 K '+ht+' (day)',fgp=run_type+'-mage-source-420K'+suffix2,show=show,mask=True,vmin=vmin[420],vmax=vmax[420])
     #%%
     
     #%%
     if plot_mthet: 
-        pile.chart('mthet_s'+suffix,3,back_field='hist_s'+suffix,cumsum=True,vmin=330,vmax=360,txt=run_name+' mean PT source of 340 K '+ht+' (K)',fgp=run_type+'-mthet-source-340K'+suffix2,show=show)
-        pile.chart('mthet_s'+suffix,7,back_field='hist_s'+suffix,cumsum=True,vmin=355,vmax=365,txt=run_name+' mean PT source of 360 K '+ht+' (K)',fgp=run_type+'-mthet-source-360K'+suffix2,show=show)
-        pile.chart('mthet_s'+suffix,11,back_field='hist_s'+suffix,cumsum=True,vmin=355,vmax=375,txt=run_name+' mean PT source of 380 K '+ht+' (K)',fgp=run_type+'-mthet-source-380K'+suffix2,show=show)
-        pile.chart('mthet_s'+suffix,15,back_field='hist_s'+suffix,cumsum=True,vmin=360,vmax=380,txt=run_name+' mean PT source of 400 K '+ht+' (K)',fgp=run_type+'-mthet-source-400K'+suffix2,show=show)
-        pile.chart('mdthet_s'+suffix,3,back_field='hist_s'+suffix,cumsum=True,vmin=-25,vmax=10,txt=run_name+' mean dPT source of 340 K '+ht+' (K)',fgp=run_type+'-mdthet-source-340K'+suffix2,show=show)
-        pile.chart('mdthet_s'+suffix,7,back_field='hist_s'+suffix,cumsum=True,vmin=-5,vmax=10,txt=run_name+' mean dPT source of 360 K '+ht+' (K)',fgp=run_type+'-mdthet-source-360K'+suffix2,show=show)
-        pile.chart('mdthet_s'+suffix,11,back_field='hist_s'+suffix,cumsum=True,vmin=5,vmax=20,txt=run_name+' mean dPT source of 380 K '+ht+' (K)',fgp=run_type+'-mdthet-source-380K'+suffix2,show=show)
-        pile.chart('mdthet_s'+suffix,15,back_field='hist_s'+suffix,cumsum=True,vmin=10,vmax=40,txt=run_name+' mean dPT source of 400 K '+ht+' (K)',fgp=run_type+'-mdthet-source-400K'+suffix2,show=show)
+        pile.chart('mthet_s'+suffix,3,back_field='hist_s'+suffix,cumsum=True,vmin=345,vmax=365,txt=run_name+' mean PT source of 340 K '+ht+' (K)',fgp=run_type+'-mthet-source-340K'+suffix2,show=show,mask=True)
+        pile.chart('mthet_s'+suffix,7,back_field='hist_s'+suffix,cumsum=True,vmin=355,vmax=365,txt=run_name+' mean PT source of 360 K '+ht+' (K)',fgp=run_type+'-mthet-source-360K'+suffix2,show=show,mask=True)
+        pile.chart('mthet_s'+suffix,11,back_field='hist_s'+suffix,cumsum=True,vmin=355,vmax=375,txt=run_name+' mean PT source of 380 K '+ht+' (K)',fgp=run_type+'-mthet-source-380K'+suffix2,show=show,mask=True)
+        pile.chart('mthet_s'+suffix,15,back_field='hist_s'+suffix,cumsum=True,vmin=360,vmax=380,txt=run_name+' mean PT source of 400 K '+ht+' (K)',fgp=run_type+'-mthet-source-400K'+suffix2,show=show,mask=True)
+        pile.chart('mdthet_s'+suffix,3,back_field='hist_s'+suffix,cumsum=True,vmin=-25,vmax=10,txt=run_name+' mean dPT source of 340 K '+ht+' (K)',fgp=run_type+'-mdthet-source-340K'+suffix2,show=show,mask=True)
+        pile.chart('mdthet_s'+suffix,5,back_field='hist_s'+suffix,cumsum=True,vmin=-25,vmax=10,txt=run_name+' mean dPT source of 340 K '+ht+' (K)',fgp=run_type+'-mdthet-source-350K'+suffix2,show=show,mask=True)
+        pile.chart('mdthet_s'+suffix,7,back_field='hist_s'+suffix,cumsum=True,vmin=-5,vmax=10,txt=run_name+' mean dPT source of 360 K '+ht+' (K)',fgp=run_type+'-mdthet-source-360K'+suffix2,show=show,mask=True)
+        pile.chart('mdthet_s'+suffix,11,back_field='hist_s'+suffix,cumsum=True,vmin=5,vmax=20,txt=run_name+' mean dPT source of 380 K '+ht+' (K)',fgp=run_type+'-mdthet-source-380K'+suffix2,show=show,mask=True)
+        pile.chart('mdthet_s'+suffix,15,back_field='hist_s'+suffix,cumsum=True,vmin=10,vmax=40,txt=run_name+' mean dPT source of 400 K '+ht+' (K)',fgp=run_type+'-mdthet-source-400K'+suffix2,show=show,mask=True)
         #%%
-        pile.chart('mdthet_t'+suffix,7,back_field='hist_t'+suffix,cumsum=True,vmin=-15,vmax=5,txt=run_name+' mean dPT target 340 K '+ht+' (K)',fgp=run_type+'-mdthet-target-360K'+suffix2,show=show)  
-        pile.chart('mdthet_t'+suffix,7,back_field='hist_t'+suffix,cumsum=True,vmin=-1,vmax=2,txt=run_name+' mean dPT target 360 K '+ht+' (K)',fgp=run_type+'-mdthet-target-360K'+suffix2,show=show)  
-        pile.chart('mdthet_t'+suffix,11,back_field='hist_t'+suffix,cumsum=True,vmin=12,vmax=15,txt=run_name+' mean dPT target 380 K '+ht+' (K)',fgp=run_type+'-mdthet-target-380K'+suffix2,show=show) 
-        pile.chart('mdthet_t'+suffix,15,back_field='hist_t'+suffix,cumsum=True,vmin=25,vmax=35,txt=run_name+' mean dPT target 400 K '+ht+' (K)',fgp=run_type+'-mdthet-target-400K'+suffix2,show=show)
+        pile.chart('mdthet_t'+suffix,3,back_field='hist_t'+suffix,cumsum=True,vmin=-15,vmax=5,txt=run_name+' mean dPT target 340 K '+ht+' (K)',fgp=run_type+'-mdthet-target-340K'+suffix2,show=show,shrink=shrink,truncate=True)  
+        pile.chart('mdthet_t'+suffix,5,back_field='hist_t'+suffix,cumsum=True,vmin=-15,vmax=5,txt=run_name+' mean dPT target 340 K '+ht+' (K)',fgp=run_type+'-mdthet-target-350K'+suffix2,show=show,shrink=shrink,truncate=True)
+        pile.chart('mdthet_t'+suffix,7,back_field='hist_t'+suffix,cumsum=True,vmin=-1,vmax=2,txt=run_name+' mean dPT target 360 K '+ht+' (K)',fgp=run_type+'-mdthet-target-360K'+suffix2,show=show,shrink=shrink,truncate=True)  
+        pile.chart('mdthet_t'+suffix,11,back_field='hist_t'+suffix,cumsum=True,vmin=12,vmax=15,txt=run_name+' mean dPT target 380 K '+ht+' (K)',fgp=run_type+'-mdthet-target-380K'+suffix2,show=show,shrink=shrink,truncate=True) 
+        pile.chart('mdthet_t'+suffix,15,back_field='hist_t'+suffix,cumsum=True,vmin=25,vmax=35,txt=run_name+' mean dPT target 400 K '+ht+' (K)',fgp=run_type+'-mdthet-target-400K'+suffix2,show=show,shrink=shrink,truncate=True)
     #%%
 #    if plot_mz:
 #        pile.chart('mz_s'+suffix,7,back_field='hist_s'+suffix,cumsum=True,txt=run_name+' mean z source 360 K '+ht+' (km)',fgp=run_type+'-mz-source-360K'+suffix2,show=show)
@@ -348,3 +412,17 @@ elif vert == 'theta':
         pile.vect(11,type='target inv',thresh=0.0002,txt=run_name+' mean target displacement 380 K '+ht+' (K)',fgp=run_type+'-displace-source-380K'+suffix2,show=show)
         pile.vect(15,type='source',thresh=0.0005,txt=run_name+' mean source displacement 400 K '+ht+' (K)',fgp=run_type+'-displace-target-400K'+suffix2,show=show)
         pile.vect(15,type='target inv',thresh=0.0002,txt=run_name+' mean target displacement 400 K '+ht+' (K)',fgp=run_type+'-displace-source-400K'+suffix2,show=show)
+        
+    if SPE:
+        if supertype == 'EID-FULL':
+            vmax_t = 1.6
+            if target == 'FullAMA':vmax_s = 10
+            else: vmax_s = 20
+        if supertype == 'EAD':
+            vmax_t = 0.7
+            vmax_s = 7
+            
+        pile.chart('hist_t'+suffix,11,txt=run_name+' target 380 K '+ht+' : conv impact density (day$^2$ K$^{-1}$)',fgp=run_type+'-target-SPE-380K'+suffix2,
+                       show=show,shrink=shrink,box=box,vmin=0,vmax=vmax_t)
+        pile.chart('hist_s'+suffix,11,txt=run_name+' source of 380 K '+ht+' : conv source density (day$^2$ K$^{-1}$)',fgp=run_type+'-source-SPE-380K'+suffix2,
+                       show=show,vmin=0,vmax=vmax_s)
