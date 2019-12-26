@@ -81,9 +81,9 @@ def main():
     if 'ciclad' in socket.gethostname():
         #main_sat_dir = '/data/legras/flexpart_in/SAFNWC'
             #SVC_Dir = '/bdd/CFMIP/SEL2'
-        traj_dir = '/data/akottayil/flexout/STC/BACK'
-            #out_dir = '/data/akottayil/STC'
-        out_dir = '/data/legras/STC'
+        traj_dir = '/proju/flexpart/flexpart_in/AKT/flexout'
+        out_dir = '/proju/flexpart/flexpart_in/AKT'
+        #out_dir = '/data/legras/STC'
     elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
         traj_dir = '/data/akottayil/flexout/STC/BACK'
         out_dir = '/homedata/legras/STC'
@@ -94,6 +94,7 @@ def main():
     """ Parameters """
     step = 3
     hmax = 1728
+    #hmax = 18
     dstep = timedelta (hours=step)
     # time width of the parcel slice
     slice_width = timedelta(minutes=5)
@@ -102,7 +103,7 @@ def main():
     # default values of parameters
     # date of the flight
     year=2017
-    month=7
+    month=8
     day1=1
     day2=31
     advect = 'EID-FULL'
@@ -334,7 +335,8 @@ def main():
             # get the slice for the particles
             datpart = next(gsp)
             # Check x within (-180,180), necessary when GridSat is used
-            if datpart['x'] != []:
+            #if datpart['x'] != []:
+            if len(datpart['x'])>0:
                 datpart['x'] = (datpart['x']+180)%360 - 180
             if verbose: print('part slice ',i, datpart['time'])
             # Check whether the present satellite image is valid
@@ -484,6 +486,7 @@ def read_sat(t0,dtRange,pre=False,vshift=0):
             # defining a new object is necessary to avoid messing dat if an error occurs
             dat0 = geosat.GridSat(current_time)
             dat0._get_IR0()
+            dat0.var['IR0'][dat0.var['IR0']<0] = 9999
             dat0.close()
             # remove dat and make it a view of dat0, try to avoid errors on first attempt
             print('read GridSat for ',current_time)
