@@ -46,20 +46,18 @@ Created on 21/01/2018 from ECMWF.py
 @author: Bernard Legras (legras@lmd.ens.fr)
 @licence: CeCILL-C
 """
-from __future__ import division, print_function
-#from __future__ import unicode_literals
 from datetime import datetime
 import numpy as np
 import math
 import pygrib
 import os
-#from mpl_toolkits.basemap import Basemap
 #from cartopy import feature
 #from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 #import cartopy.crs as ccrs
 #import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import socket
-from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import interp1d,RegularGridInterpolator
 from mki2d import tohyb
 import constants as cst
 import gzip,pickle
@@ -75,6 +73,20 @@ MISSING = -999
 #g = 9.80665
 #pref = 101325.
 #p0 = 100000.
+
+listcolors=['#161d58','#253494','#2850a6','#2c7fb8','#379abe','#41b6c4',
+            '#71c8bc','#a1dab4','#d0ecc0','#ffffcc','#fef0d9','#fedeb1',
+            '#fdcc8a','#fdac72','#fc8d59','#ef6b41','#e34a33','#cb251a',
+            '#b30000','#7f0000']
+# homemade color table            
+listcolors_sw=[listcolors[1],listcolors[0],listcolors[3],listcolors[2],\
+               listcolors[5],listcolors[4],listcolors[7],listcolors[6],\
+               listcolors[9],listcolors[8],listcolors[11],listcolors[10],\
+               listcolors[13],listcolors[12],listcolors[15],listcolors[14],\
+               listcolors[17],listcolors[16],listcolors[19],listcolors[18]]
+mymap=colors.ListedColormap(listcolors)
+mymap_sw=colors.ListedColormap(listcolors_sw)
+
 
 def strictly_increasing(L):
     return all(x<y for x, y in zip(L, L[1:]))
@@ -98,10 +110,11 @@ class ECMWF_pure(object):
         self.d1d={}
         self.warning = []
 
-    def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None)):
+    def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),
+             cmap=mymap,savfile=None,cLines=None):
         """ Chart for data fields """
         from cartopy import feature
-        #from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+        from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
         import cartopy.crs as ccrs
         import matplotlib.pyplot as plt
         
@@ -138,7 +151,10 @@ class ECMWF_pure(object):
         iax = ax.imshow(buf, transform=proj, interpolation='nearest',
                     extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
                             self.attr['lats'][0], self.attr['lats'][-1]],
-                    origin='lower', aspect=1.,cmap='jet',clim=clim)
+                    origin='lower', aspect=1.,cmap=cmap,clim=clim)
+        if cLines is not None:
+                ax.contour(self.var[var][lev,:,:],transform=proj,extent=(self.attr['lons'][0]-cm_lon,
+                           self.attr['lons'][-1]-cm_lon,self.attr['lats'][0],self.attr['lats'][-1]),levels=cLines,origin='lower')
         ax.add_feature(feature.NaturalEarthFeature(
             category='cultural',
             name='admin_1_states_provinces_lines',
@@ -150,13 +166,17 @@ class ECMWF_pure(object):
         # If crossing the dateline, superimposition of labels there
         # can be suppressed by specifying xlocs
         xlocs = None
-        if cm_lon == 180: xlocs = [0,60,120,180,-120,-60]
+        if cm_lon == 180:
+            interx = 30
+            # next multiple of interx on the east of the western longitude boundary
+            minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
+            xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
         gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
         gl.xlabels_top = False
         gl.ylabels_right = False
-        #gl.xformatter = LONGITUDE_FORMATTER
-        #gl.yformatter = LATITUDE_FORMATTER
+        gl.xformatter = LONGITUDE_FORMATTER
+        gl.yformatter = LATITUDE_FORMATTER
         gl.xlabel_style = {'size': fs}
         gl.ylabel_style = {'size': fs}
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
@@ -171,7 +191,9 @@ class ECMWF_pure(object):
         pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
         cbar=fig.colorbar(iax,cax=pos_cax)
         cbar.ax.tick_params(labelsize=fs)
-
+        
+        if savfile is not None:
+            plt.savefig(savfile,dpi=300,bbox_inches='tight')
         plt.show()
         return None
 
@@ -367,6 +389,74 @@ class ECMWF_pure(object):
                     #                     self.var[var][npmin:npmax,jys,ixs])
                     #new.var[var][:,jyt,ixt] = fint(np.log(p))
                     new.var[var][:,jyt,ixt] = np.interp(np.log(p),np.log(self.var['P'][npmin:npmax,jys,ixs]),self.var[var][npmin:npmax,jys,ixs])
+                    ixt += 1
+                jyt += 1
+        return new
+    
+    def interpolZ(self,z,varList='All',latRange=None,lonRange=None):
+        """ interpolate the variables to an altitude level or a set of altitude levels
+            vars must be a list of variables or a single varibale
+            p must be a list of pressures in Pascal
+        """
+        if 'Z' not in self.var.keys():
+            self._mkz()
+        new = ECMWF_pure()
+        if varList == 'All':
+            varList = list(self.var.keys())
+            varList.remove('SP')
+            varList.remove('P')
+        elif type(varList) == str:
+            varList = [varList,]
+        for var in varList:
+            if var not in self.var.keys():
+                print(var,' not defined')
+                return
+        if type(z) != list:
+            z = [z,]
+        if 'Z' not in self.var.keys():
+            print('Z not defined')
+            return
+        # first determine the boundaries of the domain
+        if (latRange == []) | (latRange == None):
+            nlatmin = 0
+            nlatmax = self.nlat
+        else:
+            nlatmin = np.abs(self.attr['lats']-latRange[0]).argmin()
+            nlatmax = np.abs(self.attr['lats']-latRange[1]).argmin()+1
+        if (lonRange == []) | (lonRange == None):
+            nlonmin = 0
+            nlonmax = self.nlon
+        else:
+            nlonmin = np.abs(self.attr['lons']-lonRange[0]).argmin()
+            nlonmax = np.abs(self.attr['lons']-lonRange[1]).argmin()+1
+        new.attr['lats'] = self.attr['lats'][nlatmin:nlatmax]
+        new.attr['lons'] = self.attr['lons'][nlonmin:nlonmax]
+        new.nlat = len(new.attr['lats'])
+        new.nlon = len(new.attr['lons'])
+        new.date = self.date
+        new.nlev = len(z)
+        new.attr['levtype'] = 'altitude'
+        new.attr['levs'] = z
+        zmin = np.min(z)
+        zmax = np.max(z)
+        for var in varList:
+            new.var[var] = np.empty(shape=(len(z),nlatmax-nlatmin,nlonmax-nlonmin))
+            jyt = 0
+            # big loop that should be paralellized or calling numa for good performance
+            for jys in range(nlatmin,nlatmax):
+                ixt = 0
+                for ixs in range(nlonmin,nlonmax):
+                    # find the range of z in the column
+                    nzmin = np.abs(self.var['Z'][:,jys,ixs]-zmin).argmin()
+                    nzmax = np.abs(self.var['Z'][:,jys,ixs]-zmax).argmin()+1
+                    nzmin = max(nzmin + 3,self.nlev-1)
+                    nzmax = min(nzmax - 3,0)
+                    # Better version than the linear interpolation but much too slow
+                    #fint = PchipInterpolator(np.log(self.var['P'][npmin:npmax,jys,ixs]),
+                    #                     self.var[var][npmin:npmax,jys,ixs])
+                    #new.var[var][:,jyt,ixt] = fint(np.log(p))                  
+                    fint = interp1d(-self.var['Z'][nzmax:nzmin,jys,ixs],self.var[var][nzmax:nzmin,jys,ixs])
+                    new.var[var][:,jyt,ixt] =  [fint(-zz) for zz in z]
                     ixt += 1
                 jyt += 1
         return new
@@ -1185,7 +1275,7 @@ class ECMWF(ECMWF_pure):
                 return lev
             
     def _mkz(self):
-        """ Calculate the geopotential without taking moiture into account """
+        """ Calculate the geopotential altitude (m) without taking moisture into account """
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
@@ -1193,7 +1283,7 @@ class ECMWF(ECMWF_pure):
             with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'.pkl')) as f:
                 Z0 = pickle.load(f)
         except:
-            print('Cannot read ground geopotential')
+            print('Cannot read ground geopotential altitude')
         self.var['Z0'] = Z0.var['Z0']
         self.var['Z'] =  np.empty(shape=self.var['T'].shape)
         uu = - np.log(self.var['P'])
