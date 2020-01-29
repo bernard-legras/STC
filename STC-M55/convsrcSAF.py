@@ -49,6 +49,7 @@ verbose = False
 debug = False
 
 # idx_orgn was not set to 1 but to 0 in M55 and GLO runs
+# only in the runs until October 2018
 IDX_ORGN = 0
 
 # Error handling
@@ -94,6 +95,7 @@ def main():
     parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
     parser.add_argument("-v","--vshift",type=int,choices=[0,1,2,3],help='vertical shift')
+    parser.add_argument("-hm","--hmax",type=int,choices=[732,1716],help='trajectory length (hour)')
     
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -160,6 +162,11 @@ def main():
         vshift = args.vshift
         if vshift > 0:
             super = 'super'+str(vshift)
+    if args.hmax is not None:
+        hmax = args.hmax
+        ext = '-'+str(hmax)
+    else:
+        ext = ''
             
     # derived parameters
     # number of slices between two outputs
@@ -174,9 +181,9 @@ def main():
     if quiet:
         # Output file
         if platform == 'BAL':
-           print_file = os.path.join(out_dir,'out',flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.out')
+           print_file = os.path.join(out_dir,'out',flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+ext+'.out')
         else:  
-           print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.out')
+           print_file = os.path.join(out_dir,'out',platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+ext+'.out')
         fsock = open(print_file,'w')
         sys.stdout=fsock
 
@@ -196,10 +203,10 @@ def main():
     if platform == 'BAL':
         traj_dir = '/data/legras/flexout/STC/BAL'
         ftraj = os.path.join(traj_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix)
-        out_file2 = os.path.join(out_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.hdf5')
+        out_file2 = os.path.join(out_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+ext+'.hdf5')
     else:    
         ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix)
-        out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+'.hdf5')
+        out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+ext+'.hdf5')
 
     # Directories for the satellite cloud top files
     satdir ={'MSG1':os.path.join(main_sat_dir,'msg1','S_NWC'),\
@@ -228,8 +235,12 @@ def main():
     print('check flag is clean ',((part0['flag']&I_HIT)!=0).sum(),((part0['flag']&I_DEAD)!=0).sum(),\
                                  ((part0['flag']&I_CROSSED)!=0).sum())
     # check idx_orgn
+    # This is not enough as idx_orgn might change during the run when a restart occur
+    # actually the new default value is 1, not 0
+    # For these reasons, IDX_ORGN is not used in the sequel but we use rather the value of idx_orgn
+    # read from each part file
     if part0['idx_orgn'] != 0:
-        print('MINCHIA, IDX_ORGN NOT 0 ASSTC-M55-OUT-SAF-super1silviahigh ASSUMED, CORRECTED WITH READ VALUE')
+        print('MINCHIA, IDX_ORGN NOT 0 AS ASSUMED, CORRECTED WITH READ VALUE')
         print('VALUE ',part0['idx_orgn'])
         IDX_ORGN = part0['idx_orgn']
 
@@ -286,16 +297,26 @@ def main():
         kept_p is a logical field with same length as partpost
         After the launch of the earliest parcel along the flight track, there
         should not be any member in new
-        The parcels
+        The idx_orgn is removed as it might change with time in case of restart
         """
-        kept_a = np.in1d(partante['idx_back'],partpost['idx_back'],assume_unique=True)
-        kept_p = np.in1d(partpost['idx_back'],partante['idx_back'],assume_unique=True)
+        # This complication to manage the beginning of the run with empty part files and avoid problems in the sequel
+        try:
+            kept_a = np.in1d(partante['idx_back']-partante['idx_orgn'],partpost['idx_back']-partpost['idx_orgn'],assume_unique=True)
+            kept_p = np.in1d(partpost['idx_back']-partpost['idx_orgn'],partante['idx_back']-partante['idx_orgn'],assume_unique=True)
+        except:
+            kept_a = np.array([])
+            if partpost['nact']>0:
+                kept_p = np.empty(partpost['nact'],dtype='bool')
+                kept_p.fill(False)
+            else:
+                kept_p = np.array([])
+      
         #new_p = ~np.in1d(partpost['idx_back'],partpost['idx_back'],assume_unique=True)
         print('kept a, p ',len(kept_a),len(kept_p),kept_a.sum(),kept_p.sum(),'  new ',len(partpost['x'])-kept_p.sum())
 
         """ IDENTIFY AND TAKE CARE OF DEADBORNE AS NON BORNE PARCELS """
         if (hour <= 30) & (partpost['nact']>0):
-            new[partpost['idx_back'][~kept_p]-IDX_ORGN] = True
+            new[partpost['idx_back'][~kept_p]-partpost['idx_orgn']] = True
             nnew += len(partpost['x'])-kept_p.sum()
         if hour == 30:
             ndborne = np.sum(~new)
@@ -313,6 +334,7 @@ def main():
 
         """ PROCESSING OF CROSSED PARCELS """
         if len(kept_a)>0:
+            IDX_ORGN = partante['idx_orgn'] # set as global variable
             exits = exiter(int((partante['itime']+partpost['itime'])/2), \
                 partante['x'][~kept_a],partante['y'][~kept_a],partante['p'][~kept_a],\
                 partante['t'][~kept_a],partante['idx_back'][~kept_a],\
@@ -326,11 +348,11 @@ def main():
         # Select the kept parcels which have not been hit yet
         # !!! Never use and between two lists, the result is wrong
 
-        if kept_p.sum()==0:
-            live_a = live_p = kept_p
+        if len(kept_a)==0:
+            live_a = live_p = kept_a
         else:
-            live_a = np.logical_and(kept_a,(prod0['flag_source'][partante['idx_back']-IDX_ORGN] & I_DEAD) == 0)
-            live_p = np.logical_and(kept_p,(prod0['flag_source'][partpost['idx_back']-IDX_ORGN] & I_DEAD) == 0)
+            live_a = np.logical_and(kept_a,(prod0['flag_source'][partante['idx_back']-partante['idx_orgn']] & I_DEAD) == 0)
+            live_p = np.logical_and(kept_p,(prod0['flag_source'][partpost['idx_back']-partpost['idx_orgn']] & I_DEAD) == 0)
         print('live a, b ',live_a.sum(),live_p.sum())
 
         # Build generator for parcel locations of the 5' slices
@@ -390,9 +412,10 @@ def main():
                     except:
                         # This handle the unlikely case where the first image is missing
                         continue
-            
+           
             """ PROCESS THE COMPARISON OF PARCEL PRESSURES TO CLOUDS """
             if len(datpart['x'])>0:
+                IDX_ORGN = partante['idx_orgn'] # set as global variable
                 nhits += convbirth(datpart['itime'],
                     datpart['x'],datpart['y'],datpart['p'],datpart['t'],datpart['idx_back'],\
                     prod0['flag_source'],prod0['src']['x'],prod0['src']['y'],\
@@ -405,8 +428,8 @@ def main():
         """ End of of loop on slices """
         # find parcels still alive       if kept_p.sum()==0:
         try:
-            nlive = ((prod0['flag_source'][partpost['idx_back']-IDX_ORGN] & I_DEAD) == 0).sum()
-            n_nohit = ((prod0['flag_source'][partpost['idx_back']-IDX_ORGN] & I_HIT) == 0).sum()
+            nlive = ((prod0['flag_source'][partpost['idx_back']-partpost['idx_orgn']] & I_DEAD) == 0).sum()
+            n_nohit = ((prod0['flag_source'][partpost['idx_back']-partpost['idx_orgn']] & I_HIT) == 0).sum()
         except:
             nlive = 0
             n_nohit =0
