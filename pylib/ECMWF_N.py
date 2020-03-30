@@ -55,6 +55,10 @@ import os
 #from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 #import cartopy.crs as ccrs
 #import matplotlib.pyplot as plt
+from cartopy import feature
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import cartopy.crs as ccrs
+import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import socket
 from scipy.interpolate import interp1d,RegularGridInterpolator
@@ -111,13 +115,8 @@ class ECMWF_pure(object):
         self.warning = []
 
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),
-             cmap=mymap,savfile=None,cLines=None):
+             cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1):
         """ Chart for data fields """
-        from cartopy import feature
-        from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
-        import cartopy.crs as ccrs
-        import matplotlib.pyplot as plt
-        
         # test existence of key field
         if var in self.var.keys():
             if len(self.var[var].shape) == 3:
@@ -136,7 +135,6 @@ class ECMWF_pure(object):
         else:
             print ('undefined field')
             return
-                
         fs=15
         # it is unclear how the trick with cm_lon works in imshow but it does
         # the web says that it is tricky to plot data accross dateline with cartopy
@@ -148,10 +146,10 @@ class ECMWF_pure(object):
         fig = plt.figure(figsize=[11,4])
         fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         ax = plt.axes(projection = proj)
-        iax = ax.imshow(buf, transform=proj, interpolation='nearest',
+        iax = ax.imshow(scale*buf, transform=proj, interpolation='nearest',
                     extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
                             self.attr['lats'][0], self.attr['lats'][-1]],
-                    origin='lower', aspect=1.,cmap=cmap,clim=clim)
+                    origin='lower', aspect=aspect,cmap=cmap,clim=clim)
         if cLines is not None:
                 ax.contour(self.var[var][lev,:,:],transform=proj,extent=(self.attr['lons'][0]-cm_lon,
                            self.attr['lons'][-1]-cm_lon,self.attr['lats'][0],self.attr['lats'][-1]),levels=cLines,origin='lower')
@@ -182,7 +180,7 @@ class ECMWF_pure(object):
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
         
         if txt is None:
-            plt.title(var,fontsize=fs)
+            plt.title(var+' '+str(lev),fontsize=fs)
         else:
             plt.title(txt,fontsize=fs)
         # plot adjusted colorbar
@@ -194,8 +192,132 @@ class ECMWF_pure(object):
         
         if savfile is not None:
             plt.savefig(savfile,dpi=300,bbox_inches='tight')
-        plt.show()
-        return None
+        if show: plt.show()
+        return ax
+    
+    def chartlonz(self,var,lat,levs=(None,None),txt='',log=False,clim=(None,None),
+             cmap=mymap,savfile=None,show=True,scale=1):
+        """ Plot a lon x alt section for a given latitude 
+        """
+        if var not in self.var.keys():
+            print("UNKNOWN VAR ", var)
+            return -1
+        try:
+            pos=np.where(self.attr['lats']>=lat)[0][0]
+            print('pos',pos)
+        except:
+            print('lat out of range') 
+            return -1
+        fig = plt.figure(figsize=[11,4])
+        fs = 16
+        ax = fig.add_subplot(111)
+        if levs[0]==None: l1=29
+        else: l1 = levs[0]
+        if levs[1]==None: l2=115
+        else: l2 = levs[1]
+        lons = np.arange(self.attr['lons'][0]-0.5*self.attr['dlo'],self.attr['lons'][-1]+self.attr['dlo'],self.attr['dlo'])       
+        #if Z variable is available, lets use it, if not use zscale
+        #try:
+        zz1 = 0.5*(self.var['Z'][l1-1:l2+1,pos, :] + self.var['Z'][l1:l2+2,pos,:])/1000
+        zz = np.empty((zz1.shape[0],zz1.shape[1]+1))
+        zz[:,1:-1] = 0.5*(zz1[:,1:]+zz1[:,:-1])
+        zz[:,0] = zz1[:,0]
+        zz[:,-1] = zz1[:,-1]      
+        print(zz.shape,len(lons))
+        iax=ax.pcolormesh(lons,zz,scale*self.var[var][l1:l2+1,pos,:],
+                        vmin=clim[0],vmax=clim[1],cmap=cmap)
+        print('USE Z')
+        # except:    
+        #     iax=ax.pcolormesh(lons,self.attr['zscale_i'][l1:l2+2],self.var[var][l1:l2+1,pos, :],
+        #                 vmin=clim[0],vmax=clim[1],cmap=cmap)
+        ax.tick_params(labelsize=16)
+        plt.xlabel('longitude',fontsize=fs)
+        plt.ylabel('baro altitude (km)',fontsize=fs)
+        plt.title(txt+" lat="+str(lat),fontsize=fs)
+        #cax = fig.add_axes([0.91, 0.21, 0.03, 0.6])
+        #cbar = fig.colorbar(iax,cax=cax)
+        cbar = fig.colorbar(iax)
+        cbar.ax.tick_params(labelsize=fs)
+        if savfile is not None:
+            plt.savefig(savfile,bbox_inches='tight',dpi=300)
+        if show: plt.show()
+        return ax
+
+    def shift2zero(self):
+        # generate an object with the same content as self but with the origin 
+        # of longitude shifted to 0
+        new = ECMWF_pure()
+        # find the location of 0 in the initial grid
+        ll0 = np.abs(self.attr['lons']).argmin()
+        if ll0==0:
+            print ('This dataset is already gridded from zero longitude')
+            return None
+        
+        new.attr['lons'] = np.concatenate((self.attr['lons'][ll0:],self.attr['lons'][:ll0]+360))
+        new.attr['lats'] = self.attr['lats']
+        new.nlon = len(new.attr['lons'])
+        new.nlat = len(new.attr['lats'])
+        new.nlev = self.nlev
+        new.attr['levtype'] = self.attr['levtype']
+        new.attr['levs'] = self.attr['levs']
+        new.attr['plev'] = self.attr['plev']
+        new.date = self.date
+        new.attr['La1'] = self.attr['La1']
+        new.attr['Lo1'] = 0
+        try:
+            new.attr['dla'] = self.attr['dla']
+            new.attr['dlo'] = self.attr['dlo']
+        except:
+            new.attr['dla'] = (self.attr['lats'][-1]-self.attr['lats'][0])/(new.nlat-1)
+            new.attr['dlo'] = (self.attr['lons'][-1]-self.attr['lons'][0])/(new.nlon-1)
+        try:
+            new.attr['pscale'] = self.attr['pscale']
+            new.attr['zscale'] = self.attr['zscale']
+            new.attr['zscale_i'] = self.attr['zscale_i']
+        except: pass
+        for var in self.var.keys():
+            ndim = len(self.var[var].shape)
+            new.var[var] = np.concatenate((self.var[var][...,ll0:],self.var[var][...,:ll0]),axis=ndim-1)
+        return new
+
+    def shift2west(self,lon0):
+        # generate an object with the same content as self but with the origin 
+        # of longitude shifted to lon0
+        # It is assumed that the first longitude is presently 0
+        if self.attr['lons'][0] != 0:
+            print('This operation can only be made on a grid strating at 0 longitude')
+            return None
+        new = ECMWF_pure()
+        # find the location of lon0 in the initial grid
+        # first make sure it is in the grid
+        if lon0 < 0 : lon0 += 360
+        ll0 = np.abs(self.attr['lons']-lon0).argmin()
+        new.attr['lons'] = np.concatenate((self.attr['lons'][ll0:]-360,self.attr['lons'][:ll0]))
+        new.attr['lats'] = self.attr['lats']
+        new.nlon = len(new.attr['lons'])
+        new.nlat = len(new.attr['lats'])
+        new.nlev = self.nlev
+        new.attr['levtype'] = self.attr['levtype']
+        new.attr['levs'] = self.attr['levs']
+        new.attr['plev'] = self.attr['plev']
+        new.date = self.date
+        new.attr['La1'] = self.attr['La1']
+        new.attr['Lo1'] = 0
+        try:
+            new.attr['dla'] = self.attr['dla']
+            new.attr['dlo'] = self.attr['dlo']
+        except:
+            new.attr['dla'] = (self.attr['lats'][-1]-self.attr['lats'][0])/(new.nlat-1)
+            new.attr['dlo'] = (self.attr['lons'][-1]-self.attr['lons'][0])/(new.nlon-1)
+        try:
+            new.attr['pscale'] = self.attr['pscale']
+            new.attr['zscale'] = self.attr['zscale']
+            new.attr['zscale_i'] = self.attr['zscale_i']
+        except: pass
+        for var in self.var.keys():
+            ndim = len(self.var[var].shape)
+            new.var[var] = np.concatenate((self.var[var][...,ll0:],self.var[var][...,:ll0]),axis=ndim-1)
+        return new         
 
     def extract(self,latRange=None,lonRange=None,varss=None,vard=None):
         """ extract all variables on a reduced grid
@@ -209,7 +331,7 @@ class ECMWF_pure(object):
             nlatmin = 0
             nlatmax = len(self.attr['lats'])
         else:
-            nlatmin = np.argmax(self.attr['lats']>latRange[0])-1            
+            nlatmin = np.argmax(self.attr['lats']>latRange[0])-1
             nlatmax = np.argmax(self.attr['lats']>latRange[1])
         if (lonRange == []) | (lonRange == None):
             new.attr['lons'] = self.attr['lons']
@@ -217,7 +339,7 @@ class ECMWF_pure(object):
             nlonmax = len(self.attr['lons'])
         else:
             nlonmin = np.argmax(self.attr['lons']>lonRange[0])-1            
-            nlonmax = np.argmax(self.attr['lons']>lonRange[1])
+            nlonmax = np.argmax(self.attr['lons']>=lonRange[1])+1
         new.attr['lats'] = self.attr['lats'][nlatmin:nlatmax]
         new.attr['lons'] = self.attr['lons'][nlonmin:nlonmax]
         new.nlat = len(new.attr['lats'])
@@ -235,6 +357,11 @@ class ECMWF_pure(object):
         except:
             new.attr['dla'] = (self.attr['lats'][-1]-self.attr['lats'][0])/(new.nlat-1)
             new.attr['dlo'] = (self.attr['lons'][-1]-self.attr['lons'][0])/(new.nlon-1)
+        try:
+            new.attr['pscale'] = self.attr['pscale']
+            new.attr['zscale'] = self.attr['zscale']
+            new.attr['zscale_i'] = self.attr['zscale_i']
+        except: pass
         # extraction
         if varss is None:
             list_vars = []
@@ -878,7 +1005,7 @@ class ECMWF_pure(object):
 class ECMWF(ECMWF_pure):
     # to do: raise exception in case of an error
     
-    def __init__(self,project,date):
+    def __init__(self,project,date,step=0):
         ECMWF_pure.__init__(self)
         self.project = project
         self.date = date
@@ -888,6 +1015,7 @@ class ECMWF(ECMWF_pure):
         self.WT_expected = False
         self.VD_expected = False
         self.DE_expected = False
+        self.x4I_expected = False
         self.offd = 100 # offset to be set for ERA-I below, 100 for ERA5
         if self.project=='VOLC':
             if 'satie' in socket.gethostname():
@@ -930,7 +1058,7 @@ class ECMWF(ECMWF_pure):
             elif 'camelot' in socket.gethostname():
                 self.rootdir = '/proju/flexpart/flexpart_in/NIRgrid'
             elif 'satie' in socket.gethostname():
-                self.rootdir = '/limbo/data/NIRgrid'
+                self.rootdir = '/data/NIRgrid'
             else:
                 print('unknown hostname for this dataset')
                 return
@@ -946,7 +1074,34 @@ class ECMWF(ECMWF_pure):
             elif 'climserv' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/ERA5'
             elif 'satie' in socket.gethostname():
-                self.rootdir = '/limbo/data/ERA5'
+                self.rootdir = '/data/ERA5'
+            else:
+                print('unknown hostname for this dataset')
+                return
+            self.EN_expected = True
+        elif project=='OPZ':
+            if 'gort' == socket.gethostname():
+                self.rootdir = '/dkol/data/OPZ'
+            elif 'ciclad' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/OPZ'
+            elif 'climserv' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/OPZ'
+            elif 'satie' in socket.gethostname():
+                self.rootdir = '/data/OPZ'
+            else:
+                print('unknown hostname for this dataset')
+                return
+            self.EN_expected = True
+            self.x4I_expected = True
+        elif project=='OPZFCST':
+            if 'gort' == socket.gethostname():
+                self.rootdir = '/dkol/data/OPZ'
+            elif 'ciclad' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/OPZ'
+            elif 'climserv' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/OPZ'
+            elif 'satie' in socket.gethostname():
+                self.rootdir = '/data/OPZ'
             else:
                 print('unknown hostname for this dataset')
                 return
@@ -962,15 +1117,27 @@ class ECMWF(ECMWF_pure):
             if project == 'FULL-EA':
                 self.fname = date.strftime('ERA5EN%Y%m%d.grb')
                 path1 ='EN-true'
+            elif project == 'OPZ':
+                self.fname = date.strftime('OPZLWDA%Y%m%d.grb')
+                path1 ='EN-true'
+            elif project == 'OPZFCST':
+                self.fname = date.strftime('OPZFCST%Y%m%d_SH.grb')
+                path1 ='EN-true'
             else:    
                 self.fname = date.strftime('EN%y%m%d%H')           
-            path1 = 'EN-true/grib'
-            if project == 'FULL-EI': path1 = 'EN-true'
+                path1 = 'EN-true/grib'
+                if project == 'FULL-EI': path1 = 'EN-true'
             self.ENvar = {'U':['u','U component of wind','m s**-1'],
                      'V':['v','V component of wind','m s**-1'],
                      'W':['w','Vertical velocity','Pa s**-1'],
                      'T':['t','Temperature','K'],
-                     'LNSP':['lnsp','Logarithm of surface pressure','Log(Pa)']}
+                     'LNSP':['lnsp','Logarithm of surface pressure','Log(Pa)'],
+                     'VO':['vo','Vorticity','s**-1'],
+                     'D':['d','Divergence','s**-1'],
+                     'Q':['q','Specific humidity','kg kg**-1'],
+                     'QI':['ciwc','Specific cloud ice water content','kg kg**-1'],
+                     'O3':['o3','Ozone mixing ratio','kg kg**-1']
+                     }
         if self.DI_expected:
             if project=='FULL-EI':
                 # for ERA-I: tendencies over 3-hour intervals following file date, provided as temperature increments
@@ -1011,6 +1178,14 @@ class ECMWF(ECMWF_pure):
             # for ERA-I
             self.DEvar = {'UDR':['udra','Mean updraught detrainment rate','kg m**-3 s**-1']}
             self.dename = 'DE'+date.strftime('%y%m%d%H')
+        if self.x4I_expected:
+            self.x4Ivar = {'VOD':['vodiff',"Vorticity increment","s**-1"],
+                           'O3D':['o3diff','Ozone mixing ratio increment','kg kg**-1'],
+                           'DD':['ddiff','Divergence increment','s**-1'],
+                           'QD':['qdiff','Specidic humidity increment','kg kg**-1'],
+                           'TD':['tdiff','Temperature increment','K'],
+                           'LNSPD':['lnspdiff','Surface log pressure increment','']}
+            self.x4iname = date.strftime('4ILWDA%Y%m%d.grb')
             
         # opening the main file    
         try:
@@ -1021,23 +1196,27 @@ class ECMWF(ECMWF_pure):
             except:
                 print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
                 return
-        # Define searched valid date and time
+        # Define searched valid date and time, and step
         validityDate = int(self.date.strftime('%Y%m%d'))
         validityTime = int(self.date.strftime('%H%M'))
         self.EN_open = True
+        step
         try:
             sp = self.grb.select(name='Surface pressure',validityTime=validityTime)[0]
             logp = False
         except:
             try:
-                sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
+                if self.project=='OPZFCST':
+                    sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime,step=step)[0]
+                else:
+                    sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
                 logp = True
             except:
                 print('no surface pressure in '+self.fname)
                 self.grb.close()
                 return
         # Check date matching (should be)
-        if sp['validityDate'] != validityDate:
+        if (sp['validityDate'] != validityDate) & (self.project!='OPZFCST'):
             print('WARNING: dates do not match')
             print('called date    ',self.date.strftime('%Y%m%d %H%M'))
             print('date from file ',sp['validityDate'],sp['validityTime'])
@@ -1048,6 +1227,7 @@ class ECMWF(ECMWF_pure):
         self.attr['Time'] = sp['dataTime']
         self.attr['valDate'] = sp['validityDate']
         self.attr['valTime'] = sp['validityTime']
+        self.attr['step'] = sp['step']
         self.nlon = sp['Ni']
         self.nlat = sp['Nj']
         self.attr['lons'] = sp['distinctLongitudes']
@@ -1094,6 +1274,7 @@ class ECMWF(ECMWF_pure):
         self.WT_open = False
         self.VD_open = False
         self.DE_open = False
+        self.x4I_open = False
         if self.DI_expected:
             try:
                 self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
@@ -1122,7 +1303,12 @@ class ECMWF(ECMWF_pure):
                 self.DE_open = True
             except:
                 print('cannot open '+os.path.join(self.rootdir,date.strftime('DE-true/%Y'),self.dename))
-    
+        if self.x4I_expected:
+            try:
+                self.x4Irb = pygrib.open(os.path.join(self.rootdir,date.strftime('EN-true/%Y'),self.x4iname))
+                self.x4I_open = True
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('EN-true/%Y'),self.x4iname))
     def close(self):
         self.grb.close()
         try: self.drb.close()
@@ -1147,65 +1333,94 @@ class ECMWF(ECMWF_pure):
         self._get_var('Q')
         
 # get a variable from the archive
-    def _get_var(self,var):
-        if var in self.var.keys():
+    def _get_var(self,var,step=None):
+        if (var in self.var.keys()) & (self.project != 'OPZFCST'):
             return
         get = False
         try:
             if self.EN_open:
                 if var in self.ENvar.keys():
-                    TT = self.grb.select(shortName=self.ENvar[var][0],validityTime=self.attr['valTime'])
+                    if self.project=='OPZFCST':
+                        if step is not None: 
+                            stepi = step
+                            self.attr['step'] = step
+                        else: stepi = self.attr['step']
+                        TT = self.grb.select(shortName=self.ENvar[var][0],validityTime=self.attr['valTime'],step=stepi)
+                    else:
+                        TT = self.grb.select(shortName=self.ENvar[var][0],validityTime=self.attr['valTime'])
                     get = True
-            if self.DI_open:
+            if ~get & self.DI_open:
                 if var in self.DIvar.keys():
                     TT = self.drb.select(shortName=self.DIvar[var][0],validityTime=(self.attr['valTime']+self.offd) % 2400)
                     get = True
-            if self.WT_open:
-                if var in self.WTvar.keys():
+            if ~get & self.WT_open:
+                if var in self.WTvar.keys():       
                     TT = self.wrb.select(shortName=self.WTvar[var][0],validityTime=self.attr['valTime'])
                     get = True
-            if self.VD_open:
+            if ~get & self.VD_open:
                 if var in self.VDvar.keys():
                     TT = self.vrb.select(shortName=self.VDvar[var][0],validityTime=self.attr['valTime'])
                     get = True
-            if self.DE_open:
-                if var in self.DEvar.keys():
+            if ~get & self.DE_open:
+                if var in self.DEvar.keys():         
                     # Shift of validity time due to ERA-I convention
                     TT = self.derb.select(shortName=self.DEvar[var][0],validityTime=(self.attr['valTime']+self.offd) % 2400)
                     get = True
+            if ~get & self.x4I_open:
+                if var in self.x4Ivar.keys():
+                    # sum of the four partial increments
+                    TT = {}
+                    print('TT created')
+                    for i in range(4):
+                        TT[i] = self.x4Irb.select(shortName=self.x4Ivar[var][0],validityTime=self.attr['valTime']+300,iterationNumber=i)
+                        print('exit',i)
+                    get = True
             if get == False:
-                print(var+' not found')
+                    print(var+' not found')
+                    return
         except:
             print(var+' not found or read error')
             return
         # Process each message corresponding to a level
-        if 'levs' not in self.attr.keys():
-            readlev=True
-            self.nlev = len(TT)
-            self.attr['levs'] = np.full(len(TT),MISSING,dtype=int)
-            self.attr['plev'] = np.full(len(TT),MISSING,dtype=int)
+        # Special case of the 4D var increment first
+        # ugly programming 
+        x4ISpecial = False
+        if self.x4I_open:
+            if var in self.x4Ivar.keys(): x4ISpecial = True
+        if x4ISpecial:
+            self.var[var] = np.zeros(shape=[self.nlev,self.nlat,self.nlon])
+            for i in range(4):
+               for l in range(len(TT[i])): 
+                   self.var[var][l,:,:] += TT[i][l]['values']
+            readlev = False
+        # Common case
         else:
-            readlev=False
-            if len(TT) !=  self.nlev:
-                print('new record inconsistent with previous ones')
-                return
-        self.var[var] = np.empty(shape=[self.nlev,self.nlat,self.nlon])
-        #print(np.isfortran(self.var[var]))
-
-        for i in range(len(TT)):
-            self.var[var][i,:,:] = TT[i]['values']
-            if readlev:
-                try:
-                    lev = TT[i]['lev']
-                except:
-                    pass
-                try:
-                    lev = TT[i]['level']
-                except:
-                    pass
-                self.attr['levs'][i] = lev
-                self.attr['plev'][i] = self.attr['am'][lev-1] + self.attr['bm'][lev-1]*cst.pref
-
+            if 'levs' not in self.attr.keys():
+                readlev=True
+                self.nlev = len(TT)
+                self.attr['levs'] = np.full(len(TT),MISSING,dtype=int)
+                self.attr['plev'] = np.full(len(TT),MISSING,dtype=float)
+            else:
+                readlev=False
+                if (len(TT) !=  self.nlev) & (var != 'LNSP'):
+                    print('new record inconsistent with previous ones ',len(TT))
+            self.var[var] = np.empty(shape=[self.nlev,self.nlat,self.nlon])
+            #print(np.isfortran(self.var[var]))
+    
+            for l in range(len(TT)):
+                self.var[var][TT[l]['level']-1,:,:] = TT[l]['values']
+                if readlev:
+                    try:
+                        lev = TT[l]['lev']
+                    except:
+                        pass
+                    try:
+                        lev = TT[l]['level']
+                    except:
+                        pass
+                    self.attr['levs'][l] = lev
+                    self.attr['plev'][l] = self.attr['am'][lev-1] + self.attr['bm'][lev-1]*cst.pref
+        
 #       # Check the vertical ordering of the file
         if readlev:
             if not strictly_increasing(self.attr['levs']):
@@ -1240,6 +1455,18 @@ class ECMWF(ECMWF_pure):
         # Define the standard pressure scale for this vertical grid
         # could also be defined as as d1d field
         self.attr['pscale'] = self.attr['am'] + self.attr['bm'] * 101325
+        self.attr['pscale_i'] = self.attr['ai'] + self.attr['bi'] * 101325
+    
+    def _mkzscale(self):
+        # Define the standard altitude scale
+        from zISA import zISA
+        try:
+            self.attr['zscale'] = zISA(self.attr['pscale'])
+            self.attr['zscale_i'] = zISA(self.attr['pscale_i'][1:])
+            ztop = 2*self.attr['zscale_i'][0]-self.attr['zscale_i'][1]
+            self.attr['zscale_i'] = np.concatenate(((ztop,),self.attr['zscale_i']))
+        except:
+            print('pscale must be generated before zscale')
 
     def _mkthet(self):
         # Calculate the potential temperature
@@ -1284,7 +1511,10 @@ class ECMWF(ECMWF_pure):
                 Z0 = pickle.load(f)
         except:
             print('Cannot read ground geopotential altitude')
-        self.var['Z0'] = Z0.var['Z0']
+        try:
+            self.var['Z0'] = Z0.var['Z0']
+        except:
+            self.var['Z0'] = Z0
         self.var['Z'] =  np.empty(shape=self.var['T'].shape)
         uu = - np.log(self.var['P'])
         uusp = -np.log(self.var['SP'])
