@@ -7,7 +7,7 @@ For both python 2 and python 3 under anaconda
 ACHTUNG: in some installations of python 3, error at loading stage because
 of libZ not found. Remedy: load netCDF4 in the calling program even if not used.
 
-Functions: Open files, read the data, extract subgrids, make charts, interpolate in time, 
+Functions: Open files, read the data, extract subgrids, make charts, interpolate in time,
 interpolate to pressure levels
 
 Data are read on hybrid levels. They can interpolated to pressure levels. Do it on subgrids
@@ -32,12 +32,12 @@ interpolate in time (date2 must be between the dates of data0 and data1)
 >> data2 = data0.interpol-time(data1,date2)
 interpolate to pressure levels
 >> data1 = data.interpolP(pList,varList,latRange,lonRange)
-where pList is a pressure or a list of pressures, varList is a variable or a list of variables, 
+where pList is a pressure or a list of pressures, varList is a variable or a list of variables,
 latRange and lonRange as in extract
-    
+
 The ECMWF class is used to read the file corresponding to a date for several projects/
 The relevant projects are STC and VOLC
-  
+
 The ECMWF_pure allows to define a template object without reading files.
 It can be used to modify data. It is produced as an output of the interpolation.
 
@@ -82,7 +82,7 @@ listcolors=['#161d58','#253494','#2850a6','#2c7fb8','#379abe','#41b6c4',
             '#71c8bc','#a1dab4','#d0ecc0','#ffffcc','#fef0d9','#fedeb1',
             '#fdcc8a','#fdac72','#fc8d59','#ef6b41','#e34a33','#cb251a',
             '#b30000','#7f0000']
-# homemade color table            
+# homemade color table
 listcolors_sw=[listcolors[1],listcolors[0],listcolors[3],listcolors[2],\
                listcolors[5],listcolors[4],listcolors[7],listcolors[6],\
                listcolors[9],listcolors[8],listcolors[11],listcolors[10],\
@@ -95,11 +95,11 @@ mymap_sw=colors.ListedColormap(listcolors_sw)
 def strictly_increasing(L):
     return all(x<y for x, y in zip(L, L[1:]))
 
-# Second order estimate of the first derivative dy/dx for non uniform spacing of x  
+# Second order estimate of the first derivative dy/dx for non uniform spacing of x
 d = lambda x,y:(1/(x[2:,:,:]-x[:-2,:,:]))\
                 *((y[2:,:,:]-y[1:-1,:,:])*(x[1:-1,:,:]-x[:-2,:,:])/(x[2:,:,:]-x[1:-1,:,:])\
                 -(y[:-2,:,:]-y[1:-1,:,:])*(x[2:,:,:]-x[1:-1,:,:])/(x[1:-1,:,:]-x[:-2,:,:]))
-            
+
 class curtain(object):
     def __init__(self):
         self.var={}
@@ -120,7 +120,7 @@ class ECMWF_pure(object):
         # test existence of key field
         if var in self.var.keys():
             if len(self.var[var].shape) == 3:
-                # detection of the level as pressure or potential temperature with a value always 
+                # detection of the level as pressure or potential temperature with a value always
                 # larger than the number of levels (may fail at the top of the model in pressure or in z coordinate (if km))
                 # in this cas, force the value with cardinal_level
                 if (cardinal_level==False) | (lev > self.nlev-1):
@@ -140,7 +140,7 @@ class ECMWF_pure(object):
         # the web says that it is tricky to plot data accross dateline with cartopy
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
         cm_lon =0
-        # guess that we want to plot accross dateline 
+        # guess that we want to plot accross dateline
         if self.attr['lons'][-1] > 180: cm_lon=180
         proj = ccrs.PlateCarree(central_longitude=cm_lon)
         fig = plt.figure(figsize=[11,4])
@@ -178,7 +178,7 @@ class ECMWF_pure(object):
         gl.xlabel_style = {'size': fs}
         gl.ylabel_style = {'size': fs}
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
-        
+
         if txt is None:
             plt.title(var+' '+str(lev),fontsize=fs)
         else:
@@ -189,15 +189,15 @@ class ECMWF_pure(object):
         pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
         cbar=fig.colorbar(iax,cax=pos_cax)
         cbar.ax.tick_params(labelsize=fs)
-        
+
         if savfile is not None:
             plt.savefig(savfile,dpi=300,bbox_inches='tight')
         if show: plt.show()
         return ax
-    
+
     def chartlonz(self,var,lat,levs=(None,None),txt='',log=False,clim=(None,None),
              cmap=mymap,savfile=None,show=True,scale=1):
-        """ Plot a lon x alt section for a given latitude 
+        """ Plot a lon x alt section for a given latitude
         """
         if var not in self.var.keys():
             print("UNKNOWN VAR ", var)
@@ -206,7 +206,7 @@ class ECMWF_pure(object):
             pos=np.where(self.attr['lats']>=lat)[0][0]
             print('pos',pos)
         except:
-            print('lat out of range') 
+            print('lat out of range')
             return -1
         fig = plt.figure(figsize=[11,4])
         fs = 16
@@ -215,24 +215,27 @@ class ECMWF_pure(object):
         else: l1 = levs[0]
         if levs[1]==None: l2=115
         else: l2 = levs[1]
-        lons = np.arange(self.attr['lons'][0]-0.5*self.attr['dlo'],self.attr['lons'][-1]+self.attr['dlo'],self.attr['dlo'])       
+        lons = np.arange(self.attr['lons'][0]-0.5*self.attr['dlo'],self.attr['lons'][-1]+self.attr['dlo'],self.attr['dlo'])
         #if Z variable is available, lets use it, if not use zscale
-        #try:
-        zz1 = 0.5*(self.var['Z'][l1-1:l2+1,pos, :] + self.var['Z'][l1:l2+2,pos,:])/1000
-        zz = np.empty((zz1.shape[0],zz1.shape[1]+1))
-        zz[:,1:-1] = 0.5*(zz1[:,1:]+zz1[:,:-1])
-        zz[:,0] = zz1[:,0]
-        zz[:,-1] = zz1[:,-1]      
-        print(zz.shape,len(lons))
-        iax=ax.pcolormesh(lons,zz,scale*self.var[var][l1:l2+1,pos,:],
+        try:
+            zz1 = 0.5*(self.var['Z'][l1-1:l2+1,pos, :] + self.var['Z'][l1:l2+2,pos,:])/1000
+            zz = np.empty((zz1.shape[0],zz1.shape[1]+1))
+            zz[:,1:-1] = 0.5*(zz1[:,1:]+zz1[:,:-1])
+            zz[:,0] = zz1[:,0]
+            zz[:,-1] = zz1[:,-1]
+            print(zz.shape,len(lons))
+            iax=ax.pcolormesh(lons,zz,scale*self.var[var][l1:l2+1,pos,:],
+                            vmin=clim[0],vmax=clim[1],cmap=cmap)
+            plt.ylabel('altitude (km)',fontsize=fs)
+            print('USE Z')
+        except:
+            iax=ax.pcolormesh(lons,self.attr['zscale_i'][l1:l2+2],self.var[var][l1:l2+1,pos, :],
                         vmin=clim[0],vmax=clim[1],cmap=cmap)
-        print('USE Z')
-        # except:    
-        #     iax=ax.pcolormesh(lons,self.attr['zscale_i'][l1:l2+2],self.var[var][l1:l2+1,pos, :],
-        #                 vmin=clim[0],vmax=clim[1],cmap=cmap)
+
+            plt.ylabel('baro altitude (km)',fontsize=fs)
         ax.tick_params(labelsize=16)
         plt.xlabel('longitude',fontsize=fs)
-        plt.ylabel('baro altitude (km)',fontsize=fs)
+
         plt.title(txt+" lat="+str(lat),fontsize=fs)
         #cax = fig.add_axes([0.91, 0.21, 0.03, 0.6])
         #cbar = fig.colorbar(iax,cax=cax)
@@ -244,7 +247,7 @@ class ECMWF_pure(object):
         return ax
 
     def shift2zero(self):
-        # generate an object with the same content as self but with the origin 
+        # generate an object with the same content as self but with the origin
         # of longitude shifted to 0
         new = ECMWF_pure()
         # find the location of 0 in the initial grid
@@ -252,7 +255,7 @@ class ECMWF_pure(object):
         if ll0==0:
             print ('This dataset is already gridded from zero longitude')
             return None
-        
+
         new.attr['lons'] = np.concatenate((self.attr['lons'][ll0:],self.attr['lons'][:ll0]+360))
         new.attr['lats'] = self.attr['lats']
         new.nlon = len(new.attr['lons'])
@@ -281,7 +284,7 @@ class ECMWF_pure(object):
         return new
 
     def shift2west(self,lon0):
-        # generate an object with the same content as self but with the origin 
+        # generate an object with the same content as self but with the origin
         # of longitude shifted to lon0
         # It is assumed that the first longitude is presently 0
         if self.attr['lons'][0] != 0:
@@ -317,12 +320,12 @@ class ECMWF_pure(object):
         for var in self.var.keys():
             ndim = len(self.var[var].shape)
             new.var[var] = np.concatenate((self.var[var][...,ll0:],self.var[var][...,:ll0]),axis=ndim-1)
-        return new         
+        return new
 
     def extract(self,latRange=None,lonRange=None,varss=None,vard=None):
         """ extract all variables on a reduced grid
            varss is a list of the 3D variables
-           vard is a list of the 2D variables 
+           vard is a list of the 2D variables
         """
         # first determine the boundaries of the domain
         new = ECMWF_pure()
@@ -338,7 +341,7 @@ class ECMWF_pure(object):
             nlonmin = 0
             nlonmax = len(self.attr['lons'])
         else:
-            nlonmin = np.argmax(self.attr['lons']>lonRange[0])-1            
+            nlonmin = np.argmax(self.attr['lons']>lonRange[0])-1
             nlonmax = np.argmax(self.attr['lons']>=lonRange[1])+1
         new.attr['lats'] = self.attr['lats'][nlatmin:nlatmax]
         new.attr['lons'] = self.attr['lons'][nlonmin:nlonmax]
@@ -362,6 +365,7 @@ class ECMWF_pure(object):
             new.attr['zscale'] = self.attr['zscale']
             new.attr['zscale_i'] = self.attr['zscale_i']
         except: pass
+        new.globalGrid = False
         # extraction
         if varss is None:
             list_vars = []
@@ -383,7 +387,7 @@ class ECMWF_pure(object):
         for var in list_vars:
             new.d2d[var] = self.d2d[var][nlatmin:nlatmax,nlonmin:nlonmax]
         return new
-    
+
     def zonal(self,vars=None,vard=None):
         """ Calculate the zonal averages of the variables contained in self"""
         new = ECMWF_pure()
@@ -407,14 +411,14 @@ class ECMWF_pure(object):
             list_vars = vard
         for var in list_vars:
             new.d2d[var] = np.mean(self.d2d[var],axis=1)
-        return new    
-    
+        return new
+
     def getxy(self,var,lev,y,x):
         """ get the interpolated value of var in x, y on the level lev """
         # Quick n' Dirty version by nearest neighbour
         jy = np.abs(self.attr['lats']-y).argmin()
         ix = np.abs(self.attr['lons']-x).argmin()
-        return self.var[var][lev,jy,ix]       
+        return self.var[var][lev,jy,ix]
 
     def interpol_time(self,other,date):
         # This code interpolate in time between two ECMWF objects with same vars
@@ -451,7 +455,7 @@ class ECMWF_pure(object):
         except:
             pass
         return data
-    
+
     def interpolP(self,p,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to a pressure level or a set of pressure levels
             vars must be a list of variables or a single varibale
@@ -519,7 +523,7 @@ class ECMWF_pure(object):
                     ixt += 1
                 jyt += 1
         return new
-    
+
     def interpolZ(self,z,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to an altitude level or a set of altitude levels
             vars must be a list of variables or a single varibale
@@ -581,15 +585,15 @@ class ECMWF_pure(object):
                     # Better version than the linear interpolation but much too slow
                     #fint = PchipInterpolator(np.log(self.var['P'][npmin:npmax,jys,ixs]),
                     #                     self.var[var][npmin:npmax,jys,ixs])
-                    #new.var[var][:,jyt,ixt] = fint(np.log(p))                  
+                    #new.var[var][:,jyt,ixt] = fint(np.log(p))
                     fint = interp1d(-self.var['Z'][nzmax:nzmin,jys,ixs],self.var[var][nzmax:nzmin,jys,ixs])
                     new.var[var][:,jyt,ixt] =  [fint(-zz) for zz in z]
                     ixt += 1
                 jyt += 1
         return new
-    
+
     def interpolPT(self,pt,varList='All',latRange=None,lonRange=None):
-        """ interpolate the variables to a potential temperature level or a set of 
+        """ interpolate the variables to a potential temperature level or a set of
             potential tempearture levels
             vars must be a list of variables or a single varibale
             pt must be a list of potential temperatures in K
@@ -653,7 +657,7 @@ class ECMWF_pure(object):
                     npbot = min(npbot + 1,self.nlev)
                     #if jyt == 20 : print(npup,npbot)
                     # Test sorting and interpolation with reverse potential temperature to ensure growth
-                    # along x-axis 
+                    # along x-axis
                     if np.any(self.var['PT'][npup+1:npbot,jys,ixs]-self.var['PT'][npup:npbot-1,jys,ixs]>0):
                         #print('sort for ',ixt,jyt)
                         pts = np.sort(-self.var['PT'][npup:npbot,jys,ixs])
@@ -666,7 +670,7 @@ class ECMWF_pure(object):
         return new
 
     def interpol_part(self,p,x,y,varList='All'):
-        """ Interpolate the variables to the location of particles given by [p,y,x] using trilinear method."""  
+        """ Interpolate the variables to the location of particles given by [p,y,x] using trilinear method."""
         if 'P' not in self.var.keys():
             self._mkp()
         if varList == 'All':
@@ -679,7 +683,7 @@ class ECMWF_pure(object):
             if var not in self.var.keys():
                 print(var,' not defined')
                 return
-        # Defines output dictionary 
+        # Defines output dictionary
         result = {}
         # test whether fhyb already attached to the instance
         if not hasattr(self,'fhyb'):
@@ -716,8 +720,8 @@ class ECMWF_pure(object):
             hc = hyb - lhyb
             result[var] = (1-hc)*vhigh + hc*vlow
             result[var][non_valid] = MISSING
-        return result  
-           
+        return result
+
     def _CPT(self):
         """ Calculate the cold point tropopause """
         if not set(['T','P']).issubset(self.var.keys()):
@@ -742,9 +746,9 @@ class ECMWF_pure(object):
                 for ix in range(self.nlon):
                     self.d2d['zcold'][jy,ix] = self.var['Z'][nc[jy,ix],jy,ix]
         return
-    
+
     def _lzrh(self):
-        """ Calculate the clear sky LZRH. Translated from LzrnN.m 
+        """ Calculate the clear sky LZRH. Translated from LzrnN.m
         Not yet validated. Use with caution.
         Add the calculation of the all sky LZRH
         """
@@ -753,7 +757,7 @@ class ECMWF_pure(object):
             return
         # bound for the test of positive heating in the stratosphere
         levbnd = {'FULL-EA':31,'FULL-EI':15,'STC':11}
-        # Restrict the column (top at 60 hPa) 
+        # Restrict the column (top at 60 hPa)
         ntop1 = 60 - self.attr['levs'][0]
         nbot1 = self.attr['levs'][-1] - 30
         self.d2d['plzrh'] = np.ma.empty(shape=(self.nlat,self.nlon))
@@ -771,9 +775,9 @@ class ECMWF_pure(object):
                 pos = np.where(lp[1:]-lp[:-1]==-1)[0]
                 # Number of crossings
                 uniq[jy,ix] = len(pos)
-                # Select column with at least one crossing and make sure there is heating 
+                # Select column with at least one crossing and make sure there is heating
                 # in the strato higher than 66 hpa level to eliminate tropopause folds in the subtropics
-                # 
+                #
                 if (len(pos)==0) | (np.max(csh[:levbnd[self.project]])<0) :
                     self.d2d['plzrh'][jy,ix] = np.ma.masked
                     self.d2d['ptlzrh'][jy,ix] = np.ma.masked
@@ -794,8 +798,8 @@ class ECMWF_pure(object):
                 # Now we test the best continuity for pressure
                 # Collect neighbour values of the LZRH pressure already calculated
                 # and find intersections in the current column which is closest to these values
-                
-                if len(pos)==1: 
+
+                if len(pos)==1:
                     k=0
                 else:
                     if jy>0 & ix>0:
@@ -809,7 +813,7 @@ class ECMWF_pure(object):
                         pzt = [self.d2d['plzrh'][jy,ix-1],]
                     elif jy>0 & ix==0:
                         pzt = list(self.d2d['plzrh'][jy-1,ix:ix+2])
-                    else:              
+                    else:
                         pzt = []
                     if len(pzt)>0:
                         avpzt = sum(pzt)/len(pzt)
@@ -837,12 +841,12 @@ class ECMWF_pure(object):
                 self.d2d['ptlzrh'][jy,ix] = tz * (cst.p0/pzk[k])**cst.kappa
                 self.d2d['aslzrh'][jy,ix] = px[k]*self.var['ASSWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASSWR'][pos[k],jy,ix] \
                                           + px[k]*self.var['ASLWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASLWR'][pos[k],jy,ix]
-        return            
-    
+        return
+
     @jit
     def _WMO(self,highlatOffset=False):
-        """ Calculate the WMO tropopause 
-        When highlatoffset is true the 2K/km criterion is replaced by a 3K/km 
+        """ Calculate the WMO tropopause
+        When highlatoffset is true the 2K/km criterion is replaced by a 3K/km
         at high latitudes latitudes above 60S or 60N """
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
@@ -858,13 +862,13 @@ class ECMWF_pure(object):
         highbnd = levbnd[self.project][0]
         lowbnd =  levbnd[self.project][1]
         logp = np.log(self.var['P'])
-        # dz from the hydrostatic formula dp/dz = - rho g = - p/T g /R 
+        # dz from the hydrostatic formula dp/dz = - rho g = - p/T g /R
         # dz = dz/dp p dlogp = - 1/T R/g dlogp (units m)
         # dz is shifted b one index position / T, p
-        # dz[i] is the positive logp thickness for the layer between levels i and i+1, that is 
+        # dz[i] is the positive logp thickness for the layer between levels i and i+1, that is
         # above level i+1
         dz = cst.R/cst.g * self.var['T'][1:,:,:] * (logp[1:,:,:]-logp[:-1,:,:])
-        # calculate dT/dz = - 1/p dT/dlogp rho g = - g/R 1/T dT/dlogp 
+        # calculate dT/dz = - 1/p dT/dlogp rho g = - g/R 1/T dT/dlogp
         # dTdz[i] is the vertical derivative at level [i+1]
         #lapse = - cst.g/cst.R * (1/self.var['T'][highbnd+1:lowbnd-1,...]) * \
         #               (self.var['T'][highbnd:lowbnd-2,...] - self.var['T'][highbnd+2:lowbnd,...]) / \
@@ -872,15 +876,15 @@ class ECMWF_pure(object):
         lapse = - cst.g/cst.R * (1/self.var['T'][highbnd+1:lowbnd,...]) * \
                        (self.var['T'][highbnd:lowbnd-1,...] - self.var['T'][highbnd+1:lowbnd,...]) / \
                        (logp[highbnd:lowbnd-1,...]-logp[highbnd+1:lowbnd,...])
-        
-        for jy in range(self.nlat):                       
+
+        for jy in range(self.nlat):
             # standard wmo criterion
             offset = - 0.002
             thicktrop = 2000
             # adaptation of the WMO offset at high latitude
             if highlatOffset & (abs(self.attr['lats'][jy]) > 60): offset = -0.003
             for ix in range(self.nlon):
-                # location of lapse rate exceeding the threshod 
+                # location of lapse rate exceeding the threshod
                 slope = list(np.where(lapse[:,jy,ix] > offset)[0])
                 Deltaz = 0.
                 found = False
@@ -899,7 +903,7 @@ class ECMWF_pure(object):
                         if zwmo: self.d2d['zwmo'][jy,ix] = np.ma.masked
                         found = True
                         break
-                    # location of the basis of the interval 
+                    # location of the basis of the interval
                     # +1 to account for the shift of the finite difference
                     lev0 = test+1+highbnd
                     lev = lev0-1
@@ -910,19 +914,19 @@ class ECMWF_pure(object):
                         lev -= 1
                         Deltaz += dz[lev,jy,ix]
                         # mean slope over the considered layer
-                        if (self.var['T'][lev,jy,ix]-self.var['T'][lev0,jy,ix])/Deltaz < offset: 
+                        if (self.var['T'][lev,jy,ix]-self.var['T'][lev0,jy,ix])/Deltaz < offset:
                             search = False
                             break
-                    if search: 
+                    if search:
                         found = True
                         self.d2d['pwmo'][jy,ix] = self.var['P'][lev0,jy,ix]
                         self.d2d['Twmo'][jy,ix] = self.var['T'][lev0,jy,ix]
-                        if zwmo: self.d2d['zwmo'][jy,ix] = self.var['Z'][lev0,jy,ix]      
-        return 
-       
+                        if zwmo: self.d2d['zwmo'][jy,ix] = self.var['Z'][lev0,jy,ix]
+        return
+
     def interpol_track(self,p,x,y,varList='All'):
         """ Writing in progress. For the moment, this is a copy of interpol_part.
-        Calculate the distance to the cold point and to the LZRH ."""  
+        Calculate the distance to the cold point and to the LZRH ."""
         if 'P' not in self.var.keys():
             self._mkp()
         if varList == 'All':
@@ -935,7 +939,7 @@ class ECMWF_pure(object):
             if var not in self.var.keys():
                 print(var,' not defined')
                 return
-        # Defines output dictionary 
+        # Defines output dictionary
         result = {}
         # test whether fhyb already attached to the instance
         if not hasattr(self,'fhyb'):
@@ -967,7 +971,7 @@ class ECMWF_pure(object):
             result[var] = (1-hc)*vhigh + hc*vlow
             del hc; del vhigh; del vlow
         return result
-    
+
     def interpol_orbit(self,x,y,varList='All',var2='All'):
         """ Generate an interpolation to an orbit curtain in 2d """
         if varList == 'All':
@@ -990,7 +994,7 @@ class ECMWF_pure(object):
         for var in var2:
             sect.var[var] = (1-px)*(1-py)*self.d2d[var][jy,ix] + (1-px)*py*self.d2d[var][jy+1,ix] \
                   + px*(1-py)*self.d2d[var][jy,ix1] + px*py*self.d2d[var][jy+1,ix1]
-        for var in varList: 
+        for var in varList:
             if len(self.var[var].shape)==2:
                 sect.var[var] = (1-px)*(1-py)*self.var[var][jy,ix] + (1-px)*py*self.var[var][jy+1,ix] \
                     + px*(1-py)*self.var[var][jy,ix1] + px*py*self.var[var][jy+1,ix1]
@@ -1000,15 +1004,16 @@ class ECMWF_pure(object):
                     sect.var[var][lev,:] = (1-px)*(1-py)*self.var[var][lev,jy,ix] + (1-px)*py*self.var[var][lev,jy+1,ix] \
                         + px*(1-py)*self.var[var][lev,jy,ix1] + px*py*self.var[var][lev,jy+1,ix1]
         return sect
-                        
+
 # standard class to read data
 class ECMWF(ECMWF_pure):
     # to do: raise exception in case of an error
-    
-    def __init__(self,project,date,step=0):
+
+    def __init__(self,project,date,step=0,exp=[None]):
         ECMWF_pure.__init__(self)
         self.project = project
         self.date = date
+        self.exp = exp
         #SP_expected = False
         self.EN_expected = False
         self.DI_expected = False
@@ -1016,6 +1021,8 @@ class ECMWF(ECMWF_pure):
         self.VD_expected = False
         self.DE_expected = False
         self.x4I_expected = False
+        self.VOZ_expected = False
+        self.QN_expected = False
         self.offd = 100 # offset to be set for ERA-I below, 100 for ERA5
         if self.project=='VOLC':
             if 'satie' in socket.gethostname():
@@ -1025,6 +1032,7 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
+            self.globalGrid = False
             self.EN_expected = True
             self.DI_expected = True
             self.WT_expected = True
@@ -1036,7 +1044,7 @@ class ECMWF(ECMWF_pure):
             elif 'climserv' in socket.gethostname():
                 self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'
             elif 'camelot' in socket.gethostname():
-                self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'              
+                self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/STC'
             elif socket.gethostname() in ['grapelli','coltrane','zappa','couperin','puccini','lalo']:
@@ -1044,6 +1052,7 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
+            self.globalGrid = False
             self.EN_expected = True
             self.DI_expected = True
             self.WT_expected = True
@@ -1062,6 +1071,7 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
+            self.globalGrid = True
             self.EN_expected = True
             self.DI_expected = True
             self.DE_expected = True
@@ -1078,7 +1088,11 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
+            self.globalGrid = True
             self.EN_expected = True
+            if (self.exp == 'VOZ') | ('VOZ' in self.exp): self.VOZ_expected = True
+            if (self.exp == 'DI') | ('DI' in self.exp): self.DI_expected = True
+            if (self.exp == 'QN') | ('QN' in self.exp): self.QN_expected = True
         elif project=='OPZ':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/OPZ'
@@ -1091,8 +1105,9 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
+            self.globalGrid = True
             self.EN_expected = True
-            self.x4I_expected = True
+            if (self.exp == 'x4I') | ('x4I' in self.exp): self.x4I_expected = True
         elif project=='OPZFCST':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/OPZ'
@@ -1105,6 +1120,7 @@ class ECMWF(ECMWF_pure):
             else:
                 print('unknown hostname for this dataset')
                 return
+            self.globalGrid = True
             self.EN_expected = True
         else:
             print('Non implemented project')
@@ -1114,20 +1130,27 @@ class ECMWF(ECMWF_pure):
         #    self.fname = 'SP'+date.strftime('%y%m%d%H')
         #    path1 = 'SP-true/grib'
         if self.EN_expected:
-            if project == 'FULL-EA':
+            if project in ['STC','VOLC']:
+                self.fname = date.strftime('EN%y%m%d%H')
+                path1 = 'EN-true/grib'
+                self.ENvar = {'U':['u','U component of wind','m s**-1'],
+                     'V':['v','V component of wind','m s**-1'],
+                     'W':['w','Vertical velocity','Pa s**-1'],
+                     'T':['t','Temperature','K'],
+                     'LNSP':['lnsp','Logarithm of surface pressure','Log(Pa)']
+                     }
+            elif project == 'FULL-EA':
                 self.fname = date.strftime('ERA5EN%Y%m%d.grb')
                 path1 ='EN-true'
+                self.ENvar = {'U':['u','U component of wind','m s**-1'],
+                     'V':['v','V component of wind','m s**-1'],
+                     'W':['w','Vertical velocity','Pa s**-1'],
+                     'T':['t','Temperature','K'],
+                     'LNSP':['lnsp','Logarithm of surface pressure','Log(Pa)']}
             elif project == 'OPZ':
                 self.fname = date.strftime('OPZLWDA%Y%m%d.grb')
                 path1 ='EN-true'
-            elif project == 'OPZFCST':
-                self.fname = date.strftime('OPZFCST%Y%m%d_SH.grb')
-                path1 ='EN-true'
-            else:    
-                self.fname = date.strftime('EN%y%m%d%H')           
-                path1 = 'EN-true/grib'
-                if project == 'FULL-EI': path1 = 'EN-true'
-            self.ENvar = {'U':['u','U component of wind','m s**-1'],
+                self.ENvar = {'U':['u','U component of wind','m s**-1'],
                      'V':['v','V component of wind','m s**-1'],
                      'W':['w','Vertical velocity','Pa s**-1'],
                      'T':['t','Temperature','K'],
@@ -1135,17 +1158,49 @@ class ECMWF(ECMWF_pure):
                      'VO':['vo','Vorticity','s**-1'],
                      'D':['d','Divergence','s**-1'],
                      'Q':['q','Specific humidity','kg kg**-1'],
-                     'QI':['ciwc','Specific cloud ice water content','kg kg**-1'],
-                     'O3':['o3','Ozone mixing ratio','kg kg**-1']
+                     'O3':['o3','Ozone mixing ratio','kg kg**-1'],
+                     'WE':['etadot','Eta-coordinate vertical velocity','s**-1']
                      }
+            elif project == 'OPZFCST':
+                self.fname = date.strftime('OPZFCST%Y%m%d_SH.grb')
+                path1 ='EN-true'
+                self.ENvar = {'T':['t','Temperature','K'],
+                     'LNSP':['lnsp','Logarithm of surface pressure','Log(Pa)'],
+                     'VO':['vo','Vorticity','s**-1'],
+                     'O3':['o3','Ozone mixing ratio','kg kg**-1']}
+            elif project == 'FULL-EI':
+                self.fname = date.strftime('EN%y%m%d%H')
+                path1 = 'EN-true'
+                self.ENvar = {'U':['u','U component of wind','m s**-1'],
+                     'V':['v','V component of wind','m s**-1'],
+                     'W':['w','Vertical velocity','Pa s**-1'],
+                     'T':['t','Temperature','K'],
+                     'SP':['sp','Surface pressure','Pa'],
+                     'U10':['10u','10 metre U wind component','m s**-1'],
+                     'V10':['10v','10 metre V wind component','m s**-1'],
+                     'T2':['2t','2 metre temperature','K'],
+                     'TD2':['2d','2 metre dewpoint temperature','K']
+                     }
+                # A number of other surface variables are available
+
         if self.DI_expected:
-            if project=='FULL-EI':
+            if project == 'FULL-EI':
                 # for ERA-I: tendencies over 3-hour intervals following file date, provided as temperature increments
                 self.DIvar = {'ASSWR':['srta','Mean temperature tendency due to short-wave radiation','K'],
                      'ASLWR':['trta','Mean temperature tendency due to long-wave radiation','K'],
                      'CSSWR':['srtca','Mean temperature tendency due to short-wave radiation, clear sky','K'],
                      'CSLWR':['trtca','Mean temperature tendency due to long-wave radiation, clear sky','K'],
-                     'PHR':['ttpha','Mean temperature tendency due to physics','K'],}
+                     'PHR':['ttpha','Mean temperature tendency due to physics','K']}
+                self.dname = 'DI'+date.strftime('%y%m%d%H')
+            elif project == 'FULL-EA':
+                # for ERA5: tendencies over 1-hour intervals following file date, provided as temperature increments
+                # notice that native names differ from that of ERA-I
+                self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
+                     'ASLWR':['mttlwr','Mean temperature tendency due to long-wave radiation','K s**-1'],
+                     'CSSWR':['mttswrcs','Mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
+                     'CSLWR':['mttlwrcs','Mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
+                     'PHR':['mttpm','Mean temperature tendency due to parametrerizations','K s**-1'],}
+                self.dname == date.strftime('ERA5DI%Y%m%d')
             else:
                 # for ERA5: tendencies over 1-hour intervals following file date
                 self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
@@ -1157,7 +1212,7 @@ class ECMWF(ECMWF_pure):
                      'DMF':['mdmf','Mean downdraught mass flux','kg m**-2 s**-1'],
                      'UDR':['mudr','Mean updraught detrainment rate','kg m**-3 s**-1'],
                      'DDR':['mddr','Mean downdraught detrainement rate','kg m**-3 s**-1']}
-            self.dname = 'DI'+date.strftime('%y%m%d%H')
+                self.dname = 'DI'+date.strftime('%y%m%d%H')
         if self.WT_expected:
             # for ERA5
             self.WTvar = {'CRWC':['crwc','Specific rain water content','kg kg**-1'],
@@ -1170,7 +1225,7 @@ class ECMWF(ECMWF_pure):
         if self.VD_expected:
             # for ERA5
             self.VDvar = {'DIV':['d','Divergence','s**-1'],
-                          'VOR':['vo','Vorticity','s**-1'],
+                          'VO':['vo','Vorticity','s**-1'],
                           #'Z':['xxx','Geopotential','m'],
                           'WE':['etadot','Eta dot','s**-1*']}
             self.vname = 'VD'+date.strftime('%y%m%d%H')
@@ -1186,8 +1241,29 @@ class ECMWF(ECMWF_pure):
                            'TD':['tdiff','Temperature increment','K'],
                            'LNSPD':['lnspdiff','Surface log pressure increment','']}
             self.x4iname = date.strftime('4ILWDA%Y%m%d.grb')
-            
-        # opening the main file    
+        if self.VOZ_expected:
+            self.VOZvar = {'VO':['vo','Vorticity','s**-1'],
+                           'O3':['o3','Ozone mixing ratio','kg kg**-1']}
+            self.vozname = date.strftime('ERA5VOZ%Y%m%d.grb')
+        if self.QN_expected:
+            self.QNvar = {'Q':['q','Specific humidity','kg kg**-1'],
+                          'QI':['ciwc','Specific cloud ice water content','kg kg**-1'],
+                          'Ql':['clwc','Specific cloud ice water content','kg kg**-1'],
+                          'QR':['crwc','Specific rain water content:kg kg**-1'],
+                          'QS':['cswc','Specific snow water content:kg kg**-1']}
+            self.qnname = date.strftime('ERA5QN%Y%m%d.grb')
+        # opening first the DI file as it might be needed to get pressure for hours not multiple of 3
+        if self.DI_expected:
+            try:
+                self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
+                self.DI_open = True
+            except:
+                try:
+                    self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/%Y'),self.dname))
+                    self.DI_open = True
+                except:
+                    print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
+        # opening the main EN file
         try:
             self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
         except:
@@ -1202,15 +1278,19 @@ class ECMWF(ECMWF_pure):
         self.EN_open = True
         step
         try:
-            sp = self.grb.select(name='Surface pressure',validityTime=validityTime)[0]
-            logp = False
+            sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
+            logp = True
         except:
             try:
                 if self.project=='OPZFCST':
                     sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime,step=step)[0]
+                    logp = True
+                elif (self.project == 'FULL-EA') & self.DI_open:
+                    sp = self.drb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
+                    logp = True
                 else:
-                    sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
-                logp = True
+                    sp = self.grb.select(name='Surface pressure',validityTime=validityTime)[0]
+                    logp = False
             except:
                 print('no surface pressure in '+self.fname)
                 self.grb.close()
@@ -1247,7 +1327,7 @@ class ECMWF(ECMWF_pure):
             self.attr['La2'] = sp['latitudeOfFirstGridPoint']/1000000 # in degree
         # longitude and latitude interval
         self.attr['dlo'] = (self.attr['lons'][-1] - self.attr['lons'][0]) / (self.nlon-1)
-        self.attr['dla'] = (self.attr['lats'][-1] - self.attr['lats'][0]) / (self.nlat-1) 
+        self.attr['dla'] = (self.attr['lats'][-1] - self.attr['lats'][0]) / (self.nlat-1)
         if self.attr['Lo1']>self.attr['Lo2']:
             self.attr['Lo1'] = self.attr['Lo1']-360.
         if sp['PVPresent']==1 :
@@ -1275,6 +1355,8 @@ class ECMWF(ECMWF_pure):
         self.VD_open = False
         self.DE_open = False
         self.x4I_open = False
+        self.VOZ_open = False
+        self.QN_open = False
         if self.DI_expected:
             try:
                 self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
@@ -1282,7 +1364,7 @@ class ECMWF(ECMWF_pure):
             except:
                 try:
                     self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/%Y'),self.dname))
-                    self.DI_open = True 
+                    self.DI_open = True
                 except:
                     print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
         if self.WT_expected:
@@ -1309,6 +1391,19 @@ class ECMWF(ECMWF_pure):
                 self.x4I_open = True
             except:
                 print('cannot open '+os.path.join(self.rootdir,date.strftime('EN-true/%Y'),self.x4iname))
+        if self.VOZ_expected:
+            try:
+                self.vozrb = pygrib.open(os.path.join(self.rootdir,date.strftime('VO3-true/%Y'),self.vozname))
+                self.VOZ_open = True
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('VO3-true/%Y'),self.vozname))
+        if self.QN_expected:
+            try:
+                self.qnrb = pygrib.open(os.path.join(self.rootdir,date.strftime('QN-true/%Y'),self.qnname))
+                self.QN_open = True
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('QN-true/%Y'),self.qnname))
+
     def close(self):
         self.grb.close()
         try: self.drb.close()
@@ -1331,7 +1426,7 @@ class ECMWF(ECMWF_pure):
         self._get_var('W')
     def _get_Q(self):
         self._get_var('Q')
-        
+
 # get a variable from the archive
     def _get_var(self,var,step=None):
         if (var in self.var.keys()) & (self.project != 'OPZFCST'):
@@ -1341,7 +1436,7 @@ class ECMWF(ECMWF_pure):
             if self.EN_open:
                 if var in self.ENvar.keys():
                     if self.project=='OPZFCST':
-                        if step is not None: 
+                        if step is not None:
                             stepi = step
                             self.attr['step'] = step
                         else: stepi = self.attr['step']
@@ -1354,7 +1449,7 @@ class ECMWF(ECMWF_pure):
                     TT = self.drb.select(shortName=self.DIvar[var][0],validityTime=(self.attr['valTime']+self.offd) % 2400)
                     get = True
             if ~get & self.WT_open:
-                if var in self.WTvar.keys():       
+                if var in self.WTvar.keys():
                     TT = self.wrb.select(shortName=self.WTvar[var][0],validityTime=self.attr['valTime'])
                     get = True
             if ~get & self.VD_open:
@@ -1362,7 +1457,7 @@ class ECMWF(ECMWF_pure):
                     TT = self.vrb.select(shortName=self.VDvar[var][0],validityTime=self.attr['valTime'])
                     get = True
             if ~get & self.DE_open:
-                if var in self.DEvar.keys():         
+                if var in self.DEvar.keys():
                     # Shift of validity time due to ERA-I convention
                     TT = self.derb.select(shortName=self.DEvar[var][0],validityTime=(self.attr['valTime']+self.offd) % 2400)
                     get = True
@@ -1375,6 +1470,14 @@ class ECMWF(ECMWF_pure):
                         TT[i] = self.x4Irb.select(shortName=self.x4Ivar[var][0],validityTime=self.attr['valTime']+300,iterationNumber=i)
                         print('exit',i)
                     get = True
+            if ~get & self.VOZ_open:
+                if var in self.VOZvar.keys():
+                    TT = self.vozrb.select(shortName=self.VOZvar[var][0],validityTime=self.attr['valTime'])
+                    get = True
+            if ~get & self.QN_open:
+                if var in self.QNvar.keys():
+                    TT = self.qnrb.select(shortName=self.QN.var[var][0],validityTime=self.attr['valTime'])
+                    get = True
             if get == False:
                     print(var+' not found')
                     return
@@ -1383,18 +1486,19 @@ class ECMWF(ECMWF_pure):
             return
         # Process each message corresponding to a level
         # Special case of the 4D var increment first
-        # ugly programming 
+        # ugly programming
         x4ISpecial = False
         if self.x4I_open:
             if var in self.x4Ivar.keys(): x4ISpecial = True
         if x4ISpecial:
             self.var[var] = np.zeros(shape=[self.nlev,self.nlat,self.nlon])
             for i in range(4):
-               for l in range(len(TT[i])): 
+               for l in range(len(TT[i])):
                    self.var[var][l,:,:] += TT[i][l]['values']
             readlev = False
         # Common case
         else:
+            self.TT = TT
             if 'levs' not in self.attr.keys():
                 readlev=True
                 self.nlev = len(TT)
@@ -1406,9 +1510,10 @@ class ECMWF(ECMWF_pure):
                     print('new record inconsistent with previous ones ',len(TT))
             self.var[var] = np.empty(shape=[self.nlev,self.nlat,self.nlon])
             #print(np.isfortran(self.var[var]))
-    
+            # assuming levels are stored from top to bottom
+            offset = TT[0]['level']
             for l in range(len(TT)):
-                self.var[var][TT[l]['level']-1,:,:] = TT[l]['values']
+                self.var[var][TT[l]['level']-offset,:,:] = TT[l]['values']
                 if readlev:
                     try:
                         lev = TT[l]['lev']
@@ -1420,7 +1525,7 @@ class ECMWF(ECMWF_pure):
                         pass
                     self.attr['levs'][l] = lev
                     self.attr['plev'][l] = self.attr['am'][lev-1] + self.attr['bm'][lev-1]*cst.pref
-        
+
 #       # Check the vertical ordering of the file
         if readlev:
             if not strictly_increasing(self.attr['levs']):
@@ -1430,7 +1535,7 @@ class ECMWF(ECMWF_pure):
         self.var[var] = self.var[var][:,::-1,:]
         #print(np.isfortran(self.var[var]))
         return None
-    
+
     def get_var(self,var):
         self._get_var(var)
         return self.var['var' ]
@@ -1450,13 +1555,13 @@ class ECMWF(ECMWF_pure):
             lev = self.attr['levs'][i]
             self.var['PZ'][i,:,:] = self.attr['ai'][lev-1] \
                                   + self.attr['bi'][lev-1]*self.var['SP']
-                                  
+
     def _mkpscale(self):
         # Define the standard pressure scale for this vertical grid
         # could also be defined as as d1d field
         self.attr['pscale'] = self.attr['am'] + self.attr['bm'] * 101325
         self.attr['pscale_i'] = self.attr['ai'] + self.attr['bi'] * 101325
-    
+
     def _mkzscale(self):
         # Define the standard altitude scale
         from zISA import zISA
@@ -1500,7 +1605,7 @@ class ECMWF(ECMWF_pure):
             if np.min(ddd[lev,:,:]) < 0:
                 print('min level of inversion: ',lev)
                 return lev
-            
+
     def _mkz(self):
         """ Calculate the geopotential altitude (m) without taking moisture into account """
         if not set(['T','P']).issubset(self.var.keys()):
@@ -1525,7 +1630,55 @@ class ECMWF(ECMWF_pure):
              self.var['Z'][i,:,:] = self.var['Z'][i+1,:,:] + 0.5*(cst.R/cst.g) \
                     * (self.var['T'][i,:,:] + self.var['T'][i+1,:,:])\
                     * (uu[i,:,:]-uu[i+1,:,:])
-            
+
+    def _mkpv(self):
+        """ Calculate the potential vorticity using the isentropic formula """
+        if not set(['PT','P','U','V','VO']).issubset(self.var.keys()):
+            print('at least one of P, PT, U, V or VO is undefined')
+            return
+        # Calculation of the correction to the vorticity assuming that the grid is global
+        dlat = np.deg2rad(self.attr['dla'])*cst.REarth
+        dPTdPhi = np.empty(shape = self.var['PT'].shape)
+        dPTdPhi[:,1:-1,:] = 0.5*(self.var['PT'][:,2:,:]-self.var['PT'][:,:-2,:])/dlat
+        dPTdPhi[:,0,:] = (self.var['PT'][:,1,:]-self.var['PT'][:,0,:])/dlat
+        dPTdPhi[:,-1,:] = (self.var['PT'][:,-1,:]-self.var['PT'][:,-2,:])/dlat
+        dlon = np.deg2rad(self.attr['dlo'])*cst.REarth
+        coslat = np.cos(np.deg2rad(self.attr['lats']))
+        dPTdLam = np.empty(shape = self.var['PT'].shape)
+        if self.globalGrid:
+            dPTdLam[:,1:-1,1:-1] = 0.5*(self.var['PT'][:,1:-1,2:]-self.var['PT'][:,1:-1,:-2])/dlon
+            dPTdLam[:,1:-1,0] = 0.5*(self.var['PT'][:,1:-1,1]-self.var['PT'][:,1:-1,-1])/dlon
+            dPTdLam[:,1:-1,-1] = 0.5*(self.var['PT'][:,1:-1,0]-self.var['PT'][:,1:-1,-2])/dlon
+            dPTdLam[:,1:-1,:] /= coslat[np.newaxis,1:-1,np.newaxis]
+            dPTdLam[:,0,:] = dPTdLam[:,1,:]
+            dPTdLam[:,-1,:] = dPTdLam[:,-2,:]
+        else: # it is assumed that the non global grid does not contain poles
+            dPTdLam[...,1:-1] = 0.5*(self.var['PT'][...,2:]-self.var['PT'][...,:-2])/dlon
+            dPTdLam[...,0] = (self.var['PT'][...,1]-self.var['PT'][...,0])/dlon
+            dPTdLam[...,-1] = (self.var['PT'][...,-1]-self.var['PT'][...,-2])/dlon
+            dPTdLam /= coslat[np.newaxis,:,np.newaxis]
+        logP = np.log(self.var['P'])
+        dudP = np.empty(shape = self.var['U'].shape)
+        dvdP = np.empty(shape = self.var['V'].shape)
+        dPTdP = np.empty(shape = self.var['PT'].shape)
+        dudP[1:-1,...] = (self.var['U'][2:,...]-self.var['U'][:-2,...])/\
+                             (self.var['P'][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
+        dvdP[1:-1,...] = (self.var['V'][2:,...]-self.var['V'][:-2,...])/\
+                            (self.var['P'][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
+        dPTdP[1:-1,...] = (self.var['PT'][2:,...]-self.var['PT'][:-2,...])/\
+                             (self.var['P'][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
+        # Do not loose time as PV at the ground or the top levl is not of any interest
+        dudP[0,...] = dudP[1,...]
+        dvdP[0,...] = dvdP[1,...]
+        dPTdP[0,...] = dPTdP[1,...]
+        dudP[-1,...] = dudP[-2,...]
+        dvdP[-1,...] = dvdP[-2,...]
+        dPTdP[-1,...] = dPTdP[-2,...]
+        flat = 2*cst.Omega * np.sin(np.deg2rad(self.attr['lats']))
+        self.var['PV'] = - cst.g * (dPTdP * (self.var['VO'] + flat[np.newaxis,:,np.newaxis]) \
+                                       + dudP * dPTdPhi - dvdP * dPTdLam)
+        del dPTdPhi, dPTdLam, logP, dudP, dvdP, dPTdP
+
 if __name__ == '__main__':
     date = datetime(2017,8,11,18)
     dat = ECMWF('STC',date)
