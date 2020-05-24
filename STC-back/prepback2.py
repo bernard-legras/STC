@@ -3,7 +3,7 @@
 """
 Created on Fri Dec 23 09:57:27 2016
 
-This script generates the part_000 file containing parcels on a given pressure 
+This script generates the part_000 file containing parcels on a given potential temperature 
 for a backward run. The parcels are generated on a one degree centered grid in the 
 target_range which is also used for the analysis of forward runs from convection.  
 The parcels are launched every 15 minutes which means 816000 parcels per day in the 
@@ -11,7 +11,7 @@ standard setting or 25296000 in July or August month.
 
 The output is produced as a part_000 format 107 file which can be used in a StratoClim
 backward run. The format 107 is used for convenience even if the flag field is of no use
-here. flag is set to the uniform value 0x1F (=31) which means pressure coordinate (to be changed 
+here. flag is set to the uniform value 0x1F (=31) which means (wrongly) pressure coordinate (to be changed 
 in a REID run), new parcel and fill grid. In addition mode=3     
 
 @author: Bernard Legras
@@ -66,7 +66,7 @@ def interp3d(data,pt):
         lons : longitudes of the target grid
         lats : latitudes of the target grid """
     # Interpolate the ECMWF grid onto the target pressure
-    # pressure must be increasing, that is from top to bottom 
+    # pressure 'P' must be increasing, that is from top to bottom 
     Tg = np.empty(shape=[data.nlat,data.nlon]) 
     for j in range(data.nlat):
         for i in range(data.nlon):
@@ -77,14 +77,14 @@ def interp3d(data,pt):
     
 def interp3d_thet(data,theta):
     """ Produces an interpolation of the temperature field to a 2d regular grid 
-    on a given pressure level. Same horizontal grid as in the ECMWF field.
+    on a given potential temperature level. Same horizontal grid as in the ECMWF field.
     Input arguments:
         data : as read from read_ECMWF
-        pt   : target pressure in Pa
+        theta: target potential temperature in K
         lons : longitudes of the target grid
         lats : latitudes of the target grid """
-    # Interpolate the ECMWF grid onto the target pressure
-    # pressure must be increasing, that is from top to bottom 
+    # Interpolate the ECMWF grid onto the target potential temperature
+    # potential temperature 'PT' must be decreasing, that is from top to bottom
     Tg = np.empty(shape=[data.nlat,data.nlon])
     Pg = np.empty(shape=[data.nlat,data.nlon])
     for j in range(data.nlat):

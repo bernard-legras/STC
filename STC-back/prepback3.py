@@ -14,7 +14,7 @@ It generates 691200 parcels per day or 21427200 per July or August month
 
 The output is produced as a part_000 format 107 file which can be used in a StratoClim
 backward run. The format 107 is used for convenience even if the flag field is of no use
-here. flag is set to the uniform value 0x1F (=31) which means pressure coordinate (to be changed 
+here. flag is set to the uniform value 0x1F (=31) which means (wrongly) pressure coordinate (to be changed 
 in a REID run), new parcel and fill grid. In addition mode=3
 
 16 March 2018
@@ -75,8 +75,7 @@ def interp3d(data,pt):
     Input arguments:
         data : as read from read_ECMWF
         pt   : target pressure in Pa
-        lons : longitudes of the target grid
-        lats : latitudes of the target grid """
+    """
     # Interpolate the ECMWF grid onto the target pressure
     # pressure must be increasing, that is from top to bottom 
     Tg = np.empty(shape=[data.nlat,data.nlon]) 
