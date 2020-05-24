@@ -140,6 +140,8 @@ def main():
     cloud_type = 'silviahigh'
     diffus = '01'
     super = ''
+    ext= ''
+    exth = ''
     vshift = 0
     args = parser.parse_args()
     if args.year is not None: year=args.year
@@ -154,7 +156,10 @@ def main():
         else: quiet=False
     if args.clean0 is not None: clean0 = args.clean0
     if args.cloud_type is not None: cloud_type = args.cloud_type
-    if args.step is not None: step = args.step
+    if args.step is not None: 
+        step = args.step
+        ext = ext + '-' + str(step) + 'H'
+        exth = exth + '-' + str(step) + 'H'
     if args.flight is not None: flight = args.flight
     if args.diffus is not None: diffus = args.diffus
     diffus = '-D' + diffus
@@ -164,9 +169,7 @@ def main():
             super = 'super'+str(vshift)
     if args.hmax is not None:
         hmax = args.hmax
-        ext = '-'+str(hmax)
-    else:
-        ext = ''
+        ext = ext + '-' + str(hmax)
             
     # derived parameters
     # number of slices between two outputs
@@ -202,10 +205,10 @@ def main():
     # Directories of the backward trajectories and name of the output file
     if platform == 'BAL':
         traj_dir = '/data/legras/flexout/STC/BAL'
-        ftraj = os.path.join(traj_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix)
+        ftraj = os.path.join(traj_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+exth)
         out_file2 = os.path.join(out_dir,flight+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+ext+'.hdf5')
     else:    
-        ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix)
+        ftraj = os.path.join(traj_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+exth)
         out_file2 = os.path.join(out_dir,platform+fdate.strftime('-%Y%m%d')+launch_number+'-'+advect+diffus+suffix+ext+'.hdf5')
 
     # Directories for the satellite cloud top files
