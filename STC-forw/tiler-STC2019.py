@@ -77,7 +77,7 @@ draw.text((w+300,h+150),u'source 350 K',fill='yellow',font=font)
 draw.text((w+300,2*h+150),u'source 360 K',fill='yellow',font=font)
 draw.text((w+300,3*h+150),u'source 370 K',fill='yellow',font=font)
 bb.save('figs-Box/tile1.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 #%% Tile 2 impact high levels
 fname0 = join(forw_dir,'target-norm','chart-EAD-Box-theta-FullAMA-target-norm-380K-All-h1728-sh.png')
@@ -129,7 +129,7 @@ draw.text((w+300,2*h+150),u'source 400 K',fill='yellow',font=font)
 draw.text((w+300,3*h+150),u'source 420 K',fill='yellow',font=font)
 
 bb.save('figs-Box/tile2.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 #%% Tile 3 global impact
 fname1 = join(forw_dirg,'target','chart-EID-FULL-Box-theta-global-target-380K-All-h1728-sh.png')
@@ -200,7 +200,7 @@ draw.text((w2,h2+hi),u'(d)',fill='blue',font=font)
 draw.text((w2,h2+h0),u'(f)',fill='blue',font=font)
 
 bb.save('figs-Box/tile3b.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 #%% Tile 4 mean age in the target and in the source domain
 fname1 = join(forw_dir,'mage-target','chart-EAD-Box-theta-FullAMA-mage-target-360K-All-h1728-sh.png')
@@ -291,7 +291,7 @@ bb.paste(im[4],(0,2*h,w,3*h))
 bb.paste(im[5],(w,2*h,2*w,3*h))
 bb.save('figs-Box/tile7.png')
 
-#%% Tile 8 tiling of images for the backward calculations in the same way as 
+#%% Tile 8 tiling of images for the backward calculations in the same way as
 # tile 2 and 3 for the forward calculations plus the pdf of the sources
 
 fname0 = join(back_dir,'EAD-JAS','chart-EAD-percentage-hits-Jul-Aug-Sep-360K.png')
@@ -319,7 +319,7 @@ for chart in [fname0,fname1,fname2,fname3,fname4,fname5,fname6,fname7,fname8,fna
         im.append(aa.crop((0,0,1219,1173)))
     else:
         im.append(aa)
-       
+
 [w,h] = im[0].size
 [w2,h2] = im[8].size
 bb=Image.new('RGB',(2*w+w2,4*h))
@@ -361,7 +361,7 @@ draw.text((w+300,2*h+150),u'source 380 K',fill='yellow',font=font)
 draw.text((w+300,3*h+150),u'source 400 K',fill='yellow',font=font)
 
 bb.save('figs-Box/tile8.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 
 #%% Tile 9 impact of EAD against EAZ
@@ -490,7 +490,7 @@ draw.text((w+300,4*h+150),u'source 380 K',fill='yellow',font=font)
 draw.text((w+300,5*h+150),u'source 400 K',fill='yellow',font=font)
 
 bb.save('figs-Box/tile10.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 #%% Tile 11 impact of EID-FULL against EIZ-FULL
 fname0 = join(forw_dirg,'target-norm','chart-EID-FULL-Box-theta-global-target-norm-340K-All-h1728-sh.png')
@@ -555,7 +555,7 @@ draw.text((w+300,4*h+150),u'target 380 K',fill='yellow',font=font)
 draw.text((w+300,5*h+150),u'target 400 K',fill='yellow',font=font)
 
 bb.save('figs-Box/tile11.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 #%% Tile 12 sources of EID-FULL against EIZ-FULL
 fname0 = join(forw_dirg,'source-norm','chart-EID-FULL-Box-theta-global-source-norm-340K-All-h1728-sh.png')
@@ -619,7 +619,7 @@ draw.text((w+300,4*h+150),u'source 380 K',fill='yellow',font=font)
 draw.text((w+300,5*h+150),u'source 400 K',fill='yellow',font=font)
 
 bb.save('figs-Box/tile12.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 #%% Tile 13 ages of EAD in the target and source domain
 fname0 = join(forw_dir,'mage-target','chart-EAD-Box-theta-FullAMA-mage-target-340K-All-h1728-sh.png')
@@ -679,8 +679,8 @@ draw.text((w+300,4*h+500),u'source 400 K',fill='black',font=font)
 bb.save('figs-Box/tile13.png',dpi=(300,300))
 bb.show()
 
-#%% Tile 14 tiling of images for the backward calculations in the same way as 
-# tile 13 (minus 340K) for the forward calculations 
+#%% Tile 14 tiling of images for the backward calculations in the same way as
+# tile 13 (minus 340K) for the forward calculations
 
 fname0 = join(back_dir,'EAD-JAS','chart-EAD-age-target-Jul-Aug-Sep-350K.png')
 fname1 = join(back_dir,'EAD-JAS','chart-EAD-age-target-Jul-Aug-Sep-360K.png')
@@ -688,6 +688,8 @@ fname2 = join(back_dir,'EAD-JAS','chart-EAD-age-target-Jul-Aug-Sep-380K.png')
 fname3 = join(back_dir,'EAD-JAS','chart-EAD-age-target-Jul-Aug-Sep-400K.png')
 fname4 = join(back_dir,'EAD-JAS','chart-EAD-age-source-Jul-Aug-Sep-350K.png')
 fname5 = join(back_dir,'EAD-JAS','chart-EAD-age-source-Jul-Aug-Sep-360K.png')
+fname6 = join(back_dir,'EAD-JAS','chart-EAD-age-source-Jul-Aug-Sep-380K.png')
+fname7 = join(back_dir,'EAD-JAS','chart-EAD-age-source-Jul-Aug-Sep-400K.png')
 
 im = []
 for chart in [fname0,fname1,fname2,fname3,fname4,fname5,fname6,fname7]:
@@ -695,7 +697,7 @@ for chart in [fname0,fname1,fname2,fname3,fname4,fname5,fname6,fname7]:
     cc = Image.new('RGB',size=(3644,1136),color=(255,255,255))
     cc.paste(aa,(0,0,aa.size[0],aa.size[1]))
     im.append(cc)
-       
+
 [w,h] = im[0].size
 bb=Image.new('RGB',(2*w,4*h))
 bb.paste(im[0],(0,0,w,h))
@@ -729,7 +731,7 @@ draw.text((w+300,2*h+500),u'source 380 K',fill='black',font=font)
 draw.text((w+300,3*h+500),u'source 400 K',fill='black',font=font)
 
 bb.save('figs-Box/tile14.png',dpi=(300,300))
-bb.show()
+#bb.show()
 
 #%% Tile 15 tiling of images for the variability study
 
@@ -747,7 +749,7 @@ for chart in [fname0,fname1,fname2,fname3,fname4,fname5]:
     cc = Image.new('RGB',size=(3644,1136),color=(255,255,255))
     cc.paste(aa,(0,0,aa.size[0],aa.size[1]))
     im.append(aa)
-       
+
 [w,h] = im[0].size
 bb=Image.new('RGB',(2*w,3*h))
 bb.paste(im[0],(0,0,w,h))
