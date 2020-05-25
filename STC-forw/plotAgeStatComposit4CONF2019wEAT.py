@@ -85,8 +85,8 @@ hmax = 1728
 # 62 days
 age_max = 1488
 nstep  =  int(hmax/step)
-figsave = True
-figpdf = True
+figsave = False
+figpdf = False
 nbins = 425
 theta = np.arange(275.5,700,1)
 ages = np.arange(0,age_max+1,6)/24
