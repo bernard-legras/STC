@@ -19,11 +19,12 @@ It generates for both sh and mh hightypes 4  figures which are
 
 This is made for all of the 9 streams and for one supertype
 
-EAZ, EAD, EIZ, EID are showing statistics of parcels in the FullAMA domain with the rule that a particle that exits
-once is discarded.
+EAZ, EAD, EIZ, EID are showing statistics of parcels in the FullAMA domain 
+with the rule that a particle that exits once is discarded.
 EIZ-FULL, EID-FULL show the statistics of parcels in the global domain
-EIZ-Return, EID-Return show the statistics of parcels in the FullAMA domain by applying a simple mask to the FULL runs, 
-that is parcels that leave the domain are counted if they return.  
+EIZ-Return, EID-Return show the statistics of parcels in the FullAMA domain 
+by applying a simple mask to the FULL runs, that is parcels that leave the 
+domain are counted if they return.  
 
 Created on Sat 23 Feb 2019
 
@@ -50,7 +51,7 @@ hmax = 1728
 # 62 days
 age_max = 1488
 
-figsave = True
+figsave = False
 
 args = parser.parse_args()
 if args.type is not None: supertype = args.type
