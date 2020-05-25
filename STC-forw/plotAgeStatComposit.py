@@ -7,11 +7,15 @@ This script provides statistics of the forward runs of the FORWBox-meanhigh fami
 It is based on the output of ageStat.py and is a variant of plotAgeStat
 In plotAgeStat, the diagnostics are shown for all streams for a given supertype
 
-Here we show the results for the whole summer 2017 and as a comparison 
-between the supertypes in the FullAMA domain (EAZ, EAD, EIZ, EID, EIZ-Return and EID-Return)
+Here we show the results for the whole summer 2017 (summing the streams) 
+and as a comparison between the supertypes in the FullAMA domain 
+(EAZ, EAD, EIZ, EID, EIZ-Return and EID-Return)
 
 It generates for both sh and mh hightypes 4  figures which are
 (actually mh not plotted)
+
+This script is the basis for the more specialized versions used later
+(ACP and CONF2019)
 
 1) The 2d histogram of parcels as a function of age and potential temperature
 
@@ -67,7 +71,7 @@ hmax = 1728
 age_max = 1488
 nstep  =  int(hmax/step)
 figsave = False
-figpdf = True
+figpdf = False
 nbins = 425
 
 args = parser.parse_args()
