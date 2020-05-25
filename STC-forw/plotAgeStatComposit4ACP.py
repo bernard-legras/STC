@@ -9,8 +9,9 @@ In plotAgeStat, the diagnostics are shown for all streams for a given supertype
 
 This version is a special version of plotAgeStatComposit for the 2019 ACP paper
 It differs by removing the plots for the Return runs, rescaling due to change of 
-time unit from hour to day and accounting for the output step and beautifying 
-the figures, and improving the printed version.
+time unit from hour to day (in the impact) 
+and accounting for the output step and beautifying the figures, 
+and improving the printed version.
 
 Here we show the results for the whole summer 2017 and as a comparison 
 between the supertypes in the FullAMA domain (EAZ, EAD, EIZ, EID, EIZ-Return and EID-Return)
@@ -22,11 +23,11 @@ It generates for both sh and mh hightypes 4  figures which are
 
 2) The same histogram normalized per level to better see the vertical propagation
 
-3) The mean age and the modal age for each level
+3) The mean age and the modal age for each level (discarded)
 
 4) The number of active parcels as a function of age
 
-5) Plot of the vertical distribution of sources at (age 0 parcels)
+5) Plot of the vertical distribution of sources at (age 0 parcels) (discarded)
 
 6) Plot for each of the supertype of the normalized age histogram at 370 K, 380 K and 400 K ,
 that is positions 94, 104, 124
@@ -44,7 +45,7 @@ EAZ, EAD, EIZ, EID are showing statistics of parcels in the FullAMA domain with 
 once is discarded.
 EIZ-FULL, EID-FULL show the statistics of parcels in the global domain
 EIZ-Return, EID-Return show the statistics of parcels in the FullAMA domain by applying a simple mask to the FULL runs, 
-that is parcels that leave the domain are counted if they return.  
+that is parcels that leave the domain are counted if they return.
 
 Created on Sat 23 Feb 2019
 
@@ -138,25 +139,8 @@ for supertype in supertypes:
     for hightype in hightypes:
         result[hightype][supertype]['nactiv'] = np.sum(result[hightype][supertype]['histog'],axis=1)
 
-#%% 1) Plot of the age/thet histogram
-#for hightype in hightypes:
-#    fig = plt.figure(figsize=(14,7))
-#    fig.suptitle(hightype+' age theta histogram' )
-#    n = 1
-#    for supertype in supertypes:
-#        plt.subplot(2,4,n)
-#        plt.imshow(np.log10(result[hightype][supertype]['histog'][0:248,:]).T,
-#                   extent=(0.25,62,275,700),origin='lower',aspect='auto',cmap='jet',clim=(-1,5))
-#        plt.ylim(310,450)
-#        plt.colorbar( in [1,5]: plt.ylabel('potential temperature (K)')
-#        if n in [5,6,7,8]: plt.xlabel('age (day)')
-#        n += 1
-#    if figsave:
-#        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethethist-composit'))
-#    plt.show()
-
 #%% 1ACP) Plot of the age/thet histogram
-# normalization : conversion of time into days
+# normalization : conversion of time in the impact into days
 # The factor Delta theta is 1 here (1K layer)
 ff_s = (1/24)
 
@@ -186,29 +170,7 @@ for hightype in hightypes:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethethist-composit-ACP.png'),bbox_inches='tight',dpi=dpi)
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethethist-composit-ACP.pdf'),bbox_inches='tight',dpi=dpi)
     plt.show()
-    
-#%% 2) Plot of the age/thet histogram, normalized for each level
-#for hightype in hightypes:
-#    fig = plt.figure(figsize=(14,7))
-#    fig.suptitle(hightype+' age theta normalized histogram' )
-#    n = 1
-#    for supertype in supertypes:
-#        plt.subplot(2,4,n)
-#        hh = result[hightype][supertype]['histog'][0:248,:]
-#        ss = np.sum(hh,axis=0)
-#        hh = hh / ss[np.newaxis,:]
-#        plt.imshow(np.log10(hh.T),
-#                   extent=(0.25,62,275,700),origin='lower',aspect='auto',cmap='jet',clim=(-6,0))
-#        plt.ylim(310,450)
-#        plt.colorbar()
-#        plt.title(supertype)      
-#        if n in [1,5]: plt.ylabel('potential temperature (K)')
-#        if n in [5,6,7,8]: plt.xlabel('age (day)')
-#        n += 1
-#    if figsave:
-#        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethetnormhist-composit'))
-#    plt.show()
-    
+        
 #%% 2ACP) Plot of the age/thet histogram, normalized for each level
 lt1 = 94   # index for theta = 369.5 K
 lt2 = 144  # index for theta = 419.5 K
@@ -246,92 +208,6 @@ for hightype in hightypes:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agethetnormhist-composit-ACP.pdf'),bbox_inches='tight',dpi=dpi)
     plt.show()
     
-#%% 3) Mean age
-#ageaxis = np.arange(0.25,62.25,0.25) 
-#thetaxis = np.arange(275.5,700)
-#for hightype in hightypes:
-#    fig = plt.figure(figsize=(14,7))
-#    fig.suptitle(hightype+'  mean and modal age ')
-#    n = 1
-#    for supertype in supertypes:
-#        plt.subplot(2,4,n)
-#        hh = result[hightype][supertype]['histog'][0:248,:]
-#        ss = np.sum(hh,axis=0)
-#        ss[ss==0]=1
-#        hh = hh / ss[np.newaxis,:]
-#        agemean = np.sum(hh*ageaxis[:,np.newaxis],axis=0)
-#        agemode = ageaxis[np.argmax(hh,axis=0)]
-#        plt.plot(agemean,thetaxis,'k',agemode,thetaxis,'r')
-#        plt.ylim(325,425)
-#        plt.title(supertype)
-#        if n in [1,5]: plt.ylabel('potential temperature (K)')
-#        if n in [5,6,7,8]: plt.xlabel('age (day)')
-#        n +=1
-#    if figsave:
-#        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agemean-composit'))
-#    plt.show()
-
-#%% Plot of the number of active parcels as a function of age
-#for hightype in hightypes:
-#    fig = plt.figure(figsize=(14,7))
-#    fig.suptitle(hightype+' nactiv as a function of age')
-#    n = 1
-#    for supertype in supertypes:
-#        plt.subplot(2,4,n)
-#        plt.semilogy(ageaxis,result[hightype][supertype]['nactiv'][0:248])
-#        plt.title(supertype)
-#        if n in [1,5]: plt.ylabel('nactiv')
-#        if n in [5,6,7,8]: plt.xlabel('age (day)')
-#        n += 1
-#    if figsave:
-#        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agenactiv-composit'))
-#    plt.show()
-#    
-#%% 4) Plot of the number of active parcels as a function of age in three separate 
-# vertical bands of theta (and total)
-#for hightype in hightypes:
-#    fig = plt.figure(figsize=(14,7))
-#    fig.suptitle(hightype+' nactiv as a function of age  per range tot(k) top(r) bot(b) mid(g)')
-#    n = 1
-#    for supertype in supertypes:
-#        plt.subplot(2,4,n)
-#        # 65 is first thetaxis above 340 K and 95 is first thetaxis above 370 K
-#        total = np.sum(result[hightype][supertype]['histog'][0:248,:],axis=1)
-#        toprange = np.sum(result[hightype][supertype]['histog'][0:248,95:],axis=1)
-#        botrange = np.sum(result[hightype][supertype]['histog'][0:248,0:65],axis=1)
-#        midrange = np.sum(result[hightype][supertype]['histog'][0:248,65:95],axis=1)
-#        plt.semilogy(ageaxis,total,'k',ageaxis,toprange,'r',
-#                     ageaxis,botrange,'b',ageaxis,midrange,'g',linewidth=3)
-#        
-#        if n in [1,5]: plt.ylabel('nactiv')
-#        if n in [5,6,7,8]: plt.xlabel('age (day)')
-#        # Calculate the slope of the curves during the second half and fit a curve
-#        tc = 188
-#        [total_slope,total_y0] = np.polyfit(ageaxis[tc:],np.log(total[tc:]),1)
-#        [toprange_slope,toprange_y0] = np.polyfit(ageaxis[tc:],np.log(toprange[tc:]),1)
-#        [midrange_slope,midrange_y0] = np.polyfit(ageaxis[tc:],np.log(midrange[tc:]),1)
-#        [botrange_slope,botrange_y0] = np.polyfit(ageaxis[tc:],np.log(botrange[tc:]),1)
-#        print('decay',supertype)
-#        print('total   ',[total_slope,total_y0])
-#        print('toprange',[toprange_slope,toprange_y0])
-#        print('midrange',[midrange_slope,midrange_y0])
-#        print('botrange',[botrange_slope,botrange_y0])
-#        tc2 = 124
-#        plt.semilogy(ageaxis[tc2:],np.exp(total_y0)*np.exp(total_slope*ageaxis[tc2:]),'k',
-#                     ageaxis[tc2:],np.exp(midrange_y0)*np.exp(midrange_slope*ageaxis[tc2:]),'g',
-#                     ageaxis[tc2:],np.exp(botrange_y0)*np.exp(botrange_slope*ageaxis[tc2:]),'b',
-#                     linewidth=8,alpha=0.3)
-#        if n in [1,2,5,6]: plt.ylim(1,2*10**6)
-#        else:
-#            plt.ylim(5*10**3,2*10**6)
-#        plt.title('{} t:{:3.1f} m:{:3.1f} b:{:3.1f}'.format(supertype,-1/total_slope,-1/midrange_slope,-1/botrange_slope))
-#        n += 1
-#        
-#    if figsave:
-#        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agenactiv-composit'))
-#        
-#    plt.show()
-
 #%% 4ACP) Plot of the number of active parcels as a function of age in three separate 
 # vertical bands of theta (and total)
 # The rescaling factor is here due to changing from hour to day in tau and multiplying 
@@ -384,62 +260,12 @@ for hightype in hightypes:
         plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agenactiv-composit-ACP.pdf'),bbox_inches='tight',dpi=dpi)
     plt.show()
     
-#%% 5) Plot of the vertical distribution of sources at (age 0 parcels)
-# We only have data at 6h but that should not be too different in terms of vertical distribution
+#%% 
 # By construction, the distribution of sources is the same for all runs
 
 with gzip.open(os.path.join(forw_dir,'source_dist.pkl'),'rb') as f:
     source_dist = pickle.load(f)
 
-#for hightype in hightypes:
-#    fig = plt.figure(figsize=(14,7))
-#    fig.suptitle(hightype+' vertical distribution of sources')
-#    n = 1
-#    for supertype in supertypes:
-#        plt.subplot(2,4,n)
-#        plt.semilogx(result[hightype][supertype]['histog'][0,:],thetaxis,linewidth=3)
-#        plt.ylim(315,425)
-#        if n in [1,5]: plt.ylabel('potential temperature (K)')
-#        if n in [5,6,7,8]: plt.xlabel('souce density')
-#        plt.title(supertype)
-#        n += 1
-    # define source_dist which is the same for all supertypes
-    # notice that the source distribution is actually the distribution at 6h
-    # to do: calculate the true source distribution from part_000 file
-#    source_dist[hightype] = result[hightype][supertype]['histog'][0,:]
-#    if figsave:
-#        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-vertsources-composit'))
-#    plt.show()
-
-#%% 6) Plot for each of the supertype of the normalized age histogram at 370 K, 380 K and 400 K ,
-# that is positions 94, 104, 124
-# show mean and modal peak
-#for hightype in hightypes:
-#    fig = plt.figure(figsize=(14,7))
-#    fig.suptitle(hightype+' normalized age histogram at 370 k (b), 380 K (r) and 400 K (k)')
-#    n = 1
-#    for supertype in supertypes:
-#        plt.subplot(2,4,n)
-#        hh = result[hightype][supertype]['histog'][0:248,:]
-#        ss = np.sum(hh,axis=0)
-#        hh = hh / ss[np.newaxis,:]
-#        agemean = np.sum(hh*ageaxis[:,np.newaxis],axis=0)
-#        agemode = ageaxis[np.argmax(hh,axis=0)]
-#        plt.plot(ageaxis,hh[:,94],'b',ageaxis,hh[:,104],'r',ageaxis,hh[:,124],'k',linewidth=3)
-#        plt.scatter(agemean[94],0.015,c='b',marker='v',s=64)
-#        plt.scatter(agemean[104],0.015,c='r',marker='v',s=64)
-#        plt.scatter(agemean[124],0.015,c='k',marker='v',s=64)
-#        plt.scatter(agemode[94],0.013,c='b',marker='D',s=64)
-#        plt.scatter(agemode[104],0.013,c='r',marker='D',s=64)
-#        plt.scatter(agemode[124],0.013,c='k',marker='D',s=64)
-#        #plt.plot([agemean[94],],[0.015,],'bv',[agemean[104],],[0.015,],'rv',[agemean[124],],[0.015,],'kv',linewidth=12)
-#        plt.title(supertype)
-#        plt.ylim(0,0.016)
-#        if n in [5,6,7,8]: plt.xlabel('age (day)')
-#        n += 1
-#    if figsave:
-#        plt.savefig(os.path.join(forw_dir,'figs',hightype+'-agehistog3levels-composit'))
-#    plt.show() 
 
 #%% 6ACP) Plot for each of the supertype of the normalized age histogram at 370 K, 380 K and 400 K ,
 # that is positions 94, 104, 124
