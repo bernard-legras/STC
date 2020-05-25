@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Sep 20 01:15:15 2016
-Exploit the trajectories to investigate the transit properties from sources to 
+Exploit the trajectories to investigate the transit properties from sources to
 target levels
 
 The methods of transit class are:
-    
+
 __init__: initializes the source and target dictionaries
 For all quantities defined in these dictionary, the horizontal grid is either in the source
 or the target space. The vertical levels always refer to the target space. Therefore this tool
@@ -23,7 +23,7 @@ Variables diagnosed in transit
 'thet': mean potential temperature,
 'dthet': mean potential temperature displacement
 'r_v': water mixing ratio (if water_path argument is true)
-The prefix tot in __init__ means that these quantities are first accumulated and 
+The prefix tot in __init__ means that these quantities are first accumulated and
 then divided by the count registry (in hist)
 The accumulation is made in "update" and the division is made in "complete".
 The grid domain is either fullAMA (for source an target space) or global (for target space only).
@@ -35,10 +35,10 @@ The current definition is such that in pressure, there are 21 levels of 500m eac
 in potential temperature 20 levels of 5K each from 325 to 420 K.
 
 update: Performs the accumulation.
-The accumulation consist in counting all the parcel provided with dat in both the source and the 
+The accumulation consist in counting all the parcel provided with dat in both the source and the
 target grid (_s and _t suffixes).
 A weight is applied due to the pixelisation of the sources in the PTOP files that serve to initialize
-the forward runs (see prepforw5Box and STC-SAFNWC/). The weight is 0.1°x0.1°xcos(lat source). See also notes 
+the forward runs (see prepforw5Box and STC-SAFNWC/). The weight is 0.1°x0.1°xcos(lat source). See also notes
 on impact scaling.
 
 complete: Calculate the means from the accumulations and the counts.
@@ -58,7 +58,7 @@ Modified 16 January 2019 to accommodate the new calculations based on meanhigh s
 and doing a further selection on veryhigh (_vh index) or silviahigh (_sh index) in the analysis.
 Vect changed to cartopy but untested
 
-This code needs a correction near line 208 for future usages if the resolution of the 
+This code needs a correction near line 208 for future usages if the resolution of the
 analysis grid is no longer 1°
 
 Fixing data error:
@@ -77,7 +77,7 @@ import numpy as np
 #import io107
 #import matplotlib
 #matplotlib.use('Agg') # to avoid requiring X output
-#matplotlib.use('Qt4Agg') # anaconda spyder2 on Windows 10 
+#matplotlib.use('Qt4Agg') # anaconda spyder2 on Windows 10
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.colorbar as clb
@@ -86,6 +86,7 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import cartopy.crs as ccrs
 from scipy.ndimage import gaussian_filter
 #import gzip, pickle
+import pickle
 from os.path import join
 import sys
 from constants import kappa
@@ -93,18 +94,18 @@ from zISA import z1,z2,z3
 
 # Discretization of age histograms
 #minage = 0.
-#maxage = 20. 
+#maxage = 20.
 #binage = 50
 
 # No more pre-calculated area field. Weight is included in the calculation below
 # area_pix: area of the pixel in the projected SAFNWC map (in degree^2)
 area_pix = 0.1*0.1
 
-# Color list with 20 colors      
+# Color list with 20 colors
 listcolors=['#161d58','#253494','#2850a6','#2c7fb8','#379abe','#41b6c4',
             '#71c8bc','#a1dab4','#d0ecc0','#ffffcc','#fef0d9','#fedeb1',
             '#fdcc8a','#fdac72','#fc8d59','#ef6b41','#e34a33','#cb251a',
-            '#b30000','#7f0000']            
+            '#b30000','#7f0000']
 mymap=colors.ListedColormap(listcolors)
 
 p00=100000.
@@ -133,7 +134,7 @@ class transit(object):
             self.target = {}
             self.target['type'] = 'global'
             self.target['range'] = np.array([[-179.,181.],[-90.,90.]])
-            self.target['binx'] = 360 
+            self.target['binx'] = 360
             self.target['biny'] = 180
             self.target['xedge'] = np.arange(self.target['range'][0,0],self.target['range'][0,1]+0.001,
                        (self.target['range'][0,1]-self.target['range'][0,0])/self.target['binx'])
@@ -149,7 +150,7 @@ class transit(object):
             self.vertype = 'baro'
             # Vertical discretization of the barometric altitude (in km)
 #            self.minv = 10.
-#            self.maxv = 20. 
+#            self.maxv = 20.
 #            self.binv = 20
             # New definition centered on full levels
             self.minv = 9.75
@@ -169,7 +170,7 @@ class transit(object):
             exit()
         self.deltav = (self.maxv-self.minv)/self.binv
         self.vcent = np.arange(self.minv+0.5*self.deltav,self.maxv,self.deltav)
-        self.vedge = np.arange(self.minv,self.maxv+0.01,(self.maxv-self.minv)/self.binv) 
+        self.vedge = np.arange(self.minv,self.maxv+0.01,(self.maxv-self.minv)/self.binv)
         """ Initialization of the transit dictionary """
         self.transit={}
         for var in ['hist','totage','totz','totdz','totdx','totdy','totdx2','totdy2','totdthet','totthet']:
@@ -179,7 +180,7 @@ class transit(object):
             self.transit[var+'_t_vh'] = np.zeros(shape=[self.binv,self.target['biny'],self.target['binx']])
             self.transit[var+'_s_sh'] = np.zeros(shape=[self.binv,self.source['biny'],self.source['binx']])
             self.transit[var+'_t_sh'] = np.zeros(shape=[self.binv,self.target['biny'],self.target['binx']])
-    
+
         self.water_path = water_path
         if water_path:
             self.transit['rv_t'] = np.zeros(shape=[self.binv,self.target['biny'],self.target['binx']])
@@ -192,14 +193,14 @@ class transit(object):
         self.transit['count_sh']=0
         self.count = 0
         return
-    
+
     def update(self,dat):
-        """ Main calculation routine to be applied to each data dictionary read 
+        """ Main calculation routine to be applied to each data dictionary read
         from part files to update the statistics of transit."""
         # initialization of temporary fields
         print('enter transit_update')
         #H_s=H_t=np.zeros(shape=[binv,source_binx,source_biny])
-        
+
         # Calculation of the barometric altitude and the potential temperature
         altbaro=z2(0.01*dat['p'])
         altbaro = np.empty(len(dat['p']))
@@ -209,10 +210,10 @@ class transit(object):
         id1=dat['p']<5474.88
         altbaro[id1]=z3(0.01*dat['p'][id1])
         thet = dat['t']*(p00/dat['p'])**kappa
-        
+
         # Increment the call counter
         self.count += 1
-        
+
         # Indexing of the vertical location with vedge
         print('digitizing')
         if self.vertype == 'baro':
@@ -229,7 +230,7 @@ class transit(object):
             lsel=np.sum(selec)
             if lsel==0:
                 continue
-            # Make a veryhigh boolean slice among active parcels from layer j 
+            # Make a veryhigh boolean slice among active parcels from layer j
             vh = dat['veryhigh'][selec]
             sh = dat['silviahigh'][selec]
             print('transit',j,np.sum(vh),np.sum(sh))
@@ -245,14 +246,14 @@ class transit(object):
             alt_s = dat['alt0'][selec]
             thet_t = thet[selec]
             thet_s = dat['thet0'][selec]
-            dx = xx_t-x0_s 
+            dx = xx_t-x0_s
             dy = yy_t-y0_s
             dz = alt_t - alt_s
-            dx2 = dx**2 
+            dx2 = dx**2
             dy2 = dy**2
             dthet = thet_t-thet_s
             # index the latitude and longitude within the transit grid
-            # for source and target locations 
+            # for source and target locations
             # TO DO target grid for idxt and idyt
             idxt=np.digitize(xx_t,self.target['xedge'])-1
             idyt=np.digitize(yy_t,self.target['yedge'])-1
@@ -274,14 +275,14 @@ class transit(object):
             ww = area_pix * np.cos(np.deg2rad(idy0))
             # should be instead
             # ww = area_pix * np.cos(np.deg2rad(y0_s))
-            
+
             # Histograms in the source and target space
             # notice, however, that the cumul is done by levels in the target space
             # the sum of H_t and H_s per level should be the same
             H_t,_,_=np.histogram2d(yy_t,xx_t,weights=ww,bins=[self.target['biny'],self.target['binx']],
                          range=np.flip(self.target['range'],0))
             H_s,_,_=np.histogram2d(y0_s,x0_s,weights=ww,bins=[self.source['biny'],self.source['binx']],
-                         range=np.flip(self.source['range'],0))            
+                         range=np.flip(self.source['range'],0))
             H_t_vh,_,_=np.histogram2d(yy_t[vh],xx_t[vh],weights=ww[vh],bins=[self.target['biny'],self.target['binx']],
                          range=np.flip(self.target['range'],0))
             H_s_vh,_,_=np.histogram2d(y0_s[vh],x0_s[vh],weights=ww[vh],bins=[self.source['biny'],self.source['binx']],
@@ -290,16 +291,16 @@ class transit(object):
                          range=np.flip(self.target['range'],0))
             H_s_sh,_,_=np.histogram2d(y0_s[sh],x0_s[sh],weights=ww[sh],bins=[self.source['biny'],self.source['binx']],
                          range=np.flip(self.source['range'],0))
-            
+
             self.transit['count'] += len(yy_t)
             self.transit['count_vh'] += np.sum(vh)
             self.transit['count_sh'] += np.sum(sh)
-            
-            # Notice that another way to get the age would be to make the 
+
+            # Notice that another way to get the age would be to make the
             # 2d histogram with the age*ww as weight. This procedure based on
             # calculating an index by np.digitize is not required and actually
             # might be a waste of cpu.
-            
+
             np.add.at(self.transit['totage_t'][j,:,:],(idyt,idxt),age*ww)
             np.add.at(self.transit['totage_s'][j,:,:],(idy0,idx0),age*ww)
             np.add.at(self.transit['totdz_t'][j,:,:],(idyt,idxt),dz*ww)
@@ -318,7 +319,7 @@ class transit(object):
             np.add.at(self.transit['totthet_s'][j,:,:],(idy0,idx0),thet_s*ww)
             np.add.at(self.transit['totdthet_t'][j,:,:],(idyt,idxt),dthet*ww)
             np.add.at(self.transit['totdthet_s'][j,:,:],(idy0,idx0),dthet*ww)
-            
+
             np.add.at(self.transit['totage_t_vh'][j,:,:],(idyt[vh],idxt[vh]),age[vh]*ww[vh])
             np.add.at(self.transit['totage_s_vh'][j,:,:],(idy0[vh],idx0[vh]),age[vh]*ww[vh])
             np.add.at(self.transit['totdz_t_vh'][j,:,:],(idyt[vh],idxt[vh]),dz[vh]*ww[vh])
@@ -337,7 +338,7 @@ class transit(object):
             np.add.at(self.transit['totthet_s_vh'][j,:,:],(idy0[vh],idx0[vh]),thet_s[vh]*ww[vh])
             np.add.at(self.transit['totdthet_t_vh'][j,:,:],(idyt[vh],idxt[vh]),dthet[vh]*ww[vh])
             np.add.at(self.transit['totdthet_s_vh'][j,:,:],(idy0[vh],idx0[vh]),dthet[vh]*ww[vh])
-            
+
             np.add.at(self.transit['totage_t_sh'][j,:,:],(idyt[sh],idxt[sh]),age[sh]*ww[sh])
             np.add.at(self.transit['totage_s_sh'][j,:,:],(idy0[sh],idx0[sh]),age[sh]*ww[sh])
             np.add.at(self.transit['totdz_t_sh'][j,:,:],(idyt[sh],idxt[sh]),dz[sh]*ww[sh])
@@ -356,25 +357,25 @@ class transit(object):
             np.add.at(self.transit['totthet_s_sh'][j,:,:],(idy0[sh],idx0[sh]),thet_s[sh]*ww[sh])
             np.add.at(self.transit['totdthet_t_sh'][j,:,:],(idyt[sh],idxt[sh]),dthet[sh]*ww[sh])
             np.add.at(self.transit['totdthet_s_sh'][j,:,:],(idy0[sh],idx0[sh]),dthet[sh]*ww[sh])
-            
+
             if self.water_path:
                 np.add.at(self.transit['rv_t'][j,:,:],(idyt,idxt),rv_t*ww)
-                np.add.at(self.transit['rv_t_vh'][j,:,:],(idyt[vh],idxt[vh]),rv_t[vh]*ww[vh]) 
-                np.add.at(self.transit['rv_t_sh'][j,:,:],(idyt[sh],idxt[sh]),rv_t[sh]*ww[sh]) 
+                np.add.at(self.transit['rv_t_vh'][j,:,:],(idyt[vh],idxt[vh]),rv_t[vh]*ww[vh])
+                np.add.at(self.transit['rv_t_sh'][j,:,:],(idyt[sh],idxt[sh]),rv_t[sh]*ww[sh])
             self.transit['hist_s'][j,:,:]+=H_s
             self.transit['hist_t'][j,:,:]+=H_t
             self.transit['hist_s_vh'][j,:,:]+=H_s_vh
             self.transit['hist_t_vh'][j,:,:]+=H_t_vh
             self.transit['hist_s_sh'][j,:,:]+=H_s_sh
             self.transit['hist_t_sh'][j,:,:]+=H_t_sh
-        #print("")       
+        #print("")
         return
 
     def complete(self):
         H_s=self.transit['hist_s']+0. # to avoid identification and unwished mod*
         H_t=self.transit['hist_t']+0. # could be best replaced by a copy
-        # sum over the latitudes and longitudes in the domain, 
-        # [no cosine weighting here as the impact is already scaled by the area 
+        # sum over the latitudes and longitudes in the domain,
+        # [no cosine weighting here as the impact is already scaled by the area
         # of the source domain]
         self.transit['Hsum_s']=np.sum(H_s,axis=(1,2))
         self.transit['Hsum_t']=np.sum(H_t,axis=(1,2))
@@ -387,13 +388,13 @@ class transit(object):
         H_s[H_s==0]=1
         H_t[H_t==0]=1
         # calculate the mean for the age and other quantities by dividing
-        # the accumulation with age in the weight by the accumulation 
+        # the accumulation with age in the weight by the accumulation
         # without the age (basically the count)
         for var in ['age','dz','z','dx','dy','dx2','dy2','thet','dthet']:
             self.transit['m'+var+'_s'] = self.transit['tot'+var+'_s']/H_s
             self.transit['m'+var+'_t'] = self.transit['tot'+var+'_t']/H_t
         if self.water_path: self.transit['mrv_t'] = self.transit['rv_t']/H_t
-        # repeat the operations for vh sources if these accumulations have 
+        # repeat the operations for vh sources if these accumulations have
         # been calculated
         try:
             H_s_vh=self.transit['hist_s_vh']+0.
@@ -414,28 +415,28 @@ class transit(object):
                 self.transit['m'+var+'_t_vh'] = self.transit['tot'+var+'_t_vh']/H_t_vh
             if self.water_path: self.transit['mrv_t_vh'] = self.transit['rv_t_vh']/H_t_vh
         except: pass
-        # repeat the operations for sh sources if these accumulations have 
+        # repeat the operations for sh sources if these accumulations have
         # been calculated
         try:
             H_s_sh=self.transit['hist_s_sh']+0.
-            H_t_sh=self.transit['hist_t_sh']+0.                
+            H_t_sh=self.transit['hist_t_sh']+0.
             self.transit['Hsum_s_sh']=np.sum(H_s_sh,axis=(1,2))
-            self.transit['Hsum_t_sh']=np.sum(H_t_sh,axis=(1,2))             
+            self.transit['Hsum_t_sh']=np.sum(H_t_sh,axis=(1,2))
             Hsum_s_sh=self.transit['Hsum_s_sh']+0.
-            Hsum_t_sh=self.transit['Hsum_t_sh']+0.       
+            Hsum_t_sh=self.transit['Hsum_t_sh']+0.
             Hsum_s_sh[Hsum_s_sh==0]=1
-            Hsum_t_sh[Hsum_t_sh==0]=1       
+            Hsum_t_sh[Hsum_t_sh==0]=1
             self.transit['Hnorm_s_sh']=H_s_sh/Hsum_s_sh[:,None,None]
-            self.transit['Hnorm_t_sh']=H_t_sh/Hsum_t_sh[:,None,None]               
+            self.transit['Hnorm_t_sh']=H_t_sh/Hsum_t_sh[:,None,None]
             H_s_sh[H_s_sh==0]=1
-            H_t_sh[H_t_sh==0]=1       
-            for var in ['age','dz','z','dx','dy','dx2','dy2','thet','dthet']:    
+            H_t_sh[H_t_sh==0]=1
+            for var in ['age','dz','z','dx','dy','dx2','dy2','thet','dthet']:
                 self.transit['m'+var+'_s_sh'] = self.transit['tot'+var+'_s_sh']/H_s_sh
                 self.transit['m'+var+'_t_sh'] = self.transit['tot'+var+'_t_sh']/H_t_sh
             if self.water_path: self.transit['mrv_t_sh'] = self.transit['rv_t_sh']/H_t_sh
         except: pass
         return
-    
+
     def merge(self,other):
         """ Merge two classes into a single one """
         self.transit['hist_s'] += other.transit['hist_s']
@@ -455,7 +456,7 @@ class transit(object):
                 self.transit['tot'+var+'_s_vh'] += other.transit['tot'+var+'_s_vh']
                 self.transit['tot'+var+'_t_vh'] += other.transit['tot'+var+'_t_vh']
             except: pass
-            try: 
+            try:
                 self.transit['tot'+var+'_s_sh'] += other.transit['tot'+var+'_s_sh']
                 self.transit['tot'+var+'_t_sh'] += other.transit['tot'+var+'_t_sh']
             except: pass
@@ -464,14 +465,15 @@ class transit(object):
             try: self.transit['rv_t_vh'] += other.transit['rv_t_vh']
             except: pass
             try: self.transit['rv_t_sh'] += other.transit['rv_t_sh']
-            except: pass 
-                
+            except: pass
+
     def chart(self,field,lev,vmin=None,vmax=None,back_field=None,txt="",fgp="",
-              cumsum=False,show=True,dpi=300,shrink=0.63,box=None,scale=None,mask=False):
+              cumsum=False,show=True,dpi=300,shrink=0.63,box=None,scale=None,mask=False,
+              color_coast='k',TP=False):
         """ Plots a 2d array field with colormap between min and max.
         This array is extracted from a 3D field with level lev.
         Optionnaly, a background field is added as contours. This field is smoothed by default.
-        The limit values for the main field are given in vmin and vmax. 
+        The limit values for the main field are given in vmin and vmax.
         TODO: add a parameter to fix the levels of the background field (levels argument of contour).
         """
         # Set TeX to write the labels and annotations
@@ -502,14 +504,14 @@ class transit(object):
             yedge = self.source['yedge']
             xcent = self.source['xcent']
             ycent = self.source['ycent']
-                       
+
         fs = 18
         # it is unclear how the trick with cm_lon works in imshow but it does
         # the web says that it is tricky to plot data accross dateline with cartopy
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
         cm_lon =0
-        # guess that we want to plot accross dateline (to be improved) 
-        if irange[0,1]> 200: cm_lon = 180 
+        # guess that we want to plot accross dateline (to be improved)
+        if irange[0,1]> 200: cm_lon = 180
         proj = ccrs.PlateCarree(central_longitude=cm_lon)
         fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         ax = plt.axes(projection = proj)
@@ -517,10 +519,10 @@ class transit(object):
         if scale is not None:
             ff = 1/scale
         else:
-            ff = 1       
-        if vmin==None:    
+            ff = 1
+        if vmin==None:
             vmin=np.min(ff*self.transit[field][lev,:,:])
-        if vmax==None:    
+        if vmax==None:
             vmax=np.max(ff*self.transit[field][lev,:,:])
             if scale is not None:
                 vmax=np.floor(vmax)+1
@@ -529,7 +531,7 @@ class transit(object):
         except:
             print('ERROR in bounds vmin vmax',vmin,vmax)
         norm=colors.BoundaryNorm(bounds,mymap.N)
-    
+
         #iax=ax.imshow(self.transit[field][lev,:,:],interpolation='nearest',extent=irange.flatten(),
         #               clim=[vmin,vmax],origin='lower',cmap=mymap,norm=norm,aspect=1.)
         # Plot of the background field if needed. This field is smoothed before plotting by default in order
@@ -542,8 +544,8 @@ class transit(object):
                 h,edges = np.histogram(self.transit[back_field][lev,:,:],bins=200)
                 # centered values for the bins
                 cc = 0.5*(edges[:-1]+edges[1:])
-                # cumulated sum of the normalized impact ordered from the largest 
-                # (in size) and weakest (in impact) 
+                # cumulated sum of the normalized impact ordered from the largest
+                # (in size) and weakest (in impact)
                 # to the smallest (in size) and strongest (in impact)
                 ee = np.cumsum((cc*h/np.sum(cc*h))[::-1])[::-1]
                 # find the impact value for several proportions of the total impact
@@ -554,7 +556,7 @@ class transit(object):
                 # plot the corresponding contours of the smoothed back_field
                 CS=ax.contour(xcent,ycent,filtered_field,
                               transform=proj,levels=edges[nl],linewidths=3)
-                strs = ['90%','70%','50%','30%','10%']             
+                strs = ['90%','70%','50%','30%','10%']
                 fmt={}
                 for l,s in zip(CS.levels,strs):
                     fmt[l] = s
@@ -562,7 +564,7 @@ class transit(object):
                 plt.clabel(CS,inline=True,fmt=fmt,fontsize=fs)
             else:
                 CS=ax.contour(xcent,ycent,filtered_field,
-                              transform=proj,linewidths=3)                
+                              transform=proj,linewidths=3)
                 plt.clabel(CS)
         # Plot of the main field
         buf = ff*self.transit[field][lev,:,:]
@@ -580,13 +582,16 @@ class transit(object):
         #   scale='50m',
         #    facecolor='none'))
         # Plot coastline
-        ax.coastlines('50m')
+        ax.coastlines('50m',color=color_coast)
+        if TP:
+            tibetc = pickle.load(open(join('..','mkSTCmask','TibetContour.pkl'),'rb'))
+            ax.plot(tibetc[:,0],tibetc[:,1],'lime')
         #ax.add_feature(feature.BORDERS)
 
         # Plot a box if required
         if box is not None:
             ax.plot([box[0],box[2],box[2],box[0],box[0]],[box[1],box[1],box[3],box[3],box[1]],'--',linewidth=4,color='yellow')
-        
+
         # The grid adjusts automatically with the following lines
         # If crossing the dateline, superimposition of labels there
         # can be suppressed by specifying xlocs
@@ -610,7 +615,7 @@ class transit(object):
             plt.ylim(yedge[0],yedge[-1])
         plt.title(txt,fontsize=fs)
         # plot adjusted colorbar
-#     This method generates too high colorbars        
+#     This method generates too high colorbars
 #        axpos = ax.get_position()
 #        pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
 #        pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
@@ -625,7 +630,7 @@ class transit(object):
             plt.savefig(join('figs','chart-'+fgp+'.png'),dpi=dpi,bbox_inches='tight')
         if show:
             plt.show()
-    
+
     def vect(self,lev,thresh=0.00025,type='source',txt="",fgp="",show=True):
         """ Plots a 2d array field with colormap between min and max"""
         try:
@@ -634,13 +639,13 @@ class transit(object):
         except:
             n1=1
             fig = plt.figure(n1+1,figsize=[13,6])
-        # Getting and sparsing the data    
+        # Getting and sparsing the data
         if 'source' in type:
             suf = '_s'
             xcent_e = self.source['xcent'][1:-1:5]
             ycent_e = self.source['ycent'][1:-1:5]
         else:
-            suf = '_t'          
+            suf = '_t'
             xcent_e = self.target['xcent'][1:-1:5]
             ycent_e = self.target['ycent'][1:-1:5]
         dx_e=np.ma.array(self.transit['mdx'+suf][lev,1:-1:5,1:-1:5])
@@ -651,24 +656,24 @@ class transit(object):
         if 'inv' in type:
             dx_e = -dx_e
             dy_e = -dy_e
-          
+
         fs = 15
         # it is unclear how the trick with cm_lon works in imshow but it does
         # the web says that it is tricky to plot data accross dateline with cartopy
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
         cm_lon =0
-        # guess that we want to plot accross dateline 
+        # guess that we want to plot accross dateline
         if xcent_e[-1] > 180: cm_lon = 180
         proj = ccrs.PlateCarree(central_longitude=cm_lon)
         fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         ax = plt.axes(projection = proj)
-        
+
         #bounds=np.arange(vmin,vmax*(1+0.0001),(vmax-vmin)/mymap.N)
         #norm=colors.BoundaryNorm(bounds,mymap.N)
         #iax=plt.imshow(field.T,interpolation='nearest',extent=source_range.flatten(),
         #               clim=[vmin,vmax],origin='lower',cmap=mymap,norm=norm,aspect=1.)
-        # Sparsing the data  
-        ax.quiver(xcent_e,ycent_e,dx_e,dy_e,H_e,angles='xy',scale_units='xy',scale=1)    
+        # Sparsing the data
+        ax.quiver(xcent_e,ycent_e,dx_e,dy_e,H_e,angles='xy',scale_units='xy',scale=1)
         plt.title(txt,fontsize=fs)
         ax.add_feature(feature.NaturalEarthFeature(
             category='cultural',
@@ -689,8 +694,8 @@ class transit(object):
         if len(fgp)>0:
             plt.savefig(join('figs','vect-'+fgp+'.png'),bbox_inches='tight')
         if show:
-            plt.show()    
-   
+            plt.show()
+
     def chartv(self,field,lat,txt="",vmin=0,vmax=0,fgp="",show=True):
         """ Plot a longitude x altitude section"""
         if field not in self.transit.keys():
@@ -699,7 +704,7 @@ class transit(object):
         try:
             pos=np.where(self.target['ycent']>=lat)[0][0]
         except:
-            print('lat out of range') 
+            print('lat out of range')
             return
         try:
             n1=plt.get_fignums()[-1]+1
@@ -707,9 +712,9 @@ class transit(object):
             n1=1
         fig=plt.figure(n1+1,figsize=[13,6])
         ax = fig.add_subplot(111)
-        if vmin==0:    
+        if vmin==0:
             vmin=np.min(self.transit[field])
-        if vmax==0:    
+        if vmax==0:
             vmax=np.max(self.transit[field])
         bounds=np.arange(vmin,vmax*(1+0.0001),(vmax-vmin)/mymap.N)
         norm=colors.BoundaryNorm(bounds,mymap.N)
