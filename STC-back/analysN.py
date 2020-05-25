@@ -24,6 +24,9 @@ import deepdish as dd
 import socket
 from os.path import join
 import constants as cst
+
+global h_hits
+
 # flags
 I_DEAD = 0x200000
 I_HIT = 0x400000
@@ -64,7 +67,7 @@ xcent_g = np.arange(domain_g[0,0] + 0.5*deltax_g,domain_g[0,1],deltax_g)
 yedge_g = np.arange(domain_g[1,0],domain_g[1,1]+0.1*deltay_g,deltay_g)
 xedge_g = np.arange(domain_g[0,0],domain_g[0,1]+0.1*deltax_g,deltax_g)
 
-# 
+#
 # Generate the grid of points
 #xg = np.tile(xcent,(biny,1))
 #yg = np.tile(ycent,(binx,1)).T
@@ -80,11 +83,11 @@ elif socket.gethostname() == 'satie':
 elif socket.gethostname() in ['couperin','zappa','coltrane','puccini']:
      BACK_DIR = '/net/grapelli/limbo/data/STC/STC-BACK-OUT-SAF-OPAQ'
 elif socket.gethostname() == 'gort':
-    BACK_DIR = '/dkol/data/STC/STC-BACK-OUT-SAF-silviahigh'     
-     
+    BACK_DIR = '/dkol/data/STC/STC-BACK-OUT-SAF-silviahigh'
+
 def main():
     # load the big file containing ended
-    theta=400
+    theta=380
     # possible choices for supertype: EAD, EAZ, EID, EIZ, EID-FULL, EIZ-FULL
     supertype='EAD'
     sept = True
@@ -92,7 +95,7 @@ def main():
     fname7 = join(BACK_DIR,'BACK-'+supertype+'-Jul-2017-'+str(theta)+'K.hdf5z')
     fname8 = join(BACK_DIR,'BACK-'+supertype+'-Aug-2017-'+str(theta)+'K.hdf5z')
     fname9 = join(BACK_DIR,'BACK-'+supertype+'-Sep-2017-'+str(theta)+'K.hdf5z')
-    
+
     if 'FULL' in supertype:
         binx_t = binx_g
         biny_t = biny_g
@@ -104,7 +107,7 @@ def main():
         glob = False
         shrink = 0.63
     bloc_size = binx_t * biny_t
-    
+
     h_hits_m = {}
     h_badhits_m = {}
     h_dborne_m = {}
@@ -118,21 +121,21 @@ def main():
     h_theta_m = {}
     nb_bottom_exit_m = {}
     i=0
-    if sept: 
+    if sept:
         fnames = (fname7,fname8,fname9)
         months = 'Jul-Aug-Sep'
-    else: 
+    else:
         fnames = (fname7,fname8)
         months = 'Jul-Aug'
-           
-    for fname in fnames:        
+
+    for fname in fnames:
         ended = dd.io.load(fname)
-    
+
         # %% The new calculation has additional steps / analys.py due to the
-        # introduction of the filtering and the theta distribution of the souurces. 
+        # introduction of the filtering and the theta distribution of the souurces.
         # This filtering is not optimal: it should be done in convscrSAF
         # as there is no second chance for parcels to hit a cloud after this
-        # spurious hit. The estimate of the impact of this filter should be done 
+        # spurious hit. The estimate of the impact of this filter should be done
         # by turning it off.
         # statistics of the convectives sources
         hits = ended['flag_source'] & I_HIT == I_HIT
@@ -141,7 +144,7 @@ def main():
         x_hits = ended['src']['x'][hits]
         y_hits = ended['src']['y'][hits]
         t_hits = ended['src']['t'][hits]
-        p_hits = ended['src']['p'][hits]      
+        p_hits = ended['src']['p'][hits]
         theta_hits = t_hits*(p_hits/cst.p0)**(-cst.kappa)
         del t_hits,p_hits
         age_hits = ended['src']['age'][hits]
@@ -154,21 +157,21 @@ def main():
         age_hits = age_hits[good_sources]
         # make a selection of very high clouds in the remaining
         highthet = theta_hits>390
-      
+
         # histograms of hits and of ages in the source domain (weighting of age by H_m done below)
         H_m[i] = np.histogram2d(y_hits,x_hits,bins=[biny,binx],range=domain[::-1])[0]
         H_m_high[i] = np.histogram2d(y_hits[highthet],x_hits[highthet],bins=[biny,binx],range=domain[::-1])[0]
-        
+
         Age_s_m[i] = np.histogram2d(y_hits,x_hits,bins=[biny,binx],weights=age_hits,range=domain[::-1])[0]
         # 1D histogram of the potential temperature of the hits
         h_theta_m[i] = np.histogram(theta_hits,bins=100,range=(320,420))[0]
         # histogram of theta hits in the source domain
         Theta_s_m[i] = np.histogram2d(y_hits,x_hits,bins=[biny,binx],weights=theta_hits,range=domain[::-1])[0]
-        
+
         # histograms in the target domain
         # number of parcels launched per bin in the target domain
         bin_size = int(len(ended['src']['x'])/bloc_size)
-        # proportion of parcels hiting a good cloud (this is correct because the 
+        # proportion of parcels hiting a good cloud (this is correct because the
         # histogram is made on the index that lives in the [0,numpart-1] interval)
         j_hits = (np.where(hits)[0])[good_sources]
         h_hits_m[i] = np.histogram(j_hits % bloc_size,bins=bloc_size,range=(-0.5,bloc_size-0.5))[0]/bin_size
@@ -191,9 +194,9 @@ def main():
         # proportion of bad sources
         j_badhits = (np.where(hits)[0])[~good_sources]
         h_badhits_m[i] = np.histogram(j_badhits % bloc_size,bins=bloc_size,range=(-0.5,bloc_size-0.5))[0]/bin_size
-        del j_badhits        
+        del j_badhits
         i += 1
-        
+
         if check_high:
             # Let us show what are the points with high h_theta
             # useful to understand the behaviour at theta = 400K
@@ -204,7 +207,7 @@ def main():
             print('mean high',np.mean(x_high),np.mean(y_high))
             plt.plot(x_high,y_high,'+')
             plt.show()
-        
+
     if sept:
         h_hits = (h_hits_m[0] + h_hits_m[1] + h_hits_m[2])/3
         h_dborne = (h_dborne_m[0] + h_dborne_m[1] + h_dborne_m[2])/3
@@ -241,7 +244,7 @@ def main():
         npart[npart==0] = 1
         Age_s = 0.5*(Age_s_m[0]+Age_s_m[1])/npart/86400
         Theta_s = 0.5*(Theta_s_m[0]+Theta_s_m[1])/npart
-        
+
     # make a save for further processing
     pickle.dump([H,Age_s,Theta_s],gzip.open('TMP.pkl','wb'))
     # print stats
@@ -261,13 +264,13 @@ def main():
     # plot of the statistics
     chart(100*np.reshape(h_hits,[biny_t,binx_t]),vmin=0,vmax=100,glob=glob,shrink=shrink,
           txt="Percentage of convective hits from "+supertype+" "+str(theta)+" K "+months+" 2017",
-          fgp=supertype+'-percentage-hits-'+months+'-'+str(theta)+'K')  
+          fgp=supertype+'-percentage-hits-'+months+'-'+str(theta)+'K')
     chart(100*np.reshape(h_old,[biny_t,binx_t]),glob=glob,shrink=shrink,
           txt="Percentage ending by age from "+supertype+" "+str(theta)+" K "+months+" 2017",
            fgp=supertype+'-percentage-age-end-'+months+'-'+str(theta)+'K')
     chart(100*np.reshape(h_badhits,[biny_t,binx_t]),vmin=0,vmax=100,glob=glob,shrink=shrink,
           txt="Percentage of bad convective hits from "+supertype+" "+str(theta)+" K "+months+" 2017",
-          fgp=supertype+'-percentage-badhits-'+months+'-'+str(theta)+'K')
+          fgp=supertype+'-percentage-badhits-'+months+'-'+str(theta)+'K',coast_color='w')
     if supertype == 'EAD':
         vmin = {340:4,350:0,360:0,370:9,380:12,390:23,400:25}
         vmax = {340:14,350:10,360:10,370:19,380:22,390:33,400:35}
@@ -281,24 +284,24 @@ def main():
     if not glob:
         chart(100*np.reshape(h_dborne,[biny_t,binx_t]),glob=glob,shrink=shrink,
           txt="Percentage of deadbornes from "+supertype+" "+str(theta)+" K "+months+" 2017",
-          fgp=supertype+'-percentage-deadborne-'+months+'-'+str(theta)+'K')  
+          fgp=supertype+'-percentage-deadborne-'+months+'-'+str(theta)+'K',coast_color='w')
         chart(100*np.reshape(h_dead,[biny_t,binx_t]),vmin=0,vmax=100,glob=glob,shrink=shrink,
           txt="Percentage of escape from "+supertype+" "+str(theta)+" K "+months+" 2017",
            fgp=supertype+'-percentage-escape-'+months+'-'+str(theta)+'K')
-    
-    
+
+
     #chart(np.reshape(h_alive,[biny,binx]),txt="percentage of still alive")
     # Rescale the distribution of sources before plotting
     #   Calculate the area and the scale factor
     area = np.sum(np.cos(np.deg2rad(ycent)))*len(xcent)
     d0 = np.sum(H)/area
-    #   Rescale H with d0 and the cosine factor 
-    H = H / (np.cos(np.deg2rad(ycent))[:,np.newaxis]*d0)    
+    #   Rescale H with d0 and the cosine factor
+    H = H / (np.cos(np.deg2rad(ycent))[:,np.newaxis]*d0)
     chart(H,txt="distribution of convective sources from "+supertype+" "+str(theta)+" K "+months+" 2017",
-          fgp=supertype+'-distrib-sources-'+months+'-'+str(theta)+'K')
-    H_high = H_high / (np.cos(np.deg2rad(ycent))[:,np.newaxis]*d0)    
+          fgp=supertype+'-distrib-sources-'+months+'-'+str(theta)+'K',coast_color='w',TP=True)
+    H_high = H_high / (np.cos(np.deg2rad(ycent))[:,np.newaxis]*d0)
     chart(H_high,txt="distribution of high convective sources from "+supertype+" "+str(theta)+" K "+months+" 2017",
-          fgp=supertype+'-distrib-high-sources-'+months+'-'+str(theta)+'K')
+          fgp=supertype+'-distrib-high-sources-'+months+'-'+str(theta)+'K',coast_color='w',TP=True)
     if supertype == 'EAD':
         vmin = {340:5,350:0,360:0,370:7,380:7,390:20,400:25}
         vmax = {340:25,350:10,360:10,370:17,380:27,390:40,400:45}
@@ -306,21 +309,26 @@ def main():
         vmin = {340:None,350:None,360:None,370:None,380:None,390:None,400:None}
         vmax = vmin
     chart(Age_s,txt="mean age (day) from "+supertype+" "+str(theta)+" K "+months+" 2017",vmin=vmin[theta],vmax=vmax[theta],
-          fgp=supertype+'-age-source-'+months+'-'+str(theta)+'K',back_field=H,cumsum=True,truncate=True)
+          fgp=supertype+'-age-source-'+months+'-'+str(theta)+'K',back_field=H,cumsum=True,truncate=True,TP=True)
     chart(Theta_s,txt="mean theta (day) from "+supertype+" "+str(theta)+" K "+months+" 2017",
           fgp=supertype+'-theta-source-'+months+'-'+str(theta)+'K',back_field=H,cumsum=True,
-          vmin=340,vmax=390,truncate=True)
+          vmin=340,vmax=390,truncate=True,TP=True)
     # plot of the pdf of theta source
-    plt.figure(figsize=(4.2,4.2))
+    plt.figure(figsize=(3.9,4.0))
     thetav = np.arange(320.5,420,1)
     plt.plot(h_theta/np.sum(h_theta),thetav,linewidth=6)
-    plt.xlabel(r'pdf theta source (K$^{-1}$)',fontsize=18)
-    plt.ylabel(r'potential temperature (K)',fontsize=18)
+    plt.xlabel(r'pdf $\theta$ source (K$^{-1}$)',fontsize=22)
+    plt.ylabel(r'$\theta$ (K)',fontsize=22)
     plt.ylim((340,410))
+    plt.tick_params(labelsize=22)
     plt.savefig('figs/plot-source-theta-'+supertype+'-'+months+'-'+str(theta)+'K.png',dpi=300,bbox_inches='tight')
-    plt.tick_params(labelsize=18)
     plt.show()
-    
+
+    # backup of hits for further processing
+    if supertype == 'EAD':
+        pickle.dump([100*np.reshape(h_hits,[biny_t,binx_t]),xcent,ycent],open('hits_'+str(theta)+'.pkl','wb'))
+
+
 #    # %% Moisture
 #    # load MLS profile data
 #    prof_file = '../MLS/MeanMLSProf-H2O-2016-07.pkl'
@@ -384,7 +392,7 @@ def main():
 
 # %%
 def chart(field,txt="",vmin=None,vmax=None,fgp="",back_field=None,cumsum=False,
-          shrink=0.63,glob=False,truncate=False):
+          shrink=0.63,glob=False,truncate=False,coast_color='k',TP=False):
     """ Plots a 2d array field with colormap between min and max"""
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -400,7 +408,7 @@ def chart(field,txt="",vmin=None,vmax=None,fgp="",back_field=None,cumsum=False,
         fig=plt.figure(n1+1,figsize=[13,6])
     ax = fig.add_subplot(111)
     cm_lon =0
-    # ACHTUNG !!: if we are to plot accross dateline, set cm to 180 
+    # ACHTUNG !!: if we are to plot accross dateline, set cm to 180
     proj = ccrs.PlateCarree(central_longitude=cm_lon)
     fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
     ax = plt.axes(projection = proj)
@@ -412,12 +420,12 @@ def chart(field,txt="",vmin=None,vmax=None,fgp="",back_field=None,cumsum=False,
     print(vmin,vmax,(vmax-vmin)/mymap.N)
     bounds=np.arange(vmin,vmax*(1+0.0001),(vmax-vmin)/mymap.N)
     norm=colors.BoundaryNorm(bounds,mymap.N)
-    if back_field is not None:            
+    if back_field is not None:
             if cumsum:
                 # Here we plot levels for areas that contain a percentage of the sum
                 h,edges = np.histogram(back_field,bins=200)
                 cc = 0.5*(edges[:-1]+edges[1:])
-                ee = np.cumsum((cc*h/np.sum(cc*h))[::-1])[::-1]         
+                ee = np.cumsum((cc*h/np.sum(cc*h))[::-1])[::-1]
                 nl = [np.argmin(np.abs(ee-x)) for x in [0.9,0.7,0.5,0.3,0.1]]
                 nl95 = np.argmin(np.abs(ee-0.95))
                 if glob:
@@ -426,7 +434,7 @@ def chart(field,txt="",vmin=None,vmax=None,fgp="",back_field=None,cumsum=False,
                 else:
                     CS=ax.contour(xcent,ycent,gaussian_filter(back_field,2),
                               transform=proj,levels=edges[nl],linewidths=3)
-                strs = ['90%','70%','50%','30%','10%']                
+                strs = ['90%','70%','50%','30%','10%']
                 fmt={}
                 for l,s in zip(CS.levels,strs):
                     fmt[l] = s
@@ -441,14 +449,17 @@ def chart(field,txt="",vmin=None,vmax=None,fgp="",back_field=None,cumsum=False,
                               transform=proj,linewidths=3)
                 else:
                     CS=ax.contour(xcent,ycent,gaussian_filter(back_field,2),
-                              transform=proj,linewidths=3)                
+                              transform=proj,linewidths=3)
                 plt.clabel(CS)
     if glob:
         iax=ax.pcolormesh(xedge_g,yedge_g,field,clim=[vmin,vmax],transform=proj,cmap=mymap,norm=norm)
     else:
         iax=ax.pcolormesh(xedge,yedge,field,clim=[vmin,vmax],transform=proj,cmap=mymap,norm=norm)
     # plot coastline
-    ax.coastlines('50m')
+    ax.coastlines('50m',color=coast_color)
+    if TP:
+        tibetc = pickle.load(open(join('..','mkSTCmask','TibetContour.pkl'),'rb'))
+        ax.plot(tibetc[:,0],tibetc[:,1],'lime')
     # Beautify layout
     xlocs = None
     if cm_lon == 180: xlocs = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
@@ -469,14 +480,15 @@ def chart(field,txt="",vmin=None,vmax=None,fgp="",back_field=None,cumsum=False,
         plt.xlim(xedge[0],xedge[-1])
         plt.ylim(yedge[0],yedge[-1])
     plt.title(txt,fontsize=fs)
-    
+
     # plot adjusted colorbar
     cax,kw = clb.make_axes(ax,location='right',pad=0.02,shrink=shrink,fraction=0.10,aspect=12)
     cbar = fig.colorbar(iax,cax=cax,**kw)
     cbar.ax.tick_params(labelsize=fs)
-   
+
     if len(fgp)>0:
-        plt.savefig('figs/chart-'+fgp+'.png',dpi=300,bbox_inches='tight')
+        pass
+        #plt.savefig('figs/chart-'+fgp+'.png',dpi=300,bbox_inches='tight')
     plt.show()
 
 # %%
