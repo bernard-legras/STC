@@ -115,7 +115,7 @@ class ECMWF_pure(object):
         self.warning = []
 
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),
-             cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1):
+             cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,sat_H=35785831):
         """ Chart for data fields """
         # test existence of key field
         if var in self.var.keys():
@@ -140,37 +140,52 @@ class ECMWF_pure(object):
         # the web says that it is tricky to plot data accross dateline with cartopy
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
         cm_lon =0
+        ctrl_lon=(self.attr['lons'][0]+self.attr['lons'][-1])/2
+        ctrl_lat=(self.attr['lats'][0]+self.attr['lats'][-1])/2
         # guess that we want to plot accross dateline
         if self.attr['lons'][-1] > 180: cm_lon=180
-        proj = ccrs.PlateCarree(central_longitude=cm_lon)
+        projplate = ccrs.PlateCarree(central_longitude=cm_lon)
+        if projec is 'ortho':
+            proj=ccrs.Orthographic(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
+        if projec is 'azimuthalequi':
+            proj=ccrs.AzimuthalEquidistant(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
+        if projec is 'nearside':
+            proj=ccrs.NearsidePerspective(central_longitude=ctrl_lon,central_latitude=ctrl_lat,satellite_height=sat_H)
+        if projec is 'lambert':
+            proj=ccrs.LambertConformal(central_longitude=ctrl_lon,central_latitude=ctrl_lat,cutoff=self.attr['lats'][0],)
+        elif projec is None:
+            proj=projplate
         fig = plt.figure(figsize=[11,4])
         fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         ax = plt.axes(projection = proj)
-        iax = ax.imshow(scale*buf, transform=proj, interpolation='nearest',
-                    extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
-                            self.attr['lats'][0], self.attr['lats'][-1]],
-                    origin='lower', aspect=aspect,cmap=cmap,clim=clim)
+        iax = ax.imshow(scale*buf, transform=projplate, interpolation='nearest',
+                        extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
+                                self.attr['lats'][0], self.attr['lats'][-1]],
+                        origin='lower', aspect=aspect,cmap=cmap,clim=clim)
+        if projec is 'ortho' or 'azimuthalequi' or 'nearside' or 'lambert':
+            gl=ax.gridlines()
+        elif projec is None or 'mercator' or 'plate':
+            gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
+                      linewidth=2, color='gray', alpha=0.5, linestyle='--')
         if cLines is not None:
-                ax.contour(self.var[var][lev,:,:],transform=proj,extent=(self.attr['lons'][0]-cm_lon,
-                           self.attr['lons'][-1]-cm_lon,self.attr['lats'][0],self.attr['lats'][-1]),levels=cLines,origin='lower')
+                 ax.contour(self.var[var][lev,:,:],transform=projplate,extent=(self.attr['lons'][0]-cm_lon,
+                               self.attr['lons'][-1]-cm_lon,self.attr['lats'][0],self.attr['lats'][-1]),levels=cLines,origin='lower')
         ax.add_feature(feature.NaturalEarthFeature(
-            category='cultural',
-            name='admin_1_states_provinces_lines',
-            scale='50m',
-            facecolor='none'))
+                category='cultural',
+                name='admin_1_states_provinces_lines',
+                scale='50m',
+                facecolor='none'))
         ax.coastlines('50m')
-        #ax.add_feature(feature.BORDERS)
-        # The grid adjusts automatically with the following lines
-        # If crossing the dateline, superimposition of labels there
-        # can be suppressed by specifying xlocs
+            #ax.add_feature(feature.BORDERS)
+            # The grid adjusts automatically with the following lines
+            # If crossing the dateline, superimposition of labels there
+            # can be suppressed by specifying xlocs
         xlocs = None
         if cm_lon == 180:
-            interx = 30
-            # next multiple of interx on the east of the western longitude boundary
-            minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
-            xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
-        gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
-                      linewidth=2, color='gray', alpha=0.5, linestyle='--')
+                interx = 30
+                # next multiple of interx on the east of the western longitude boundary
+                minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
+                xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
         gl.xlabels_top = False
         gl.ylabels_right = False
         gl.xformatter = LONGITUDE_FORMATTER
