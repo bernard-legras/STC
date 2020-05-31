@@ -509,7 +509,7 @@ class GridField(object):
         # Initializes var dictionary
         self.var={}
 
-    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True, xlocs=None):
+    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True, xlocs=None, show=True):
         # test existence of key field
         if field not in self.var.keys():
             print ('undefined field')
@@ -555,8 +555,8 @@ class GridField(object):
         if (cm_lon == 180) & (xlocs == None): xlocs = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
         gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
-        gl.xlabels_top = False
-        gl.ylabels_right = False
+        gl.top_labels = False
+        gl.right_labels = False
         #gl.xformatter = LONGITUDE_FORMATTER
         #gl.yformatter = LATITUDE_FORMATTER
         gl.xlabel_style = {'size': fs}
@@ -569,8 +569,8 @@ class GridField(object):
         pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
         cbar=fig.colorbar(iax,cax=pos_cax)
         cbar.ax.tick_params(labelsize=fs)
-        plt.show(block=block)     
-        return None
+        if show: plt.show(block=block)     
+        return ax
 
     def patch(self,other,lon,var):
         ''' Patch two fields on the same grid at a given longitude given by lon.
