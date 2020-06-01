@@ -46,7 +46,7 @@ Created on 21/01/2018 from ECMWF.py
 @author: Bernard Legras (legras@lmd.ens.fr)
 @licence: CeCILL-C
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import math
 import pygrib
@@ -114,8 +114,9 @@ class ECMWF_pure(object):
         self.d1d={}
         self.warning = []
 
-    def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),
-             cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,sat_H=35785831):
+    def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),figsize=(11,4),
+             cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,
+             sat_H=35785831,xylim=False,polar=False):
         """ Chart for data fields """
         # test existence of key field
         if var in self.var.keys():
@@ -145,26 +146,56 @@ class ECMWF_pure(object):
         # guess that we want to plot accross dateline
         if self.attr['lons'][-1] > 180: cm_lon=180
         projplate = ccrs.PlateCarree(central_longitude=cm_lon)
-        if projec is 'ortho':
+        if polar: ctrl_lat = 90*np.sign(ctrl_lat)
+        if projec == 'ortho':
             proj=ccrs.Orthographic(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
-        if projec is 'azimuthalequi':
+        elif projec == 'azimuthalequi':
             proj=ccrs.AzimuthalEquidistant(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
-        if projec is 'nearside':
+        elif projec == 'nearside':
             proj=ccrs.NearsidePerspective(central_longitude=ctrl_lon,central_latitude=ctrl_lat,satellite_height=sat_H)
-        if projec is 'lambert':
+        elif projec == 'lambert':
             proj=ccrs.LambertConformal(central_longitude=ctrl_lon,central_latitude=ctrl_lat,cutoff=self.attr['lats'][0],)
         elif projec is None:
             proj=projplate
-        fig = plt.figure(figsize=[11,4])
+        fig = plt.figure(figsize=figsize)
         fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
         ax = plt.axes(projection = proj)
         iax = ax.imshow(scale*buf, transform=projplate, interpolation='nearest',
                         extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
                                 self.attr['lats'][0], self.attr['lats'][-1]],
                         origin='lower', aspect=aspect,cmap=cmap,clim=clim)
-        if projec is 'ortho' or 'azimuthalequi' or 'nearside' or 'lambert':
-            gl=ax.gridlines()
-        elif projec is None or 'mercator' or 'plate':
+        if xylim:
+            # if cm_lon = 180, the shift must be 360, do not seek why
+            x1a,y1a = proj.transform_point(self.attr['lons'][0]-2*cm_lon,self.attr['lats'][0],ccrs.Geodetic())
+            x1b,y1b = proj.transform_point(self.attr['lons'][0]-2*cm_lon,self.attr['lats'][-1],ccrs.Geodetic())
+            x1c,y1c = proj.transform_point(ctrl_lon-2*cm_lon,self.attr['lats'][0],ccrs.Geodetic())
+            x1 = min(x1a,x1b,x1c)
+            y1 = min(y1a,y1b,y1c)
+            x2a,y2a = proj.transform_point(self.attr['lons'][-1]-2*cm_lon,self.attr['lats'][-1],ccrs.Geodetic())
+            x2b,y2b = proj.transform_point(self.attr['lons'][-1]-2*cm_lon,self.attr['lats'][0],ccrs.Geodetic())
+            x2c,y2c = proj.transform_point(ctrl_lon-2*cm_lon,self.attr['lats'][-1],ccrs.Geodetic())
+            x2 = max(x2a,x2b,x2c)
+            y2 = max(y2a,y2b,y2c)
+            #print(x1a,y1a,x1b,y1b,x2a,y2a,x2b,y2b)
+            ax.set_xlim(x1,x2)
+            ax.set_ylim(y1,y2)
+        if polar:
+            yy = np.empty(len(self.attr['lons']))
+            if ctrl_lat>0: yy.fill(self.attr['lats'][0])
+            else: yy.fill(self.attr['lats'][-1])
+            x1,y1,_ = (proj.transform_points(ccrs.Geodetic(),self.attr['lons']-2*cm_lon,yy)).T
+            del yy
+            ax.set_xlim(np.min(x1),np.max(x1))
+            ax.set_ylim(np.min(y1),np.max(y1))
+        xlocs = None
+        if cm_lon == 180:
+                interx = 30
+                # next multiple of interx on the east of the western longitude boundary
+                minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
+                xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
+        if projec in ['ortho','azimuthalequi','nearside','lambert']:
+            gl = ax.gridlines(draw_labels=True)
+        elif projec in [None,'mercator','plate']:
             gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
         if cLines is not None:
@@ -180,14 +211,12 @@ class ECMWF_pure(object):
             # The grid adjusts automatically with the following lines
             # If crossing the dateline, superimposition of labels there
             # can be suppressed by specifying xlocs
-        xlocs = None
-        if cm_lon == 180:
-                interx = 30
-                # next multiple of interx on the east of the western longitude boundary
-                minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
-                xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
-        gl.xlabels_top = False
-        gl.ylabels_right = False
+
+        #ax.set_xlim(self.attr['lons'][0],self.attr['lons'][-1])
+        #ax.set_ylim(self.attr['lats'][0],self.attr['lats'][-1])
+        if projec == None:
+            gl.top_labels = False
+            gl.right_labels = False
         gl.xformatter = LONGITUDE_FORMATTER
         gl.yformatter = LATITUDE_FORMATTER
         gl.xlabel_style = {'size': fs}
@@ -211,7 +240,7 @@ class ECMWF_pure(object):
         return ax
 
     def chartlonz(self,var,lat,levs=(None,None),txt='',log=False,clim=(None,None),
-             cmap=mymap,savfile=None,show=True,scale=1):
+             cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4)):
         """ Plot a lon x alt section for a given latitude
         """
         if var not in self.var.keys():
@@ -223,7 +252,7 @@ class ECMWF_pure(object):
         except:
             print('lat out of range')
             return -1
-        fig = plt.figure(figsize=[11,4])
+        fig = plt.figure(figsize=figsize)
         fs = 16
         ax = fig.add_subplot(111)
         if levs[0]==None: l1=29
@@ -1038,6 +1067,7 @@ class ECMWF(ECMWF_pure):
         self.x4I_expected = False
         self.VOZ_expected = False
         self.QN_expected = False
+        self.F12_expected = False
         self.offd = 100 # offset to be set for ERA-I below, 100 for ERA5
         if self.project=='VOLC':
             if 'satie' in socket.gethostname():
@@ -1108,6 +1138,11 @@ class ECMWF(ECMWF_pure):
             if (self.exp == 'VOZ') | ('VOZ' in self.exp): self.VOZ_expected = True
             if (self.exp == 'DI') | ('DI' in self.exp): self.DI_expected = True
             if (self.exp == 'QN') | ('QN' in self.exp): self.QN_expected = True
+            if (self.exp == 'F12') | ('F12' in self.exp):
+                if self.date.hour not in [6,18]:
+                    print('non valid time for the 12h forecast')
+                    return
+                self.F12_expected = True
         elif project=='OPZ':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/OPZ'
@@ -1267,6 +1302,14 @@ class ECMWF(ECMWF_pure):
                           'QR':['crwc','Specific rain water content:kg kg**-1'],
                           'QS':['cswc','Specific snow water content:kg kg**-1']}
             self.qnname = date.strftime('ERA5QN%Y%m%d.grb')
+        if self.F12_expected:
+            self.F12var = {'UF':['u','12h forecast U component of wind','m s**-1'],
+                     'VF':['v','12h forecast V component of wind','m s**-1'],
+                     'TF':['t','12h forecast temperature','K'],
+                     'VOF':['vo',"12h forecast vorticity","s**-1"],
+                     'O3F':['o3',"12h forecast ozone mixing ratio",'kg kg**-1'],
+                     'LNSPF':['lnsp',"12h forecast surface log pressure",'']}
+            #self.f12name defined in the opening
         # opening first the DI file as it might be needed to get pressure for hours not multiple of 3
         if self.DI_expected:
             try:
@@ -1372,6 +1415,7 @@ class ECMWF(ECMWF_pure):
         self.x4I_open = False
         self.VOZ_open = False
         self.QN_open = False
+        self.F12_open = False
         if self.DI_expected:
             try:
                 self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
@@ -1418,6 +1462,19 @@ class ECMWF(ECMWF_pure):
                 self.QN_open = True
             except:
                 print('cannot open '+os.path.join(self.rootdir,date.strftime('QN-true/%Y'),self.qnname))
+        if self.F12_expected:
+            if self.date.hour == 6: datef = date - timedelta(days=1)
+            else: datef = date
+            self.f12name = datef.strftime('ERA5FCST12%Y%m%d.grb')
+            try:
+                self.f12rb = pygrib.open(os.path.join(self.rootdir,datef.strftime('FCST12-true/%Y'),self.f12name))
+                self.F12_open = True
+                sp = self.f12rb.select(name='Logarithm of surface pressure',validityTime=self.attr['valTime'])[0]
+                self.var['SPF'] = np.exp(sp['values'])
+                self.var['SPF']   = self.var['SPF'][::-1,:]
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('FCST12-true/%Y'),self.f12name))
+
 
     def close(self):
         self.grb.close()
@@ -1491,7 +1548,11 @@ class ECMWF(ECMWF_pure):
                     get = True
             if ~get & self.QN_open:
                 if var in self.QNvar.keys():
-                    TT = self.qnrb.select(shortName=self.QN.var[var][0],validityTime=self.attr['valTime'])
+                    TT = self.qnrb.select(shortName=self.QNvar[var][0],validityTime=self.attr['valTime'])
+                    get = True
+            if ~get & self.F12_open:
+                if var in self.F12var.keys():
+                    TT = self.f12rb.select(shortName=self.F12var[var][0],validityTime=self.attr['valTime'])
                     get = True
             if get == False:
                     print(var+' not found')
@@ -1555,13 +1616,13 @@ class ECMWF(ECMWF_pure):
         self._get_var(var)
         return self.var['var' ]
 
-    def _mkp(self):
+    def _mkp(self,suffix=''):
         # Calculate the pressure field
-        self.var['P'] =  np.empty(shape=(self.nlev,self.nlat,self.nlon))
+        self.var['P'+suffix] =  np.empty(shape=(self.nlev,self.nlat,self.nlon))
         for i in range(self.nlev):
             lev = self.attr['levs'][i]
-            self.var['P'][i,:,:] = self.attr['am'][lev-1] \
-                                 + self.attr['bm'][lev-1]*self.var['SP']
+            self.var['P'+suffix][i,:,:] = self.attr['am'][lev-1] \
+                                 + self.attr['bm'][lev-1]*self.var['SP'+suffix]
 
     def _mkpz(self):
         # Calculate pressure field for w (check)
@@ -1588,19 +1649,19 @@ class ECMWF(ECMWF_pure):
         except:
             print('pscale must be generated before zscale')
 
-    def _mkthet(self):
+    def _mkthet(self,suffix=''):
         # Calculate the potential temperature
-        if not set(['T','P']).issubset(self.var.keys()):
+        if not set(['T'+suffix,'P'+suffix]).issubset(self.var.keys()):
             print('T or P undefined')
             return
-        self.var['PT'] = self.var['T'] * (cst.p0/self.var['P'])**cst.kappa
+        self.var['PT'+suffix] = self.var['T'+suffix] * (cst.p0/self.var['P'+suffix])**cst.kappa
 
-    def _mkrho(self):
+    def _mkrho(self,suffix=''):
         # Calculate the dry density
-        if not set(['T','P']).issubset(self.var.keys()):
+        if not set(['T'+suffix,'P'+suffix]).issubset(self.var.keys()):
             print('T or P undefined')
             return
-        self.var['RHO'] = (1/cst.R) * self.var['P'] / self.var['T']
+        self.var['RHO'+suffix] = (1/cst.R) * self.var['P'+suffix] / self.var['T'+suffix]
 
     def _mkrhoq(self):
         # Calculate the moist density
@@ -1621,7 +1682,7 @@ class ECMWF(ECMWF_pure):
                 print('min level of inversion: ',lev)
                 return lev
 
-    def _mkz(self):
+    def _mkz(self,suffix=''):
         """ Calculate the geopotential altitude (m) without taking moisture into account """
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
@@ -1635,53 +1696,53 @@ class ECMWF(ECMWF_pure):
             self.var['Z0'] = Z0.var['Z0']
         except:
             self.var['Z0'] = Z0
-        self.var['Z'] =  np.empty(shape=self.var['T'].shape)
-        uu = - np.log(self.var['P'])
-        uusp = -np.log(self.var['SP'])
-        self.var['Z'][self.nlev-1,:,:] = self.var['Z0'] \
-               + (cst.R/cst.g) * self.var['T'][self.nlev-1,:,:] \
+        self.var['Z'+suffix] =  np.empty(shape=self.var['T'+suffix].shape)
+        uu = - np.log(self.var['P'+suffix])
+        uusp = -np.log(self.var['SP'+suffix])
+        self.var['Z'+suffix][self.nlev-1,:,:] = self.var['Z0'] \
+               + (cst.R/cst.g) * self.var['T'+suffix][self.nlev-1,:,:] \
                * (uu[self.nlev-1,:,:]-uusp)
         for i in range(self.nlev-2,-1,-1):
-             self.var['Z'][i,:,:] = self.var['Z'][i+1,:,:] + 0.5*(cst.R/cst.g) \
-                    * (self.var['T'][i,:,:] + self.var['T'][i+1,:,:])\
+             self.var['Z'+suffix][i,:,:] = self.var['Z'+suffix][i+1,:,:] + 0.5*(cst.R/cst.g) \
+                    * (self.var['T'+suffix][i,:,:] + self.var['T'+suffix][i+1,:,:])\
                     * (uu[i,:,:]-uu[i+1,:,:])
 
-    def _mkpv(self):
+    def _mkpv(self,suffix=''):
         """ Calculate the potential vorticity using the isentropic formula """
-        if not set(['PT','P','U','V','VO']).issubset(self.var.keys()):
+        if not set(['PT'+suffix,'P'+suffix,'U'+suffix,'V'+suffix,'VO'+suffix]).issubset(self.var.keys()):
             print('at least one of P, PT, U, V or VO is undefined')
             return
         # Calculation of the correction to the vorticity assuming that the grid is global
         dlat = np.deg2rad(self.attr['dla'])*cst.REarth
-        dPTdPhi = np.empty(shape = self.var['PT'].shape)
-        dPTdPhi[:,1:-1,:] = 0.5*(self.var['PT'][:,2:,:]-self.var['PT'][:,:-2,:])/dlat
-        dPTdPhi[:,0,:] = (self.var['PT'][:,1,:]-self.var['PT'][:,0,:])/dlat
-        dPTdPhi[:,-1,:] = (self.var['PT'][:,-1,:]-self.var['PT'][:,-2,:])/dlat
+        dPTdPhi = np.empty(shape = self.var['PT'+suffix].shape)
+        dPTdPhi[:,1:-1,:] = 0.5*(self.var['PT'+suffix][:,2:,:]-self.var['PT'+suffix][:,:-2,:])/dlat
+        dPTdPhi[:,0,:] = (self.var['PT'+suffix][:,1,:]-self.var['PT'+suffix][:,0,:])/dlat
+        dPTdPhi[:,-1,:] = (self.var['PT'+suffix][:,-1,:]-self.var['PT'+suffix][:,-2,:])/dlat
         dlon = np.deg2rad(self.attr['dlo'])*cst.REarth
         coslat = np.cos(np.deg2rad(self.attr['lats']))
-        dPTdLam = np.empty(shape = self.var['PT'].shape)
+        dPTdLam = np.empty(shape = self.var['PT'+suffix].shape)
         if self.globalGrid:
-            dPTdLam[:,1:-1,1:-1] = 0.5*(self.var['PT'][:,1:-1,2:]-self.var['PT'][:,1:-1,:-2])/dlon
-            dPTdLam[:,1:-1,0] = 0.5*(self.var['PT'][:,1:-1,1]-self.var['PT'][:,1:-1,-1])/dlon
-            dPTdLam[:,1:-1,-1] = 0.5*(self.var['PT'][:,1:-1,0]-self.var['PT'][:,1:-1,-2])/dlon
+            dPTdLam[:,1:-1,1:-1] = 0.5*(self.var['PT'+suffix][:,1:-1,2:]-self.var['PT'+suffix][:,1:-1,:-2])/dlon
+            dPTdLam[:,1:-1,0] = 0.5*(self.var['PT'+suffix][:,1:-1,1]-self.var['PT'+suffix][:,1:-1,-1])/dlon
+            dPTdLam[:,1:-1,-1] = 0.5*(self.var['PT'+suffix][:,1:-1,0]-self.var['PT'+suffix][:,1:-1,-2])/dlon
             dPTdLam[:,1:-1,:] /= coslat[np.newaxis,1:-1,np.newaxis]
             dPTdLam[:,0,:] = dPTdLam[:,1,:]
             dPTdLam[:,-1,:] = dPTdLam[:,-2,:]
         else: # it is assumed that the non global grid does not contain poles
-            dPTdLam[...,1:-1] = 0.5*(self.var['PT'][...,2:]-self.var['PT'][...,:-2])/dlon
-            dPTdLam[...,0] = (self.var['PT'][...,1]-self.var['PT'][...,0])/dlon
-            dPTdLam[...,-1] = (self.var['PT'][...,-1]-self.var['PT'][...,-2])/dlon
+            dPTdLam[...,1:-1] = 0.5*(self.var['PT'+suffix][...,2:]-self.var['PT'+suffix][...,:-2])/dlon
+            dPTdLam[...,0] = (self.var['PT'+suffix][...,1]-self.var['PT'+suffix][...,0])/dlon
+            dPTdLam[...,-1] = (self.var['PT'+suffix][...,-1]-self.var['PT'+suffix][...,-2])/dlon
             dPTdLam /= coslat[np.newaxis,:,np.newaxis]
-        logP = np.log(self.var['P'])
-        dudP = np.empty(shape = self.var['U'].shape)
-        dvdP = np.empty(shape = self.var['V'].shape)
-        dPTdP = np.empty(shape = self.var['PT'].shape)
-        dudP[1:-1,...] = (self.var['U'][2:,...]-self.var['U'][:-2,...])/\
-                             (self.var['P'][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
-        dvdP[1:-1,...] = (self.var['V'][2:,...]-self.var['V'][:-2,...])/\
-                            (self.var['P'][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
-        dPTdP[1:-1,...] = (self.var['PT'][2:,...]-self.var['PT'][:-2,...])/\
-                             (self.var['P'][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
+        logP = np.log(self.var['P'+suffix])
+        dudP = np.empty(shape = self.var['U'+suffix].shape)
+        dvdP = np.empty(shape = self.var['V'+suffix].shape)
+        dPTdP = np.empty(shape = self.var['PT'+suffix].shape)
+        dudP[1:-1,...] = (self.var['U'+suffix][2:,...]-self.var['U'+suffix][:-2,...])/\
+                             (self.var['P'+suffix][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
+        dvdP[1:-1,...] = (self.var['V'+suffix][2:,...]-self.var['V'+suffix][:-2,...])/\
+                            (self.var['P'+suffix][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
+        dPTdP[1:-1,...] = (self.var['PT'+suffix][2:,...]-self.var['PT'+suffix][:-2,...])/\
+                             (self.var['P'+suffix][1:-1,...]*(logP[2:,...]-logP[:-2,...]))
         # Do not loose time as PV at the ground or the top levl is not of any interest
         dudP[0,...] = dudP[1,...]
         dvdP[0,...] = dvdP[1,...]
@@ -1690,9 +1751,22 @@ class ECMWF(ECMWF_pure):
         dvdP[-1,...] = dvdP[-2,...]
         dPTdP[-1,...] = dPTdP[-2,...]
         flat = 2*cst.Omega * np.sin(np.deg2rad(self.attr['lats']))
-        self.var['PV'] = - cst.g * (dPTdP * (self.var['VO'] + flat[np.newaxis,:,np.newaxis]) \
+        self.var['PV'+suffix] = - cst.g * (dPTdP * (self.var['VO'+suffix] + flat[np.newaxis,:,np.newaxis]) \
                                        + dudP * dPTdPhi - dvdP * dPTdLam)
         del dPTdPhi, dPTdLam, logP, dudP, dvdP, dPTdP
+
+    def _mkinc(self,varss='All' ):
+        """ Calculate the increment on the listed variables or on all the variables in the forecast """
+        if self.F12_open == False:
+            print ('The increment can only be calculated if the forcast file is open')
+            return
+        if varss == 'All': listvar = [v for v in ['U','V','O3','VO','T'] if v in self.var]
+        else: listvar = varss
+        for var in listvar:
+            if any(x not in self.var for x in [var,var+'F']):
+                print('one of the two fields',var,var+'F','not available')
+                continue
+            self.var[var+'D'] = self.var[var]-self.var[var+'F']
 
 if __name__ == '__main__':
     date = datetime(2017,8,11,18)
