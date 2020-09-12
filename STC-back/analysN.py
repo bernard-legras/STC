@@ -90,7 +90,7 @@ def main():
     theta=380
     # possible choices for supertype: EAD, EAZ, EID, EIZ, EID-FULL, EIZ-FULL
     supertype='EAD'
-    sept = True
+    sept = False
     check_high = True
     fname7 = join(BACK_DIR,'BACK-'+supertype+'-Jul-2017-'+str(theta)+'K.hdf5z')
     fname8 = join(BACK_DIR,'BACK-'+supertype+'-Aug-2017-'+str(theta)+'K.hdf5z')
@@ -132,15 +132,20 @@ def main():
         ended = dd.io.load(fname)
 
         # %% The new calculation has additional steps / analys.py due to the
-        # introduction of the filtering and the theta distribution of the souurces.
+        # introduction of the filtering and the theta distribution of the sources.
         # This filtering is not optimal: it should be done in convscrSAF
         # as there is no second chance for parcels to hit a cloud after this
         # spurious hit. The estimate of the impact of this filter should be done
         # by turning it off.
         # statistics of the convectives sources
+        #
+        # Select the parcel which have met convection 
         hits = ended['flag_source'] & I_HIT == I_HIT
+        # Extract the exit parameter and fin number of parcels exiting through
+        # the lower boundary
         excode = (ended['flag_source'] >> 13) & 0xFF
         nb_bottom_exit_m[i] =  np.sum((excode ==7) | (excode == 1))
+        # Find the location of the convective hits, calculate theta
         x_hits = ended['src']['x'][hits]
         y_hits = ended['src']['y'][hits]
         t_hits = ended['src']['t'][hits]
@@ -289,7 +294,6 @@ def main():
           txt="Percentage of escape from "+supertype+" "+str(theta)+" K "+months+" 2017",
            fgp=supertype+'-percentage-escape-'+months+'-'+str(theta)+'K')
 
-
     #chart(np.reshape(h_alive,[biny,binx]),txt="percentage of still alive")
     # Rescale the distribution of sources before plotting
     #   Calculate the area and the scale factor
@@ -310,9 +314,9 @@ def main():
         vmax = vmin
     chart(Age_s,txt="mean age (day) from "+supertype+" "+str(theta)+" K "+months+" 2017",vmin=vmin[theta],vmax=vmax[theta],
           fgp=supertype+'-age-source-'+months+'-'+str(theta)+'K',back_field=H,cumsum=True,truncate=True,TP=True)
-    chart(Theta_s,txt="mean theta (day) from "+supertype+" "+str(theta)+" K "+months+" 2017",
+    chart(Theta_s,txt="mean theta (K) from "+supertype+" "+str(theta)+" K "+months+" 2017",
           fgp=supertype+'-theta-source-'+months+'-'+str(theta)+'K',back_field=H,cumsum=True,
-          vmin=340,vmax=390,truncate=True,TP=True)
+          vmin=364,vmax=381,truncate=True,TP=True)
     # plot of the pdf of theta source
     plt.figure(figsize=(3.9,4.0))
     thetav = np.arange(320.5,420,1)
@@ -465,8 +469,8 @@ def chart(field,txt="",vmin=None,vmax=None,fgp="",back_field=None,cumsum=False,
     if cm_lon == 180: xlocs = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
     gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
                   linewidth=2, color='gray', alpha=0.5, linestyle='--')
-    gl.xlabels_top = False
-    gl.ylabels_right = False
+    gl.top_labels = False
+    gl.yright_labels = False
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
     gl.xlabel_style = {'size': fs}
