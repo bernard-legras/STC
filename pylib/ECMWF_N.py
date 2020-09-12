@@ -115,7 +115,7 @@ class ECMWF_pure(object):
         self.warning = []
 
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),figsize=(11,4),
-             cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,
+             axf=None,cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,
              sat_H=35785831,xylim=False,polar=False):
         """ Chart for data fields """
         # test existence of key field
@@ -157,9 +157,11 @@ class ECMWF_pure(object):
             proj=ccrs.LambertConformal(central_longitude=ctrl_lon,central_latitude=ctrl_lat,cutoff=self.attr['lats'][0],)
         elif projec is None:
             proj=projplate
-        fig = plt.figure(figsize=figsize)
-        fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
-        ax = plt.axes(projection = proj)
+        if figsize is not None:
+            fig = plt.figure(figsize=figsize)
+            fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
+        if axf is None: ax = plt.axes(projection = proj)
+        else: ax = axf
         iax = ax.imshow(scale*buf, transform=projplate, interpolation='nearest',
                         extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
                                 self.attr['lats'][0], self.attr['lats'][-1]],
@@ -224,14 +226,15 @@ class ECMWF_pure(object):
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
 
         if txt is None:
-            plt.title(var+' '+str(lev),fontsize=fs)
+            plt.title(var+' lev'+str(lev),fontsize=fs)
         else:
             plt.title(txt,fontsize=fs)
         # plot adjusted colorbar
-        axpos = ax.get_position()
-        pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
-        pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
-        cbar=fig.colorbar(iax,cax=pos_cax)
+        #axpos = ax.get_position()
+        #pos_x = axpos.x0 + axpos.width + 0.01
+        #pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
+        pos_cax = ax.inset_axes([1.02,0,0.06,1])
+        cbar=plt.colorbar(iax,cax=pos_cax)
         cbar.ax.tick_params(labelsize=fs)
 
         if savfile is not None:
@@ -239,8 +242,8 @@ class ECMWF_pure(object):
         if show: plt.show()
         return ax
 
-    def chartlonz(self,var,lat,levs=(None,None),txt='',log=False,clim=(None,None),
-             cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4)):
+    def chartlonz(self,var,lat,levs=(None,None),txt=None,log=False,clim=(None,None),
+             cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4),axf=None,ylabel=True):
         """ Plot a lon x alt section for a given latitude
         """
         if var not in self.var.keys():
@@ -248,13 +251,16 @@ class ECMWF_pure(object):
             return -1
         try:
             pos=np.where(self.attr['lats']>=lat)[0][0]
-            print('pos',pos)
+            #print('pos',pos)
         except:
             print('lat out of range')
             return -1
-        fig = plt.figure(figsize=figsize)
+        if axf is None:
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot(111)
+        else:
+            ax = axf
         fs = 16
-        ax = fig.add_subplot(111)
         if levs[0]==None: l1=29
         else: l1 = levs[0]
         if levs[1]==None: l2=115
@@ -267,23 +273,83 @@ class ECMWF_pure(object):
             zz[:,1:-1] = 0.5*(zz1[:,1:]+zz1[:,:-1])
             zz[:,0] = zz1[:,0]
             zz[:,-1] = zz1[:,-1]
-            print(zz.shape,len(lons))
+            #print(zz.shape,len(lons))
             iax=ax.pcolormesh(lons,zz,scale*self.var[var][l1:l2+1,pos,:],
                             vmin=clim[0],vmax=clim[1],cmap=cmap)
-            plt.ylabel('altitude (km)',fontsize=fs)
-            print('USE Z')
+            if ylabel: plt.ylabel('altitude (km)',fontsize=fs)
+            #print('USE Z')
         except:
             iax=ax.pcolormesh(lons,self.attr['zscale_i'][l1:l2+2],self.var[var][l1:l2+1,pos, :],
                         vmin=clim[0],vmax=clim[1],cmap=cmap)
 
-            plt.ylabel('baro altitude (km)',fontsize=fs)
-        ax.tick_params(labelsize=16)
+            if ylabel: plt.ylabel('baro altitude (km)',fontsize=fs)
+        ax.tick_params(labelsize=fs)
         plt.xlabel('longitude',fontsize=fs)
 
-        plt.title(txt+" lat="+str(lat),fontsize=fs)
+        if txt is None:
+            plt.title(var+' lat'+str(lat),fontsize=fs)
+        else:
+            plt.title(txt,fontsize=fs)
         #cax = fig.add_axes([0.91, 0.21, 0.03, 0.6])
         #cbar = fig.colorbar(iax,cax=cax)
-        cbar = fig.colorbar(iax)
+        cbar = plt.colorbar(iax,ax=ax,orientation='vertical')
+        cbar.ax.tick_params(labelsize=fs)
+        if savfile is not None:
+            plt.savefig(savfile,bbox_inches='tight',dpi=300)
+        if show: plt.show()
+        return ax
+
+    def chartlatz(self,var,lon,levs=(None,None),txt=None,log=False,clim=(None,None),
+             cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4),axf=None,ylabel=True):
+        """ Plot a lon x alt section for a given latitude
+        """
+        if var not in self.var.keys():
+            print("UNKNOWN VAR ", var)
+            return -1
+        try:
+            pos=np.where(self.attr['lons']>=lon)[0][0]
+            #print('pos',pos)
+        except:
+            print('lon out of range')
+            return -1
+        if axf is None:
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot(111)
+        else:
+            ax = axf
+        fs = 16
+        if levs[0]==None: l1=29
+        else: l1 = levs[0]
+        if levs[1]==None: l2=115
+        else: l2 = levs[1]
+        lats = np.arange(self.attr['lats'][0]-0.5*self.attr['dla'],self.attr['lats'][-1]+self.attr['dla'],self.attr['dla'])
+        #if Z variable is available, lets use it, if not use zscale
+        try:
+            zz1 = 0.5*(self.var['Z'][l1-1:l2+1,:,pos] + self.var['Z'][l1:l2+2,:,pos])/1000
+            zz = np.empty((zz1.shape[0],zz1.shape[1]+1))
+            zz[:,1:-1] = 0.5*(zz1[:,1:]+zz1[:,:-1])
+            zz[:,0] = zz1[:,0]
+            zz[:,-1] = zz1[:,-1]
+            #print(zz.shape,len(lons))
+            iax=ax.pcolormesh(lats,zz,scale*self.var[var][l1:l2+1,:,pos],
+                            vmin=clim[0],vmax=clim[1],cmap=cmap)
+            if ylabel: plt.ylabel('altitude (km)',fontsize=fs)
+            #print('USE Z')
+        except:
+            iax=ax.pcolormesh(lats,self.attr['zscale_i'][l1:l2+2],self.var[var][l1:l2+1,:,pos],
+                        vmin=clim[0],vmax=clim[1],cmap=cmap)
+
+            if ylabel: plt.ylabel('baro altitude (km)',fontsize=fs)
+        ax.tick_params(labelsize=16)
+        plt.xlabel('latitude',fontsize=fs)
+
+        if txt is None:
+            plt.title(var+' lon'+str(lon),fontsize=fs)
+        else:
+            plt.title(txt,fontsize=fs)
+        #cax = fig.add_axes([0.91, 0.21, 0.03, 0.6])
+        #cbar = fig.colorbar(iax,cax=cax)
+        cbar = plt.colorbar(iax,ax=ax)
         cbar.ax.tick_params(labelsize=fs)
         if savfile is not None:
             plt.savefig(savfile,bbox_inches='tight',dpi=300)
@@ -309,6 +375,7 @@ class ECMWF_pure(object):
         new.attr['levs'] = self.attr['levs']
         new.attr['plev'] = self.attr['plev']
         new.date = self.date
+        new.project = self.project
         new.attr['La1'] = self.attr['La1']
         new.attr['Lo1'] = 0
         try:
@@ -348,6 +415,7 @@ class ECMWF_pure(object):
         new.attr['levs'] = self.attr['levs']
         new.attr['plev'] = self.attr['plev']
         new.date = self.date
+        new.project = self.project
         new.attr['La1'] = self.attr['La1']
         new.attr['Lo1'] = 0
         try:
@@ -395,6 +463,7 @@ class ECMWF_pure(object):
         new.attr['levtype'] = self.attr['levtype']
         new.attr['levs'] = self.attr['levs']
         new.attr['plev'] = self.attr['plev']
+        new.project = self.project
         new.date = self.date
         new.attr['La1'] = self.attr['lats'][nlatmin]
         new.attr['Lo1'] = self.attr['lons'][nlonmin]
@@ -733,7 +802,7 @@ class ECMWF_pure(object):
         if not hasattr(self,'fhyb'):
             self.fhyb,void = tohyb()
         # generate the 2D interpolator of the surface pressure
-        lsp = RegularGridInterpolator((self.attr['lats'],self.attr['lons']),-np.log(self.var['SP']))
+        lsp = RegularGridInterpolator((self.attr['lats'],self.attr['lons']),-np.log(self.var['SP']),bounds_error=True)
         lspi = lsp(np.transpose([y,x]))
         # define -log sigma = -log(p) - -log(ps)
         lsig = - np.log(p) - lspi
@@ -970,7 +1039,9 @@ class ECMWF_pure(object):
 
     def interpol_track(self,p,x,y,varList='All'):
         """ Writing in progress. For the moment, this is a copy of interpol_part.
-        Calculate the distance to the cold point and to the LZRH ."""
+        Calculate the distance to the cold point and to the LZRH .
+        We use RegularGridInterpolator that allows interpolation to a list of
+        points unlike interp2d."""
         if 'P' not in self.var.keys():
             self._mkp()
         if varList == 'All':
@@ -988,8 +1059,8 @@ class ECMWF_pure(object):
         # test whether fhyb already attached to the instance
         if not hasattr(self,'fhyb'):
             self.fhyb,void = tohyb()
-        # generate the 2D interpolator of the surface pressure
-        lsp = RegularGridInterpolator((self.attr['lats'],self.attr['lons']),-np.log(self.var['SP']))
+        # generate the 2D interpolator of the surface log pressure
+        lsp = RegularGridInterpolator((self.attr['lats'],self.attr['lons']),-np.log(self.var['SP']),bounds_error=True)
         lspi = lsp(np.transpose([y,x]))
         # define -log sigma = -log(p) - -log(ps)
         lsig = - np.log(p) - lspi
@@ -1017,7 +1088,8 @@ class ECMWF_pure(object):
         return result
 
     def interpol_orbit(self,x,y,varList='All',var2='All'):
-        """ Generate an interpolation to an orbit curtain in 2d """
+        """ Generate an interpolation to an orbit curtain in 2d.
+        Quick n' dirty method  using floor. Should be improved for better accuracy"""
         if varList == 'All':
             varList = list(self.var.keys())
         if var2=='All':
@@ -1068,6 +1140,10 @@ class ECMWF(ECMWF_pure):
         self.VOZ_expected = False
         self.QN_expected = False
         self.F12_expected = False
+        self.CAMS_expected = False
+        self.CF12_expected = False
+        # set when some auxilliary files are hemispheric (one choice for all concerned)
+        self.hemis = None
         self.offd = 100 # offset to be set for ERA-I below, 100 for ERA5
         if self.project=='VOLC':
             if 'satie' in socket.gethostname():
@@ -1081,6 +1157,7 @@ class ECMWF(ECMWF_pure):
             self.EN_expected = True
             self.DI_expected = True
             self.WT_expected = True
+
         elif project=='STC':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
@@ -1102,6 +1179,7 @@ class ECMWF(ECMWF_pure):
             self.DI_expected = True
             self.WT_expected = True
             self.VD_expected = True
+
         elif project=='FULL-EI':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/NIRgrid'
@@ -1121,6 +1199,7 @@ class ECMWF(ECMWF_pure):
             self.DI_expected = True
             self.DE_expected = True
             self.offd = 300
+
         elif project=='FULL-EA':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/ERA5'
@@ -1143,6 +1222,7 @@ class ECMWF(ECMWF_pure):
                     print('non valid time for the 12h forecast')
                     return
                 self.F12_expected = True
+
         elif project=='OPZ':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/OPZ'
@@ -1158,6 +1238,18 @@ class ECMWF(ECMWF_pure):
             self.globalGrid = True
             self.EN_expected = True
             if (self.exp == 'x4I') | ('x4I' in self.exp): self.x4I_expected = True
+            if (self.exp == 'CAMS') | ('CAMS' in self.exp): self.CAMS_expected = True
+            if (self.exp == 'F12') | ('F12' in self.exp):
+                if self.date.hour not in [6,18]:
+                    print('non valid time for the 12h forecast')
+                    return
+                self.F12_expected = True
+            if (self.exp == 'CF12') | ('CF12' in self.exp):
+                if self.date.hour not in [0,12]:
+                    print('non valid time for the 12h forecast')
+                    return
+                self.CF12_expected = True
+
         elif project=='OPZFCST':
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/OPZ'
@@ -1307,10 +1399,22 @@ class ECMWF(ECMWF_pure):
                      'VF':['v','12h forecast V component of wind','m s**-1'],
                      'TF':['t','12h forecast temperature','K'],
                      'VOF':['vo',"12h forecast vorticity","s**-1"],
-                     'O3F':['o3',"12h forecast ozone mixing ratio",'kg kg**-1'],
-                     'LNSPF':['lnsp',"12h forecast surface log pressure",'']}
-            #self.f12name defined in the opening
+                     'O3F':['o3',"12h forecast ozone mixing ratio",'kg kg**-1']}
+             #self.f12name defined in the opening
+        if self.CAMS_expected:
+            self.CAMSvar = {'CO':['co','Carbon monoxide','kg kg**-1'],
+                'O3G':['go3','GEMS Ozone','kg kg**-1'],
+                'O3S':['o3s','Stratospheric ozone:kg kg**-1'],
+                'O3C':['o3','Ozone mass mixing ratio','kg kg**-1']}
+            self.camsname = date.strftime('OPZCAMS-%Y%m%d_SH.grb')
+        if self.CF12_expected:
+            self.CF12var = {'COF':['co','12h forecast carbon monoxide','kg kg**-1'],
+                'O3GF':['go3','12h forecast GEMS Ozone','kg kg**-1'],
+                'O3SF':['o3s','12h forecast stratospheric ozone:kg kg**-1'],
+                'O3CF':['o3','12h ozone mass mixing ratio','kg kg**-1']}
+            #self.cf12name defined in the opening
         # opening first the DI file as it might be needed to get pressure for hours not multiple of 3
+        self.DI_open = False
         if self.DI_expected:
             try:
                 self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
@@ -1321,6 +1425,15 @@ class ECMWF(ECMWF_pure):
                     self.DI_open = True
                 except:
                     print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
+        # opening first the CAMS file as it might be needed to read pressure at 0 or 12
+        self.CAMS_open = False
+        if self.CAMS_expected:
+            try:
+                self.crb = pygrib.open(os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
+                self.CAMS_open = True
+                self.hemis = 'SH' # future: to be dynamically determined
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
         # opening the main EN file
         try:
             self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
@@ -1329,7 +1442,12 @@ class ECMWF(ECMWF_pure):
                 self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
             except:
                 print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
-                return
+                # We do not need to open EN if we only want CAMS at 0 and 12 to calculate assimilation increment
+                if self.project=='OPZ' & date.hour in [0,12]:
+                    pass
+                else:
+                    return
+
         # Define searched valid date and time, and step
         validityDate = int(self.date.strftime('%Y%m%d'))
         validityTime = int(self.date.strftime('%H%M'))
@@ -1346,6 +1464,9 @@ class ECMWF(ECMWF_pure):
                 elif (self.project == 'FULL-EA') & self.DI_open:
                     sp = self.drb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
                     logp = True
+                elif (self.project == 'OPZ') & self.CAMS_open:
+                    sp = self.crb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
+                    logp = True
                 else:
                     sp = self.grb.select(name='Surface pressure',validityTime=validityTime)[0]
                     logp = False
@@ -1353,7 +1474,7 @@ class ECMWF(ECMWF_pure):
                 print('no surface pressure in '+self.fname)
                 self.grb.close()
                 return
-        # Check date matching (should be)
+        # Check date matching (should be OK)
         if (sp['validityDate'] != validityDate) & (self.project!='OPZFCST'):
             print('WARNING: dates do not match')
             print('called date    ',self.date.strftime('%Y%m%d %H%M'))
@@ -1361,6 +1482,8 @@ class ECMWF(ECMWF_pure):
             self.grb.close()
             return
         # Get general info from this message
+        # ACHTUNG if CAMS OPZ at 0h and 12h the sp is at a hemispheric resolution,
+        # if 6h and 18h, the sp is from EN file at full resolution
         self.attr['Date'] = sp['dataDate']
         self.attr['Time'] = sp['dataTime']
         self.attr['valDate'] = sp['validityDate']
@@ -1408,7 +1531,6 @@ class ECMWF(ECMWF_pure):
         self.var['SP']   = self.var['SP'][::-1,:]
         self.attr['dla'] = -  self.attr['dla']
         # Opening of the other files
-        self.DI_open = False
         self.WT_open = False
         self.VD_open = False
         self.DE_open = False
@@ -1416,7 +1538,8 @@ class ECMWF(ECMWF_pure):
         self.VOZ_open = False
         self.QN_open = False
         self.F12_open = False
-        if self.DI_expected:
+        self.CF12_open = False
+        if self.DI_expected & ~self.DI_open:
             try:
                 self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
                 self.DI_open = True
@@ -1426,6 +1549,13 @@ class ECMWF(ECMWF_pure):
                     self.DI_open = True
                 except:
                     print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
+        if self.CAMS_expected & ~self.CAMS_open:
+            try:
+                self.crb = pygrib.open(os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
+                self.CAMS_open = True
+                self.hemis = 'SH' # future: to be dynamically determined
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
         if self.WT_expected:
             try:
                 self.wrb = pygrib.open(os.path.join(self.rootdir,date.strftime('WT-true/grib/%Y/%m'),self.wname))
@@ -1465,16 +1595,35 @@ class ECMWF(ECMWF_pure):
         if self.F12_expected:
             if self.date.hour == 6: datef = date - timedelta(days=1)
             else: datef = date
-            self.f12name = datef.strftime('ERA5FCST12%Y%m%d.grb')
+            if project == 'OPZ':
+                self.f12name = datef.strftime('OPZLWDA-FCST12-%Y%m%d_SH.grb')
+            else:
+                self.f12name = datef.strftime('ERA5FCST12%Y%m%d.grb')
             try:
-                self.f12rb = pygrib.open(os.path.join(self.rootdir,datef.strftime('FCST12-true/%Y'),self.f12name))
+                if project == 'OPZ':
+                    self.f12rb = pygrib.open(os.path.join(self.rootdir,datef.strftime('EN-true/%Y'),self.f12name))
+                    # contrary to initial intention these data are on full grid
+                    #self.hemis = 'SH'
+                else:
+                    self.f12rb = pygrib.open(os.path.join(self.rootdir,datef.strftime('FCST12-true/%Y'),self.f12name))
                 self.F12_open = True
                 sp = self.f12rb.select(name='Logarithm of surface pressure',validityTime=self.attr['valTime'])[0]
                 self.var['SPF'] = np.exp(sp['values'])
                 self.var['SPF']   = self.var['SPF'][::-1,:]
             except:
                 print('cannot open '+os.path.join(self.rootdir,date.strftime('FCST12-true/%Y'),self.f12name))
-
+        if self.CF12_expected:
+            if self.date.hour == 0: datef = date - timedelta(days=1)
+            else: datef = date
+            self.cf12name = datef.strftime('OPZCAMS-FCST12-%Y%m%d_SH.grb')
+            try:
+                self.cf12rb = pygrib.open(os.path.join(self.rootdir,datef.strftime('MC-true/%Y'),self.cf12name))
+                self.CF12_open = True
+                sp = self.cf12rb.select(name='Logarithm of surface pressure',validityTime=self.attr['valTime'])[0]
+                self.var['SPF'] = np.exp(sp['values'])
+                self.var['SPF']   = self.var['SPF'][::-1,:]
+            except:
+                print('cannot open '+os.path.join(self.rootdir,date.strftime('FCST12-true/%Y'),self.f12name))
 
     def close(self):
         self.grb.close()
@@ -1554,6 +1703,14 @@ class ECMWF(ECMWF_pure):
                 if var in self.F12var.keys():
                     TT = self.f12rb.select(shortName=self.F12var[var][0],validityTime=self.attr['valTime'])
                     get = True
+            if ~get & self.CAMS_open:
+                if var in self.CAMSvar.keys():
+                    TT = self.crb.select(shortName=self.CAMSvar[var][0],validityTime=self.attr['valTime'])
+                    get = True
+            if ~get & self.CF12_open:
+                if var in self.CF12var.keys():
+                    TT = self.cf12rb.select(shortName=self.CF12var[var][0],validityTime=self.attr['valTime'])
+                    get = True
             if get == False:
                     print(var+' not found')
                     return
@@ -1583,7 +1740,7 @@ class ECMWF(ECMWF_pure):
             else:
                 readlev=False
                 if (len(TT) !=  self.nlev) & (var != 'LNSP'):
-                    print('new record inconsistent with previous ones ',len(TT))
+                    print('new record inconsistent with previous ones ',var,len(TT))
             self.var[var] = np.empty(shape=[self.nlev,self.nlat,self.nlon])
             #print(np.isfortran(self.var[var]))
             # assuming levels are stored from top to bottom
@@ -1601,6 +1758,7 @@ class ECMWF(ECMWF_pure):
                         pass
                     self.attr['levs'][l] = lev
                     self.attr['plev'][l] = self.attr['am'][lev-1] + self.attr['bm'][lev-1]*cst.pref
+            del self.TT
 
 #       # Check the vertical ordering of the file
         if readlev:
@@ -1696,6 +1854,8 @@ class ECMWF(ECMWF_pure):
             self.var['Z0'] = Z0.var['Z0']
         except:
             self.var['Z0'] = Z0
+        if self.hemis == 'SH':
+            self.var['Z0'] = self.var['Z0'][0:self.nlat,:]
         self.var['Z'+suffix] =  np.empty(shape=self.var['T'+suffix].shape)
         uu = - np.log(self.var['P'+suffix])
         uusp = -np.log(self.var['SP'+suffix])
@@ -1756,9 +1916,11 @@ class ECMWF(ECMWF_pure):
         del dPTdPhi, dPTdLam, logP, dudP, dvdP, dPTdP
 
     def _mkinc(self,varss='All' ):
-        """ Calculate the increment on the listed variables or on all the variables in the forecast """
-        if self.F12_open == False:
-            print ('The increment can only be calculated if the forcast file is open')
+        """ Calculate the increment on the listed variables or on all the variables in the forecast
+        Beware that the analysis and forecast should be on same grid. If not make a step to meet this
+        criterion before """
+        if (self.F12_open == False) & (self.CF12_open == False):
+            print ('The increment can only be calculated if a forecast file is open')
             return
         if varss == 'All': listvar = [v for v in ['U','V','O3','VO','T'] if v in self.var]
         else: listvar = varss
@@ -1766,7 +1928,11 @@ class ECMWF(ECMWF_pure):
             if any(x not in self.var for x in [var,var+'F']):
                 print('one of the two fields',var,var+'F','not available')
                 continue
-            self.var[var+'D'] = self.var[var]-self.var[var+'F']
+            if self.var[var].shape != self.var[var+'F'].shape :
+                print('shape of analysis and forecast do not correspond for var ',var)
+            else:
+                self.var[var+'D'] = self.var[var]-self.var[var+'F']
+        return
 
 if __name__ == '__main__':
     date = datetime(2017,8,11,18)
