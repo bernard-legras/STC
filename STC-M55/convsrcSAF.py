@@ -95,7 +95,7 @@ def main():
     parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
     parser.add_argument("-v","--vshift",type=int,choices=[0,1,2,3],help='vertical shift')
-    parser.add_argument("-hm","--hmax",type=int,choices=[732,1716],help='trajectory length (hour)')
+    parser.add_argument("-hm","--hmax",type=int,choices=[732,1200,1716],help='trajectory length (hour)')
     
     # to be updated
     if socket.gethostname() == 'graphium':
