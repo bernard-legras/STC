@@ -240,6 +240,7 @@ class ECMWF_pure(object):
         if savfile is not None:
             plt.savefig(savfile,dpi=300,bbox_inches='tight')
         if show: plt.show()
+        ax.cm_lon = cm_lon
         return ax
 
     def chartlonz(self,var,lat,levs=(None,None),txt=None,log=False,clim=(None,None),
@@ -265,7 +266,9 @@ class ECMWF_pure(object):
         else: l1 = levs[0]
         if levs[1]==None: l2=115
         else: l2 = levs[1]
-        lons = np.arange(self.attr['lons'][0]-0.5*self.attr['dlo'],self.attr['lons'][-1]+self.attr['dlo'],self.attr['dlo'])
+        try: dlo = self.attr['dlo']
+        except: dlo =  (self.attr['lons'][-1] - self.attr['lons'][0])/(len(self.attr['lons'])-1)
+        lons = np.arange(self.attr['lons'][0]-0.5*dlo,self.attr['lons'][-1]+dlo,dlo)
         #if Z variable is available, lets use it, if not use zscale
         try:
             zz1 = 0.5*(self.var['Z'][l1-1:l2+1,pos, :] + self.var['Z'][l1:l2+2,pos,:])/1000
@@ -322,7 +325,9 @@ class ECMWF_pure(object):
         else: l1 = levs[0]
         if levs[1]==None: l2=115
         else: l2 = levs[1]
-        lats = np.arange(self.attr['lats'][0]-0.5*self.attr['dla'],self.attr['lats'][-1]+self.attr['dla'],self.attr['dla'])
+        try: dla = self.attr['dla']
+        except: dla =  (self.attr['lats'][-1] - self.attr['lats'][0])/(len(self.attr['lats'])-1)
+        lats = np.arange(self.attr['lats'][0]-0.5*dla,self.attr['lats'][-1]+dla,dla)
         #if Z variable is available, lets use it, if not use zscale
         try:
             zz1 = 0.5*(self.var['Z'][l1-1:l2+1,:,pos] + self.var['Z'][l1:l2+2,:,pos])/1000
@@ -434,13 +439,16 @@ class ECMWF_pure(object):
             new.var[var] = np.concatenate((self.var[var][...,ll0:],self.var[var][...,:ll0]),axis=ndim-1)
         return new
 
-    def extract(self,latRange=None,lonRange=None,varss=None,vard=None):
-        """ extract all variables on a reduced grid
+    def extract(self,latRange=None,lonRange=None,varss=None,vard=None,levs=None,copy=False):
+        """ Extract all variables on a reduced grid
            varss is a list of the 3D variables
            vard is a list of the 2D variables
+           The reduced grid is defined by latRange and lonRange
+           The 3D extracted fields can be extracted on a range of levels
         """
         # first determine the boundaries of the domain
         new = ECMWF_pure()
+        new.date = self.date
         if (latRange == []) | (latRange == None):
             new.attr['lats'] = self.attr['lats']
             nlatmin = 0
@@ -455,14 +463,21 @@ class ECMWF_pure(object):
         else:
             nlonmin = np.argmax(self.attr['lons']>lonRange[0])-1
             nlonmax = np.argmax(self.attr['lons']>=lonRange[1])+1
+        if levs == None:
+            kup = 0
+            kbot = self.nlev
+        else:
+            kup = max(levs[0],0)
+            kbot = min(levs[1],self.nlev)
         new.attr['lats'] = self.attr['lats'][nlatmin:nlatmax]
         new.attr['lons'] = self.attr['lons'][nlonmin:nlonmax]
         new.nlat = len(new.attr['lats'])
         new.nlon = len(new.attr['lons'])
-        new.nlev = self.nlev
+        new.nlev = kbot - kup
         new.attr['levtype'] = self.attr['levtype']
-        new.attr['levs'] = self.attr['levs']
-        new.attr['plev'] = self.attr['plev']
+        new.attr['levs'] = self.attr['levs'][kup:kbot]
+        try: new.attr['plev'] = self.attr['plev'][kup:kbot]
+        except: pass
         new.project = self.project
         new.date = self.date
         new.attr['La1'] = self.attr['lats'][nlatmin]
@@ -488,7 +503,7 @@ class ECMWF_pure(object):
             list_vars = varss
         for var in list_vars:
             if len(self.var[var].shape) == 3:
-                new.var[var] = self.var[var][:,nlatmin:nlatmax,nlonmin:nlonmax]
+                new.var[var] = self.var[var][kup:kbot,nlatmin:nlatmax,nlonmin:nlonmax]
             else:
                 new.var[var] = self.var[var][nlatmin:nlatmax,nlonmin:nlonmax]
         if vard is None:
@@ -499,6 +514,15 @@ class ECMWF_pure(object):
             list_vars = vard
         for var in list_vars:
             new.d2d[var] = self.d2d[var][nlatmin:nlatmax,nlonmin:nlonmax]
+        # make a copy if the source is not intended to be kept
+        if copy:
+            for var in new.var.keys():
+                new.var[var] = new.var[var].copy()
+            for var in new.d2d.keys():
+                new.d2d[var] = new.d2d[var].copy()
+            for var in new.attr.keys():
+                try: new.attr[var] = new.attr[var].copy()
+                except AttributeError: pass
         return new
 
     def zonal(self,vars=None,vard=None):
@@ -572,22 +596,24 @@ class ECMWF_pure(object):
     def interpolP(self,p,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to a pressure level or a set of pressure levels
             vars must be a list of variables or a single varibale
-            p must be a list of pressures in Pascal
+            p must be a list or np.array of pressures in Pascal
         """
         if 'P' not in self.var.keys():
             self._mkp()
         new = ECMWF_pure()
         if varList == 'All':
             varList = list(self.var.keys())
-            varList.remove('SP')
-            varList.remove('P')
+            try:
+                varList.remove('SP')
+                varList.remove('P')
+            except: pass # in case these variables are already removed
         elif type(varList) == str:
             varList = [varList,]
         for var in varList:
             if var not in self.var.keys():
                 print(var,' not defined')
                 return
-        if type(p) != list:
+        if type(p) in [float,int]:
             p = [p,]
         if 'P' not in self.var.keys():
             print('P not defined')
@@ -640,22 +666,24 @@ class ECMWF_pure(object):
     def interpolZ(self,z,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to an altitude level or a set of altitude levels
             vars must be a list of variables or a single varibale
-            p must be a list of pressures in Pascal
+            z must be a list of altitudes inm
         """
         if 'Z' not in self.var.keys():
             self._mkz()
         new = ECMWF_pure()
         if varList == 'All':
             varList = list(self.var.keys())
-            varList.remove('SP')
-            varList.remove('P')
+            try:
+                varList.remove('SP')
+                varList.remove('P')
+            except: pass # in case these variables are already removed
         elif type(varList) == str:
             varList = [varList,]
         for var in varList:
             if var not in self.var.keys():
                 print(var,' not defined')
                 return
-        if type(z) != list:
+        if type(z) in [float,int]:
             z = [z,]
         if 'Z' not in self.var.keys():
             print('Z not defined')
@@ -720,15 +748,17 @@ class ECMWF_pure(object):
         new = ECMWF_pure()
         if varList == 'All':
             varList = list(self.var.keys())
-            varList.remove('SP')
-            varList.remove('P')
+            try:
+                varList.remove('SP')
+                varList.remove('P')
+            except: pass # in case these variables are already removed
         elif type(varList) == str:
             varList = [varList,]
         for var in varList:
             if var not in self.var.keys():
                 print(var,' not defined')
                 return
-        if type(pt) != list:
+        if type(pt) in [float,int]:
             pt = [pt,]
         ptrev = [-x for x in pt]
         #print(ptrev)
@@ -956,7 +986,7 @@ class ECMWF_pure(object):
                                           + px[k]*self.var['ASLWR'][pos[k]+1,jy,ix] + (1-px[k])*self.var['ASLWR'][pos[k],jy,ix]
         return
 
-    @jit
+    #@jit
     def _WMO(self,highlatOffset=False):
         """ Calculate the WMO tropopause
         When highlatoffset is true the 2K/km criterion is replaced by a 3K/km
@@ -1209,6 +1239,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/data/legras/flexpart_in/ERA5'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/data/ERA5'
+            elif 'Graphium' == socket.gethostname():
+                self.rootdir = 'C:\\cygwin64\\home\\berna\\data\\ERA5'
             else:
                 print('unknown hostname for this dataset')
                 return
@@ -1342,7 +1374,7 @@ class ECMWF(ECMWF_pure):
                      'CSSWR':['mttswrcs','Mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
                      'CSLWR':['mttlwrcs','Mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
                      'PHR':['mttpm','Mean temperature tendency due to parametrerizations','K s**-1'],}
-                self.dname == date.strftime('ERA5DI%Y%m%d')
+                self.dname = date.strftime('ERA5DI%Y%m%d.grb')
             else:
                 # for ERA5: tendencies over 1-hour intervals following file date
                 self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
@@ -1521,15 +1553,19 @@ class ECMWF(ECMWF_pure):
             # todo: provide a fix, eg for JRA-55
             print('missing PV not implemented')
         self.attr['levtype'] = 'hybrid'
-        # Read the surface pressure
+        # Set the surface pressure from sp field
         if logp:
             self.var['SP'] = np.exp(sp['values'])
         else:
             self.var['SP'] = sp['values']
-        #  Reverting lat order
+        # Reverting lat order
         self.attr['lats'] = self.attr['lats'][::-1]
         self.var['SP']   = self.var['SP'][::-1,:]
         self.attr['dla'] = -  self.attr['dla']
+        # Set the hemis parameter for OPZ in the northern hemisphere
+        if (self.project == 'OPZ') & (self.attr['La1']==0):
+            print('set NH')
+            self.hemis = 'NH'
         # Opening of the other files
         self.WT_open = False
         self.VD_open = False
@@ -1854,8 +1890,15 @@ class ECMWF(ECMWF_pure):
             self.var['Z0'] = Z0.var['Z0']
         except:
             self.var['Z0'] = Z0
+        # processing special cases
         if self.hemis == 'SH':
             self.var['Z0'] = self.var['Z0'][0:self.nlat,:]
+        if self.hemis == 'NH':
+            # we assume here the ground geopotential needs to be rotated and truncated
+            # works here for the OPZ case (Californian fire)
+            print('truncate and rotate Z0')
+            ll0 = 181
+            self.var['Z0'] = np.concatenate((self.var['Z0'][self.nlat-1:,ll0:],self.var['Z0'][self.nlat-1:,:ll0]),axis=1)
         self.var['Z'+suffix] =  np.empty(shape=self.var['T'+suffix].shape)
         uu = - np.log(self.var['P'+suffix])
         uusp = -np.log(self.var['SP'+suffix])
