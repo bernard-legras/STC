@@ -596,7 +596,7 @@ class ECMWF_pure(object):
     def interpolP(self,p,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to a pressure level or a set of pressure levels
             vars must be a list of variables or a single varibale
-            p must be a list or np.array of pressures in Pascal
+            p must be a pressure or a list of pressures in Pascal
         """
         if 'P' not in self.var.keys():
             self._mkp()
@@ -666,7 +666,7 @@ class ECMWF_pure(object):
     def interpolZ(self,z,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to an altitude level or a set of altitude levels
             vars must be a list of variables or a single varibale
-            z must be a list of altitudes inm
+            z must be an altitude or a list of altitudes in m
         """
         if 'Z' not in self.var.keys():
             self._mkz()
@@ -1241,6 +1241,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/data/ERA5'
             elif 'Graphium' == socket.gethostname():
                 self.rootdir = 'C:\\cygwin64\\home\\berna\\data\\ERA5'
+            elif 'Reboud' in socket.gethosname():
+                self.rootdir = '/Users/reboudjeehanne/Desktop/STC/ERA5'
             else:
                 print('unknown hostname for this dataset')
                 return
@@ -1374,7 +1376,7 @@ class ECMWF(ECMWF_pure):
                      'CSSWR':['mttswrcs','Mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
                      'CSLWR':['mttlwrcs','Mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
                      'PHR':['mttpm','Mean temperature tendency due to parametrerizations','K s**-1'],}
-                self.dname = date.strftime('ERA5DI%Y%m%d.grb')
+                self.dname = date.strftime('ERA5DI%Y%m%d')
             else:
                 # for ERA5: tendencies over 1-hour intervals following file date
                 self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
@@ -1475,7 +1477,7 @@ class ECMWF(ECMWF_pure):
             except:
                 print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
                 # We do not need to open EN if we only want CAMS at 0 and 12 to calculate assimilation increment
-                if self.project=='OPZ' & date.hour in [0,12]:
+                if (self.project=='OPZ') & (date.hour in [0,12]):
                     pass
                 else:
                     return
