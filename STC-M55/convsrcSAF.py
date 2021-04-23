@@ -8,6 +8,11 @@ We use the reprocessed version which is produced on a truncated image.
 
 Notice that the part time is supposed to start at day+1 0h where day is the day of the flight.
 
+Parameters
+
+version: nothing for version 2016, V2018 for the version 2018
+
+
 Created on Sun Oct  8 14:03:20 2017
 
 @author: Bernard Legras
@@ -22,7 +27,8 @@ import os
 import sys
 import argparse
 import psutil
-import deepdish as dd
+#import deepdish as dd
+import flammkuchen as fl
 import SAFNWCnc
 import geosat
 import constants as cst
@@ -94,8 +100,9 @@ def main():
     parser.add_argument("-f","--flight",type=str,help="flight identifier for balloons")
     parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
-    parser.add_argument("-v","--vshift",type=int,choices=[0,1,2,3],help='vertical shift')
-    parser.add_argument("-hm","--hmax",type=int,choices=[732,1200,1716],help='trajectory length (hour)')
+    parser.add_argument("-v","--vshift",type=int,choices=[0,1,2,3,4],help='vertical shift')
+    parser.add_argument("-hm","--hmax",type=int,choices=[264,732,1200,1716],help='trajectory length (hour)')
+    parser.add_argument("-ve","--version",type=str,choices=["v2018.1",],help="version")
     
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -143,6 +150,7 @@ def main():
     ext= ''
     exth = ''
     vshift = 0
+    version=None
     args = parser.parse_args()
     if args.year is not None: year=args.year
     if args.month is not None: month=args.month
@@ -170,6 +178,8 @@ def main():
     if args.hmax is not None:
         hmax = args.hmax
         ext = ext + '-' + str(hmax)
+    if args.version is not None:
+        version = args.version
             
     # derived parameters
     # number of slices between two outputs
@@ -177,7 +187,11 @@ def main():
     nb_slices = int(dstep/slice_width)
     
     # Update the out_dir with the cloud type and the super paramater
-    out_dir = os.path.join(out_dir,'STC-M55-OUT-SAF-'+super+cloud_type)
+    if version is not None:
+        out_dir = os.path.join(out_dir,'STC-M55-OUT-SAF-'+version+'-'+super+cloud_type)
+    else:
+        out_dir = os.path.join(out_dir,'STC-M55-OUT-SAF-'+super+cloud_type)
+ 
     fdate = datetime(year,month,day)
 
     # Manage the file that receives the print output
@@ -223,8 +237,8 @@ def main():
     satmap = pixmap(gg)
 
     # Build the satellite field generator
-    get_sat = {'MSG1': read_sat(sdate,'MSG1',satmap.zone['MSG1']['dtRange'],satdir['MSG1'],pre=True,vshift=vshift),\
-               'Hima': read_sat(sdate,'Hima',satmap.zone['Hima']['dtRange'],satdir['Hima'],pre=True,vshift=vshift)}
+    get_sat = {'MSG1': read_sat(sdate,'MSG1',satmap.zone['MSG1']['dtRange'],satdir['MSG1'],pre=True,vshift=vshift,version=version),\
+               'Hima': read_sat(sdate,'Hima',satmap.zone['Hima']['dtRange'],satdir['Hima'],pre=True,vshift=vshift,version=version)}
 
     # Read the index file that contains the initial positions
     part0 = readidx107(os.path.join(ftraj,'index_old'),quiet=True)
@@ -443,7 +457,7 @@ def main():
 
     """ End of the procedure and storage of the result """
     #output file
-    dd.io.save(out_file2,prod0,compression='zlib')
+    fl.save(out_file2,prod0,compression='zlib')
     #pickle.dump(prod0,gzip.open(out_file,'wb'))
     # close the print file
     if quiet: fsock.close()
@@ -534,7 +548,7 @@ def convbirth(itime, x,y,p,t,idx_back, flag,xc,yc,pc,tc,age, ptop, ir_start, x0,
 #%%
 """ Function related to satellite read """
 
-def read_sat(t0,sat,dtRange,satdir,pre=False,vshift=0):
+def read_sat(t0,sat,dtRange,satdir,pre=False,vshift=0,version=None):
     """ Generator reading the satellite data.
     The loop is infinite; sat data are called when required until the end of
     the parcel loop. """
@@ -556,8 +570,8 @@ def read_sat(t0,sat,dtRange,satdir,pre=False,vshift=0):
         try:
             # process the blacklist
             if (sat=='MSG1') & (current_time in blacklist): raise BlacklistError()
-            dat = SAFNWCnc.SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox')
-            dat_ct = SAFNWCnc.SAFNWC_CT(current_time,namesat[sat],BBname='SAFBox')
+            dat = SAFNWCnc.SAFNWC_CTTH(current_time,namesat[sat],BBname='SAFBox',version=version)
+            dat_ct = SAFNWCnc.SAFNWC_CT(current_time,namesat[sat],BBname='SAFBox',version=version)
             dat._CTTH_PRESS()
             if vshift > 0: dat._CTTH_TEMPER()
             dat_ct._CT()
@@ -687,6 +701,12 @@ class pixmap(geosat.GridField):
                 dat.var['CTTH_PRESS'][sel] -= 1350*rhog[sel]
                 sel = (dat.var['CT'] == 13) 
                 dat.var['CTTH_PRESS'][sel] -= 800*rhog[sel]
+            elif vshift == 4:
+                rhog = (cst.g/cst.R)*dat.var['CTTH_PRESS']/dat.var['CTTH_TEMPER']
+                sel = (dat.var['CT'] ==9) | (dat.var['CT'] == 8)
+                dat.var['CTTH_PRESS'][sel] -= 1000*rhog[sel]
+                sel = (dat.var['CT'] == 13) 
+                dat.var['CTTH_PRESS'][sel] -= 1000*rhog[sel]
         # test : count the number of valid pixels
         nbValidAfterSel = len(dat.var['CTTH_PRESS'].compressed())
         print('valid pixels before & after selection',zone,nbValidBeforeSel,nbValidAfterSel)
