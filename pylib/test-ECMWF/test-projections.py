@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 from ECMWF_N import ECMWF
 
-dat = ECMWF('FULL-EA',datetime(2020,1,20,6),exp='VOZ')
+dat = ECMWF('FULL-EA',datetime(2020,1,21,6),exp='VOZ')
 dat._get_var('VO')
 dat._get_var('T')
 
