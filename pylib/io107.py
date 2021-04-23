@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # *-* coding: utf-8 -*-
 # pylint: disable=C0103, C0301
-""" 
+"""
 Reads and write 107 format used by TRACZILLA
 For both python 2 and python 3
-It can read and write both normal and gzipped files. The fname is always the 
+It can read and write both normal and gzipped files. The fname is always the
 name of the file without .gz suffix
 @authors Ann'Sophie Tissier and Bernard Legras (legras@lmd;ens.fr)
 @licence CeCILL-C
@@ -87,9 +87,9 @@ def readidx107(fname, quiet=False):
                           stamp_date -12h, undefined for new parcels
                   mode 1: index of active parcels among the list of•
                           parcels at stamp_date t
-                  mode 2: index of active parcels among the lists of 
+                  mode 2: index of active parcels among the lists of
                           parcels at time t-12h, segmented
-                          with first old parcels at time t-12h, then 
+                          with first old parcels at time t-12h, then
                           new parcels at time t-12h (both with their idx_orgn)
 
     A.-S. Tissier/ B. Legras May 2016 : Python version
@@ -114,9 +114,10 @@ def readidx107(fname, quiet=False):
     fid.read(4)  # last fortran record word
 
     # Check that the format matches :
-    if not data['outnfmt'] == 107:
-     raise ValueError('UNKNOWN FILE FORMAT')
-     if not quiet: print(data['lhead'], data['outnfmt'], data['mode']) 
+    if data['outnfmt'] != 107:
+        if not quiet: print(data['lhead'], data['outnfmt'], data['mode'])
+        raise ValueError('UNKNOWN FILE FORMAT')
+
 
     # Get stamp_date (Format YYYYMMDDHHmmss), itime (output time)
     # and step (time step)
@@ -138,10 +139,10 @@ def readidx107(fname, quiet=False):
     data['nact_lastNM'] = unpack('>l', fid.read(4))[0]
     data['nact_lastNH'] = unpack('>l', fid.read(4))[0]
     fid.read(4)  # last fortran record word
-    if not quiet:     
+    if not quiet:
         print(data['numpart'], data['nact'], data['idx_orgn'])
         print(data['nact_lastO'],data['nact_lastNM'],data['nact_lastNH'])
-     
+
      # case provided to read part_000 of M10
     if data['nact']==0:
            print("empty trajectory set")
@@ -153,7 +154,7 @@ def readidx107(fname, quiet=False):
            data['t']=[]
            data['idx_back']=[]
            fid.close()
-           return data 
+           return data
     # Get flag
     fid.read(4)  # first fortran record word (normaly 4 characters, char)
     data['flag'] = asarray(unpack('>'+str(data['nact'])+'l', fid.read(data['nact']*4)))
@@ -234,7 +235,7 @@ def writeidx107(fname, data,cmp=False):
     # Open the binary file:
     if cmp:
         fid=gzip.open(fname,'wb')
-    else:    
+    else:
         fid = open(fname, 'wb')
 
     if data['lhead'] != 3:
