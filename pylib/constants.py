@@ -6,7 +6,8 @@ Physical constants and reference values
 
 @author: Bernard Legras
 """
-R = 287.04
+R = 287.048
+Rv = 461.500
 Cp = 1005.7
 kappa = R/Cp
 g = 9.81
@@ -15,3 +16,4 @@ pref = 101325.
 M = 28.9647
 REarth = 6372000.
 Omega = 2*3.141592653589793/86164
+Zero_Celsius = 273.15
