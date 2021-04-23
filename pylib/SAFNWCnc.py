@@ -6,7 +6,7 @@ from netCDF4 import Dataset
 
 class SAFNWC(geosat.PureSat):
     
-    def __init__(self,date,sat,typ,BBname=None):
+    def __init__(self,date,sat,typ,BBname=None,version=None):
      
         '''
         filename : name of the SAFNWC file
@@ -14,18 +14,12 @@ class SAFNWC(geosat.PureSat):
         self.date = date
         geosat.PureSat.__init__(self,sat)
         # switch the rootdir if SAFBox
-        if BBname == 'SAFBox':
-            safnwc = 'safnwc-SAFBox'
-            root_dir = geosat.alt_root_dir
-        else:
-            safnwc = 'safnwc'
-            root_dir = geosat.root_dir
+        safnwc = 'safnwc'
+        root_dir = geosat.root_dir
             
         if sat=='himawari':
             nam='HIMA08'
-            if BBname == 'SAFBox':
-                nam='HIMAWARI08'
-            region='globeJ'      
+            region='globeJ'
             geosat.read_mask_himawari()
             masksat=geosat.mask_sat['himawari']
             VISIR = 'NR'
@@ -42,7 +36,13 @@ class SAFNWC(geosat.PureSat):
             geosat.read_mask_MSG()        
             masksat=geosat.mask_sat['msg']
         if BBname == 'SAFBox':
+            safnwc = 'safnwc-SAFBox'
+            root_dir = geosat.alt_root_dir
             region = 'FULLAMA'
+            if (sat=='himawari') & (version is None):
+                nam='HIMAWARI08'
+        if version is not None:
+            safnwc = safnwc + '-' + version
         
         filename='S_NWC_'+typ+'_'+nam+'_'+region+'-'+VISIR+'_'+date.strftime("%Y%m%d")+'T'+date.strftime("%H%M")+'00Z.nc'      
         
@@ -113,9 +113,9 @@ class SAFNWC_CMa(SAFNWC):
     Class to read SAF NWC Cloud mask products
     '''
     
-    def __init__(self,date,sat,BBname=None):
+    def __init__(self,date,sat,BBname=None,version=None):
         typ='CMA'  
-        SAFNWC.__init__(self,date,sat,typ,BBname=BBname)
+        SAFNWC.__init__(self,date,sat,typ,BBname=BBname,version=version)
         self.typ = typ
         self.var={}
         self.attr={}   
@@ -218,9 +218,9 @@ class SAFNWC_CT(SAFNWC):
     Class to read SAF NWC Cloud Type products
     '''
 
-    def __init__(self,date,sat,BBname=None):
+    def __init__(self,date,sat,BBname=None,version=None):
         typ='CT'
-        SAFNWC.__init__(self,date,sat,typ,BBname=BBname)
+        SAFNWC.__init__(self,date,sat,typ,BBname=BBname,version=version)
         self.typ = typ
         self.var={}
         self.attr={}   
@@ -280,9 +280,9 @@ class SAFNWC_CTTH(SAFNWC):
     Class to read SAF NWC Cloud Type products
     '''
 
-    def __init__(self,date,sat,BBname=None):
+    def __init__(self,date,sat,BBname=None,version=None):
         typ='CTTH'
-        SAFNWC.__init__(self,date,sat,typ,BBname=BBname)
+        SAFNWC.__init__(self,date,sat,typ,BBname=BBname,version=version)
         self.typ = typ
         self.var={}
         self.attr={}   
