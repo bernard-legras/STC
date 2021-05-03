@@ -15,7 +15,7 @@ from ECMWF_N import ECMWF
 from datetime import datetime, timedelta
 import flammkuchen as fl
 
-maindir = '/data/legras/flexpart_in/STC/ERA5/TPP/HR'
+maindir = '/data/legras/flexpart_in/STC/ERA5/SAFNWC/TPP/HR'
 
 date = datetime(2017,8,1,0)
 
