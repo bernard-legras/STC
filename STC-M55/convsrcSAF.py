@@ -102,7 +102,7 @@ def main():
     parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
     parser.add_argument("-v","--vshift",type=int,choices=[0,1,2,3,4],help='vertical shift')
     parser.add_argument("-hm","--hmax",type=int,choices=[264,732,1200,1716],help='trajectory length (hour)')
-    parser.add_argument("-ve","--version",type=str,choices=["v2018.1",],help="version")
+    parser.add_argument("-ve","--version",type=str,choices=["v2018.1","v2018.1-HVR"],help="version")
     
     # to be updated
     if socket.gethostname() == 'graphium':
@@ -622,9 +622,9 @@ class pixmap(geosat.GridField):
         self.zone['MSG1']['dtRange'] = timedelta(minutes=15)
         self.zone['Hima']['dtRange'] = timedelta(minutes=20)
         # define the slice
-        self.ptop = np.empty(shape=self.geogrid.shapeyx,dtype=np.float)
+        self.ptop = np.empty(shape=self.geogrid.shapeyx,dtype=float)
         self.ptop.fill(p0)
-        self.num  = np.zeros(shape=self.geogrid.shapeyx,dtype=np.int)
+        self.num  = np.zeros(shape=self.geogrid.shapeyx,dtype=int)
         self.range = self.geogrid.box_range
         self.binx = self.geogrid.box_binx
         self.biny = self.geogrid.box_biny
