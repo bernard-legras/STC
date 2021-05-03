@@ -15,7 +15,7 @@ from ECMWF_N import ECMWF
 from datetime import datetime, timedelta
 import argparse
 import flammkuchen as fl
-maindir = '/data/legras/flexpart_in/STC/ERA5/TPP/LR'
+maindir = '/data/legras/flexpart_in/STC/ERA5/SAFNWP/TPP/LR'
 #maindir = '/home/legras/sandbox/TPP'
 
 parser = argparse.ArgumentParser()
