@@ -1228,6 +1228,7 @@ class ECMWF(ECMWF_pure):
             self.EN_expected = True
             self.DI_expected = True
             self.DE_expected = True
+            if (self.exp == 'VOZ') | ('VOZ' in self.exp): self.VOZ_expected = True
             self.offd = 300
 
         elif project=='FULL-EA':
@@ -1420,7 +1421,8 @@ class ECMWF(ECMWF_pure):
         if self.VOZ_expected:
             self.VOZvar = {'VO':['vo','Vorticity','s**-1'],
                            'O3':['o3','Ozone mixing ratio','kg kg**-1']}
-            self.vozname = date.strftime('ERA5VOZ%Y%m%d.grb')
+            if project=='FULL-EA': self.vozname = date.strftime('ERA5VOZ%Y%m%d.grb')
+            if project=='FULL-EI': self.vozname = date.strftime('EIVOZ%Y%m%d.grb')
         if self.QN_expected:
             self.QNvar = {'Q':['q','Specific humidity','kg kg**-1'],
                           'QI':['ciwc','Specific cloud ice water content','kg kg**-1'],
