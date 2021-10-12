@@ -17,7 +17,8 @@ class SAFNWC(geosat.PureSat):
         safnwc = 'safnwc'
         root_dir = geosat.root_dir
             
-        if sat=='himawari':
+        if 'hima' in sat :
+            sat = 'himawari'
             nam='HIMA08'
             region='globeJ'
             geosat.read_mask_himawari()
@@ -39,7 +40,7 @@ class SAFNWC(geosat.PureSat):
             safnwc = 'safnwc-SAFBox'
             root_dir = geosat.alt_root_dir
             region = 'FULLAMA'
-            if (sat=='himawari') & (version is None):
+            if ('hima' in sat) & (version is None):
                 nam='HIMAWARI08'
         if version is not None:
             safnwc = safnwc + '-' + version
@@ -317,38 +318,50 @@ class SAFNWC_CTTH(SAFNWC):
         self.attr['CTTH_TEMPER']['FillValue'] = self.ncid.variables['ctth_tempe']._FillValue
         self.attr['CTTH_TEMPER']['MaskedFill'] = False
         return 
-        
+    
+    def _CTTH_METHOD(self):
+        self.attr['CTTH_METHOD']={}
+        self.var['CTTH_METHOD'] = np.ma.array(data = self.ncid.variables['ctth_method'][:].astype(np.uint16))
+        self.var['CTTH_METHOD'].__setmask__(self.mask)
+        self.var['CTTH_METHOD']._sharedmask=False
+        self.attr['CTTH_METHOD']['flag_mask'] = self.ncid.variables['ctth_method'].flag_mask
+        self.attr['CTTH_METHOD']['flag_values'] = self.ncid.variables['ctth_method'].flag_values
+        self.attr['CTTH_METHOD']['flag_meanings'] = self.ncid.variables['ctth_method'].flag_meanings.split()
+        return
+    
+    def _CTTH_STATUS(self):
+        self.attr['CTTH_STATUS']={}
+        self.var['CTTH_STATUS'] = np.ma.array(data = self.ncid.variables['ctth_status_flag'][:].astype(np.uint16))
+        self.var['CTTH_STATUS'].__setmask__(self.mask)
+        self.var['CTTH_STATUS']._sharedmask=False
+        self.attr['CTTH_STATUS']['flag_mask'] = self.ncid.variables['ctth_status_flag'].flag_mask
+        self.attr['CTTH_STATUS']['flag_values'] = self.ncid.variables['ctth_status_flag'].flag_values
+        self.attr['CTTH_STATUS']['flag_meanings'] = self.ncid.variables['ctth_status_flag'].flag_meanings.split()
+        return
+    
     def _CTTH_QUALITY(self):
         self.attr['CTTH_QUALITY']={}
-        var = self.ncid.variables['ctth_quality'][:]
-        q=np.empty([6,self.ny,self.nx],dtype=np.uint8)
-        q[0,:,:]=var&0x3
-        q[1,:,:]=(var&0x4)>>2 
-        q[2,:,:]=(var&0x38)>>3
-        q[3,:,:]=(var&0xc0)>>6
-        q[4,:,:]=(var&0xf00)>>8
-        q[5,:,:]=(var&0x3000)>>12
-        m=[self.mask,self.mask,self.mask,self.mask,self.mask,self.mask]
-        self.var['CTTH_QUALITY']=np.ma.array(q,mask=m)
+        self.var['CTTH_QUALITY'] = np.ma.array(data = self.ncid.variables['ctth_quality'][:].astype(np.uint16))
+        self.var['CTTH_QUALITY'].__setmask__(self.mask)
         self.var['CTTH_QUALITY']._sharedmask=False
-        self.attr['CTTH_QUALITY']['units']=('0: processing status','1: RTTOV IR availability','2: NWP input data status','3: SEVIRI input data status','4: method','5: Quality of processing')
-        self.attr['CTTH_QUALITY']['flags']=(('0: Non processed','1: Non processed beacause cloud free','2: Processed, cloudy but no results','3: Processed with results'),\
-                   ('0: Non available','1: Available'),\
-                   ('0: Undefined (Space)','1: All NWP parameters available (no thermal inversion)','2: All NWP parameters available (thermal inversion present)',\
-                    '3: Some NWP pressure levels missing (no thermal inversion)','4: Some NWP pressure levels missing (thermal inversion present)',\
-                    '5: At least one mandatory NWP information missing'),\
-                   ('0: Undefined (Space)','1: All useful SEVIRI channels available','2: At least one useful SEVIRI channel missing',\
-                    '3: At least one mandatory SAVIRI channel missing'),\
-                   ('0: Non processed','1: Opaqe cloud, using RTTOV','2: Opaqe cloud, not using RTTOV','3: Intercept method 10.8um/13.4um','4: Intercept method 10.8um/6.2um',\
-                    '5: Intercept method 10.8um/7.3um','6: Radiance Ratioing method 10.8um/13.4um','7: Radiance Ratioing method 10.8um/6.2um','8: Radiance Ratioing method 10.8um/7.3um',\
-                    '9: Spare','10: Spare','11: Spare','12: Spare','13: Opaqe cloud, using RTTOV, in case thermal inversion',\
-                    '14: Spatial smoothing (gap filling in semi-transparent cloud field)','15: Spare for not yet defined methods'),\
-                   ('0: No results (Non-processed, cloud free, no reliable method)','1: Good quality','2: Poor quality'))
+        self.attr['CTTH_QUALITY']['flag_mask'] = self.ncid.variables['ctth_quality'].flag_mask
+        self.attr['CTTH_QUALITY']['flag_values'] = self.ncid.variables['ctth_quality'].flag_values
+        self.attr['CTTH_QUALITY']['flag_meanings'] = self.ncid.variables['ctth_quality'].flag_meanings.split()
+        return
+    
+    def _CTTH_CONDITIONS(self):
+        self.attr['CTTH_CONDITIONS']={}
+        self.var['CTTH_CONDITIONS'] = np.ma.array(data = self.ncid.variables['ctth_conditions'][:].astype(np.uint16))
+        self.var['CTTH_CONDITIONS'].__setmask__(self.mask)
+        self.var['CTTH_CONDITIONS']._sharedmask=False
+        self.attr['CTTH_CONDITIONS']['flag_mask'] = self.ncid.variables['ctth_conditions'].flag_mask
+        self.attr['CTTH_CONDITIONS']['flag_values'] = self.ncid.variables['ctth_conditions'].flag_values
+        self.attr['CTTH_CONDITIONS']['flag_meanings'] = self.ncid.variables['ctth_conditions'].flag_meanings.split()
         return
 
     def _CTTH_HEIGHT(self):       
         self.attr['CTTH_HEIGHT']={}
-        self.var['CTTH_HEIGHT']=np.ma.array(self.ncid.variables['ctth_alti'][:])
+        self.var['CTTH_HEIGHT']=np.ma.array(data=self.ncid.variables['ctth_alti'][:])
         self.var['CTTH_HEIGHT'].__setmask__(self.mask)
         self.var['CTTH_HEIGHT']._sharedmask=False
         self.attr['CTTH_HEIGHT']['units'] = self.ncid.variables['ctth_alti'].units     
