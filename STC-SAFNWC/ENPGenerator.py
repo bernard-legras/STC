@@ -177,7 +177,8 @@ def main():
         file_surf = join(SurfData_dir,date.strftime('%Y'),date.strftime('LNSP%y%m%d'))
 
         # Copying surface data to the output file
-        call(['grib_copy','-w','hour='+str(date.hour),file_surf,file_out])
+        try: call(['grib_copy','-w','hour='+str(date.hour),file_surf,file_out])
+        except: call(['grib_copy','-w','hour='+str(date.hour),file_surf+'.grb',file_out])
 
         # Open the output file in append mode
         fout = open(file_out,'ab')
