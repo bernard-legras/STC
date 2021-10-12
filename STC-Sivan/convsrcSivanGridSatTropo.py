@@ -41,8 +41,6 @@ I_STOP = I_HIT + I_DEAD
 # prior to 18 March 2018
 
 # misc parameters
-# step in the cloudtop procedure
-cloudtop_step = timedelta(hours=12)
 # low p cut in the M55 traczilla runs
 lowpcut = 3000
 # highpcut in the M55 traczilla runs
@@ -52,8 +50,9 @@ highpcut = 50000
 verbose = False
 debug = False
 
-# idx_orgn was not set to 1 but to 0 in M55 and GLO runs
-IDX_ORGN = 0
+# idx_orgn was set 1
+# this is checked
+IDX_ORGN = 1
 
 # Error handling
 class BlacklistError(Exception):
@@ -81,7 +80,10 @@ def main():
     #parser.add_argument("-ct","--cloud_type",type=str,choices=["meanhigh","veryhigh","silviahigh"],help="cloud type filter")
     #parser.add_argument("-k","--diffus",type=str,choices=['01','1','001'],help='diffusivity parameter')
     parser.add_argument("-v","--vshift",type=int,choices=[0,10],help='vertical shift')
-    parser.add_argument("-hm","--hmax",type=int,help='maximum considered integration time')
+    parser.add_argument("-hm","--hmax",type=int,help='maximum considered integration time (hour)')
+    parser.add_argument("-b","--bak",type=str,choices=["y","n"],help="backup (y) or not (n)")
+    parser.add_argument("-c","--cont",type=str,choices=["y","n"],help="continuation (y) or not (n)")
+    parser.add_argument("-bs","--bakstep",type=int,help='backup step (hour)')
 
     # to be updated
     # Define main directories
@@ -128,6 +130,9 @@ def main():
     suffix =''
     quiet = False
     clean0 = True
+    backup = False
+    backup_step = 40 * step
+    restart = False
     #cloud_type = 'silviahigh'
     #diffus = '01'
     vshift = 0
@@ -157,6 +162,13 @@ def main():
         vshift = args.vshift
         if vshift > 0:
             super = '-super'+str(vshift)
+    if args.bak is not None:
+        if args.bak=='y': backup=True
+        else: backup=False
+    if args.bakstep is not None: backup_step = args.bakstep
+    if args.cont is not None:
+        if args.cont=='y': restart=True
+        else: restart=False
 
     # Update the out_dir with the cloud type and the super paramater
     out_dir = os.path.join(out_dir,'STC-Sivan-OUT-GridSat-WMO'+super)
@@ -179,7 +191,7 @@ def main():
         sys.stdout=fsock
 
     # initial time to read the sat files
-    # should be after the end of the flight
+    # should be after the latest launch date
     sdate = date_end + timedelta(days=1)
     print('year',year,'month1',month1,'day1',day1,'month2',month2,'day2',day2)
     print('advect',advect)
@@ -192,7 +204,12 @@ def main():
     # Directory of the backward trajectories (input) and name of the output file
     ftraj = os.path.join(traj_dir,'Sivan-'+advect+'-JAS-'+date_beg.strftime('%Y-')+str(level)+'K')
     out_file2 = os.path.join(out_dir,'Sivan-T2-'+advect+'-JAS-'+date_beg.strftime('%Y-')+str(level)+'K.hdf5')
-
+    # backup file
+    if backup:
+        bak_file_prod0 = os.path.join(out_dir,'Sivan-T2-'+advect+'-JAS-'+date_beg.strftime('%Y-')
+                                      +str(level)+'K-backup-prod0.hdf5')
+        bak_file_params = os.path.join(out_dir,'Sivan-T2-'+advect+'-JAS-'+date_beg.strftime('%Y-')
+                                       +str(level)+'K-backup-params.hdf5')
     """ Initialization of the calculation """
     # Initialize the dictionary of the parcel dictionaries
     partStep={}
@@ -207,7 +224,7 @@ def main():
     part0 = readidx107(os.path.join(ftraj,'part_000'),quiet=False)
     print('numpart',part0['numpart'])
     numpart = part0['numpart']
-    numpart_s = granule_size
+    numpart_s = granule_size # because of parcels launched at time 0
     # stamp_date not set in these runs
     # current_date actually shifted by one day / sdate
     # We assume here that part time is defined from this day at 0h
@@ -236,38 +253,60 @@ def main():
     # truncate eventually to 32 bits at the output stage
 
     # read the part_000 file
-    partStep[0] = readpart107(0,ftraj,quiet=False)
-    # cleaning is necessary for runs starting in the fake restart mode
-    # otherwise all parcels are thought to exit at the first step
-    if clean0:
-        partStep[0]['idx_back']=[]
-    # parcels with longitude east of zero degree are set to negative values
-    partStep[0]['x'][partStep[0]['x']>180] -= 360
+    if not restart:
+        partStep[0] = readpart107(0,ftraj,quiet=False)
+        # cleaning is necessary for runs starting in the fake restart mode
+        # otherwise all parcels are thought to exit at the first step
+        if clean0:
+            partStep[0]['idx_back']=[]
+        # parcels with longitude east of zero degree are set to negative values
+        partStep[0]['x'][partStep[0]['x']>180] -= 360
 
     # number of hists and exits
     nhits = 0
     nexits = 0
     ndborne = 0
-    nnew = granule_size
+    nnew = granule_size # because of parcels launched at time 0
     nold = 0
+    offset = 0
 
     # initialize datsat to None to force first read
     datsat = None
 
-    # used to get non borne parcels
-    new = np.empty(part0['numpart'],dtype='bool')
-    new.fill(False)
+    # used to get non borne parcels (presently unused)
+    #new = np.empty(part0['numpart'],dtype='bool')
+    #new.fill(False)
 
     print('Initialization completed')
 
+    if restart:
+        print('restart run')
+        try:
+            params = fl.load(bak_file_params)
+            prod0 = fl.load(bak_file_prod0)
+        except:
+            print('cannot load backup')
+            return -1
+        #[offset,nhits,nexits,nold,ndborne,nnew,idx1,numpart_s,current_date] = params['params']
+        [offset,nhits,nexits,nold,ndborne,nnew,current_date] = params['params']
+        idx1 = 620501
+        numpart_s = 620500
+        partStep[offset] = readpart107(offset,ftraj,quiet=True)
+        partStep[offset]['x'][partStep[offset]['x']>180] -= 360
+        # Initialize sat and ERA5 yield one step ahead as a precaution
+        get_sat = read_sat(current_date + dstep,dtRange,pre=True,vshift=vshift)
+        get_ERA5 = read_ERA5(current_date + dstep,dtRange,pre=True)
+
     """ Main loop on the output time steps """
-    for hour in range(step,hmax+1,step):
+    for hour in range(step+offset,hmax+1,step):
         pid = os.getpid()
         py = psutil.Process(pid)
         memoryUse = py.memory_info()[0]/2**30
         print('memory use: {:4.2f} gb'.format(memoryUse))
         # Get rid of dictionary no longer used
-        if hour >= 2*step: del partStep[hour-2*step]
+        if hour >= 2*step:
+            try: del partStep[hour-2*step]
+            except : print('nothing to delete')
 
         # Read the new data
         partStep[hour] = readpart107(hour,ftraj,quiet=True)
@@ -325,7 +364,7 @@ def main():
             else:
                 idx_act = partpost['idx_back'][-granule_quanta:]
             # Generate the list of indexes that should be found in this range
-            # ACHTUNG ACHTUNG : this works because IDX_ORGN=1, FIX THAT
+            # This should works for both values of IDX_orgn
             idx_theor = np.arange(idx1,numpart_s+IDX_ORGN)
             # Find the missing indexes in idx_act (make a single line after validation)
             kept_borne = np.in1d(idx_theor,idx_act,assume_unique=True)
@@ -450,6 +489,10 @@ def main():
         # check that nlive + nhits + nexits = numpart, should be true after the first day
         if part0['numpart'] != nexits + nhits + nlive + ndborne:
             print('@@@ ACHTUNG numpart not equal to sum ',part0['numpart'],nexits+nhits+nlive+ndborne)
+
+        if backup & (hour%backup_step == 0):
+            fl.save(bak_file_prod0,prod0)
+            fl.save(bak_file_params,{'params':[hour,nhits,nexits,nold,ndborne,nnew,idx1,numpart_s,current_date]})
 
     """ End of the procedure and storage of the result """
     pid = os.getpid()
