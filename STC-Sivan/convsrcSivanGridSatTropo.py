@@ -287,10 +287,7 @@ def main():
         except:
             print('cannot load backup')
             return -1
-        #[offset,nhits,nexits,nold,ndborne,nnew,idx1,numpart_s,current_date] = params['params']
-        [offset,nhits,nexits,nold,ndborne,nnew,current_date] = params['params']
-        idx1 = 620501
-        numpart_s = 620500
+        [offset,nhits,nexits,nold,ndborne,nnew,idx1,numpart_s,current_date] = params['params']
         partStep[offset] = readpart107(offset,ftraj,quiet=True)
         partStep[offset]['x'][partStep[offset]['x']>180] -= 360
         # Initialize sat and ERA5 yield one step ahead as a precaution
@@ -354,10 +351,9 @@ def main():
         These parcels are stored in the last part of posact, at most
         the last granule_quanta parcels. """
         if numpart_s < numpart :
-            print("manage deadborne",flush=True)
             # First index of the current quanta """
             numpart_s += granule_quanta
-            print("idx1",idx1," numpart_s",numpart_s)
+            print("manage deadborne idx1",idx1," numpart_s",numpart_s)
             # Extract the last granule_size indexes from posacti, this is where the new parcels should be
             if hour==step:
                 idx_act = partpost['idx_back']
@@ -453,8 +449,6 @@ def main():
                     datsat.geogrid.box_range[0,0],datsat.geogrid.box_range[1,0],datsat.geogrid.stepx,\
                     datsat.geogrid.stepy,datsat.geogrid.box_binx,datsat.geogrid.box_biny)
 
-            sys.stdout.flush()
-
         """ End of of loop on slices """
 
         """ INSERT HERE CODE FOR PARCELS ENDING BY AGE
@@ -463,7 +457,6 @@ def main():
         and is wrongly processed as crossed."""
         # Check the age limit (easier to do it here)
         if len(partante['idx_back']) >0:
-            print("Manage age limit",flush=True)
             age_sec = part0['ir_start'][partante['idx_back']-IDX_ORGN]-partante['itime']
             IIold_o = age_sec > (age_bound-(step/24)) * 86400
             IIold_o = IIold_o & ((prod0['flag_source'][partante['idx_back']-IDX_ORGN] & I_STOP)==0)
@@ -475,20 +468,25 @@ def main():
             prod0['src']['p'][idx_IIold-IDX_ORGN] = partante['p'][j_IIold_o]
             prod0['src']['t'][idx_IIold-IDX_ORGN] = partante['t'][j_IIold_o]
             prod0['src']['age'][idx_IIold-IDX_ORGN] = ((part0['ir_start'][idx_IIold-IDX_ORGN]- partante['itime'])/86400)
-            print("number of IIold ",len(idx_IIold))
+            print("manage age limit: number of IIold ",len(idx_IIold))
             nold += len(idx_IIold)
 
-        # find parcels still alive       if kept_p.sum()==0:
+        # find parcels still alive after processing this step  if kept_p.sum()==0:
         try:
             nlive = ((prod0['flag_source'][partpost['idx_back']-IDX_ORGN] & I_DEAD) == 0).sum()
             n_nohit = ((prod0['flag_source'][partpost['idx_back']-IDX_ORGN] & I_HIT) == 0).sum()
         except:
             nlive = 0
             n_nohit =0
-        print('end hour ',hour,'  numact', partpost['nact'], ' nexits',nexits,' nhits',nhits, ' nlive',nlive,' nohit',n_nohit,' nold',nold)
+
         # check that nlive + nhits + nexits = numpart, should be true after the first day
-        if part0['numpart'] != nexits + nhits + nlive + ndborne:
-            print('@@@ ACHTUNG numpart not equal to sum ',part0['numpart'],nexits+nhits+nlive+ndborne)
+        if numpart_s != nexits + nhits + nlive + ndborne + nold:
+            print('@@@ ACHTUNG numpart_s not equal to sum ',numpart_s,nexits+nhits+nlive+ndborne+nold)
+
+        print('end hour ',hour,'  numact', partpost['nact'], ' nexits',nexits,' nhits',nhits,
+              ' nlive',nlive,' nohit',n_nohit,' nold',nold,flush=True)
+
+        sys.stdout.flush()
 
         if backup & (hour%backup_step == 0):
             fl.save(bak_file_prod0,prod0)
