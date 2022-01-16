@@ -15,7 +15,7 @@ from os.path import join
 
 from ECMWF_N import ECMWF
 
-date = datetime(2017,8,23,3)
+date = datetime(2017,9,10,3)
 dat = ECMWF('FULL-EA',date,exp='VOZ')
 
 #date = datetime(2020,1,23,6)
