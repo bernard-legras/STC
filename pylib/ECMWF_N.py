@@ -116,7 +116,7 @@ class ECMWF_pure(object):
 
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),figsize=(11,4),
              axf=None,cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,
-             sat_H=35785831,xylim=False,polar=False):
+             sat_H=35785831,xylim=False,polar=False,horizontal=False):
         """ Chart for data fields """
         # test existence of key field
         if var in self.var.keys():
@@ -233,8 +233,11 @@ class ECMWF_pure(object):
         #axpos = ax.get_position()
         #pos_x = axpos.x0 + axpos.width + 0.01
         #pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
-        pos_cax = ax.inset_axes([1.02,0,0.06,1])
-        cbar=plt.colorbar(iax,cax=pos_cax)
+        if horizontal:
+            cbar=plt.colorbar(iax,location='bottom')
+        else:
+            pos_cax = ax.inset_axes([1.02,0,0.06,1])
+            cbar=plt.colorbar(iax,cax=pos_cax)
         cbar.ax.tick_params(labelsize=fs)
 
         if savfile is not None:
@@ -455,7 +458,7 @@ class ECMWF_pure(object):
             nlatmax = len(self.attr['lats'])
         else:
             nlatmin = np.argmax(self.attr['lats']>latRange[0])-1
-            nlatmax = np.argmax(self.attr['lats']>latRange[1])
+            nlatmax = np.argmax(self.attr['lats']>=latRange[1])
         if (lonRange == []) | (lonRange == None):
             new.attr['lons'] = self.attr['lons']
             nlonmin = 0
