@@ -8,7 +8,10 @@ This script generates the part_000 file containing parcels on a given potential 
 for a backward run. The parcels are generated on a one degree centered grid (xcent, ycent) in the
 target_range which is also used for the analysis of forward runs from convection.
 The parcels are launched every hour which means 8500 x 24 parcels per day in the
-standard setting or 18360000 over 90 days
+standard setting or 18768000 over 92 days (if JAS)
+As the first grid is on the date_end (on 0h if no hour given)
+and the last grid is on the date_beg (at 0h if no hour given), the total number of parcels is
+18768000 + 8500 = 18776500
 
 The output is produced as a part_000 format 107 file which can be used in a STC
 backward run. The format 107 is used for convenience even if the flag field is of no use
@@ -17,11 +20,11 @@ Launch time from stamp date, theta level, see format 107 index)
 
 Possible bug: the horizontal interpolation is defined in longitude between 0 and 359
 as this is the longitude range in the ERA5 FULL. In interp3d_thet a 2d interpolation
-is defined on this grid and then used for longitudes that go from -9.5 to 159., hence 
-in a extrapolation mode for the range [-9.5 -0.5]. It does not seem to cause many problems 
+is defined on this grid and then used for longitudes that go from -9.5 to 159., hence
+in a extrapolation mode for the range [-9.5 -0.5]. It does not seem to cause many problems
 as the parcels in this range are of negligible importance (they mostly escape immediately)
 and the extrapolation does not induces a strong variation of theta (which is found to be the
-nominal value +- 0.5K). Nevertheless this should be corrected by shifting the data grid in 
+nominal value +- 0.5K). Nevertheless this should be corrected by shifting the data grid in
 longitude.
 
 @author: Bernard Legras
@@ -220,7 +223,7 @@ if __name__ == '__main__':
     # data -> data.shit2west(-179)
     if not quiet:
         print('load first EN file ',date_f)
-    T_p, P_p = interp3d_thet(data,theta_level) # First interpolation to the theta level 
+    T_p, P_p = interp3d_thet(data,theta_level) # First interpolation to the theta level
     delta_pf = ENint.total_seconds()
     numpart = 0
 
