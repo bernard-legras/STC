@@ -65,7 +65,7 @@ from scipy.interpolate import interp1d,RegularGridInterpolator
 from mki2d import tohyb
 import constants as cst
 import gzip,pickle
-from numba import jit
+#from numba import jit
 #from copy import copy,deepcopy
 
 MISSING = -999
@@ -116,7 +116,8 @@ class ECMWF_pure(object):
 
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),figsize=(11,4),
              axf=None,cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,
-             sat_H=35785831,xylim=False,polar=False,horizontal=False):
+             sat_H=35785831,xylim=False,polar=False,horizontal=False,xaxis_touch=True,cm_lon=0,
+             xlocs=None,interx=30):
         """ Chart for data fields """
         # test existence of key field
         if var in self.var.keys():
@@ -140,29 +141,29 @@ class ECMWF_pure(object):
         # it is unclear how the trick with cm_lon works in imshow but it does
         # the web says that it is tricky to plot data accross dateline with cartopy
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
-        cm_lon =0
+        #cm_lon = cm_lon
         ctrl_lon=(self.attr['lons'][0]+self.attr['lons'][-1])/2
         ctrl_lat=(self.attr['lats'][0]+self.attr['lats'][-1])/2
         # guess that we want to plot accross dateline
-        if self.attr['lons'][-1] > 180: cm_lon=180
-        projplate = ccrs.PlateCarree(central_longitude=cm_lon)
-        if polar: ctrl_lat = 90*np.sign(ctrl_lat)
-        if projec == 'ortho':
-            proj=ccrs.Orthographic(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
-        elif projec == 'azimuthalequi':
-            proj=ccrs.AzimuthalEquidistant(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
-        elif projec == 'nearside':
-            proj=ccrs.NearsidePerspective(central_longitude=ctrl_lon,central_latitude=ctrl_lat,satellite_height=sat_H)
-        elif projec == 'lambert':
-            proj=ccrs.LambertConformal(central_longitude=ctrl_lon,central_latitude=ctrl_lat,cutoff=self.attr['lats'][0],)
-        elif projec is None:
-            proj=projplate
         if figsize is not None:
             fig = plt.figure(figsize=figsize)
             fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
-        if axf is None: ax = plt.axes(projection = proj)
+        if axf is None:          
+            if polar: ctrl_lat = 90*np.sign(ctrl_lat)
+            if projec == 'ortho':
+                proj=ccrs.Orthographic(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
+            elif projec == 'azimuthalequi':
+                proj=ccrs.AzimuthalEquidistant(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
+            elif projec == 'nearside':
+                proj=ccrs.NearsidePerspective(central_longitude=ctrl_lon,central_latitude=ctrl_lat,satellite_height=sat_H)
+            elif projec == 'lambert':
+                proj=ccrs.LambertConformal(central_longitude=ctrl_lon,central_latitude=ctrl_lat,cutoff=self.attr['lats'][0],)
+            elif projec is None:
+                if self.attr['lons'][-1] > 180: cm_lon=180
+                proj = ccrs.PlateCarree(central_longitude=cm_lon)
+            ax = plt.axes(projection = proj)
         else: ax = axf
-        iax = ax.imshow(scale*buf, transform=projplate, interpolation='nearest',
+        iax = ax.imshow(scale*buf, transform=ax.projection, interpolation='nearest',
                         extent=[self.attr['lons'][0]-cm_lon, self.attr['lons'][-1]-cm_lon,
                                 self.attr['lats'][0], self.attr['lats'][-1]],
                         origin='lower', aspect=aspect,cmap=cmap,clim=clim)
@@ -189,9 +190,9 @@ class ECMWF_pure(object):
             del yy
             ax.set_xlim(np.min(x1),np.max(x1))
             ax.set_ylim(np.min(y1),np.max(y1))
-        xlocs = None
-        if cm_lon == 180:
-                interx = 30
+        #xlocs = None
+        if (cm_lon == 180) & xaxis_touch:
+                #interx = 30
                 # next multiple of interx on the east of the western longitude boundary
                 minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
                 xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
@@ -201,7 +202,7 @@ class ECMWF_pure(object):
             gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
         if cLines is not None:
-                 ax.contour(self.var[var][lev,:,:],transform=projplate,extent=(self.attr['lons'][0]-cm_lon,
+                 ax.contour(self.var[var][lev,:,:],transform=ax.projection,extent=(self.attr['lons'][0]-cm_lon,
                                self.attr['lons'][-1]-cm_lon,self.attr['lats'][0],self.attr['lats'][-1]),levels=cLines,origin='lower')
         ax.add_feature(feature.NaturalEarthFeature(
                 category='cultural',
