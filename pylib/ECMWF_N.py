@@ -1246,13 +1246,12 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/data/ERA5'
             elif 'Graphium' == socket.gethostname():
                 self.rootdir = 'C:\\cygwin64\\home\\berna\\data\\ERA5'
-            elif 'Reboud' in socket.gethosname():
-                self.rootdir = '/Users/reboudjeehanne/Desktop/STC/ERA5'
             else:
                 print('unknown hostname for this dataset')
                 return
             self.globalGrid = True
             self.EN_expected = True
+            if (self.exp == 'NZKoobor') | ('NZKoobor' in self.exp): self.rootdir = os.path.join(self.rootdir,'NZKoobor')
             if (self.exp == 'VOZ') | ('VOZ' in self.exp): self.VOZ_expected = True
             if (self.exp == 'DI') | ('DI' in self.exp): self.DI_expected = True
             if (self.exp == 'QN') | ('QN' in self.exp): self.QN_expected = True
