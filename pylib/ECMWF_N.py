@@ -148,7 +148,7 @@ class ECMWF_pure(object):
         if figsize is not None:
             fig = plt.figure(figsize=figsize)
             fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
-        if axf is None:          
+        if axf is None:
             if polar: ctrl_lat = 90*np.sign(ctrl_lat)
             if projec == 'ortho':
                 proj=ccrs.Orthographic(central_longitude=ctrl_lon,central_latitude=ctrl_lat)
@@ -1573,6 +1573,10 @@ class ECMWF(ECMWF_pure):
         if (self.project == 'OPZ') & (self.attr['La1']==0):
             print('set NH')
             self.hemis = 'NH'
+        # Set the hemis parameter for OPZ in the southern hemisphere
+        if (self.project == 'OPZ') & (self.attr['La2']==0):
+            print('set SH')
+            self.hemis = 'SH'
         # Opening of the other files
         self.WT_open = False
         self.VD_open = False
@@ -1899,11 +1903,12 @@ class ECMWF(ECMWF_pure):
             self.var['Z0'] = Z0
         # processing special cases
         if self.hemis == 'SH':
-            self.var['Z0'] = self.var['Z0'][0:self.nlat,:]
+            print('truncate and rotate Z0')
+            ll0 = 181
+            self.var['Z0'] = np.concatenate((self.var['Z0'][:self.nlat,ll0:],self.var['Z0'][0:self.nlat,:ll0]),axis=1)
         if self.hemis == 'NH':
             # we assume here the ground geopotential needs to be rotated and truncated
             # works here for the OPZ case (Californian fire)
-            print('truncate and rotate Z0')
             ll0 = 181
             self.var['Z0'] = np.concatenate((self.var['Z0'][self.nlat-1:,ll0:],self.var['Z0'][self.nlat-1:,:ll0]),axis=1)
         self.var['Z'+suffix] =  np.empty(shape=self.var['T'+suffix].shape)
