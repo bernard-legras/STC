@@ -16,7 +16,7 @@ import socket
 
 if socket.gethostname() == 'Graphium':
     STC_database = 'C:\\cygwin64\\home\\berna\\data\\STC\\STC-M55\\database'
-elif 'ciclad' in socket.gethostname():
+elif 'spirit' in socket.gethostname():
     STC_database ='/home/legras/STC/STC-M55/database'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
     STC_database = '/home/legras//STC/STC-M55/database'
