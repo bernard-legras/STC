@@ -13,7 +13,7 @@ import geosat
 from datetime import datetime
 #import matplotlib.pyplot as plt
 #%%
-date=datetime(year=2017,month=3,day=15,hour=19)
+date=datetime(year=2022,month=1,day=27,hour=15)
 # Himawari read and plot
 ah=geosat.Himawari(date)
 gg=geosat.GeoGrid('FullAMA')
@@ -30,7 +30,7 @@ p1._sat_togrid('IR0')
 a1.show('IR0')
 p1.chart('IR0',txt='BT msg1')
 # MSG3 read and plot
-a3=geosat.MSG3(date)
+a3=geosat.MSG0(date)
 a3._get_IR0()
 p3=geosat.SatGrid(a3,gg)
 p3._sat_togrid('IR0')
@@ -66,12 +66,12 @@ p1._sza_correc()
 p3._sza_correc()
 ph.chart('IR0',txt='BT himawari corrected')
 p1.chart('IR0',txt='BT msg1 corrected')
-p3.chart('IR0',txt='BT msg3 corrected')
+p3.chart('IR0',txt='BT msg0 corrected')
 # difference and plot
 dd.var['IR0']=p1.var['IR0']-ph.var['IR0']
 dd.chart('IR0',clim=(-10,10),txt='BT msg1-himawari corrected')
 dd.var['IR0']=p3.var['IR0']-p1.var['IR0']
-dd.chart('IR0',clim=(-10,10),txt='BT msg3-msg1 corrected')
+dd.chart('IR0',clim=(-10,10),txt='BT msg0-msg1 corrected')
 #%% Test patching
 patched=p1.patch(ph,90,'IR0')
 patched.chart('IR0',txt='patched image')
