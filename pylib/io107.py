@@ -99,7 +99,7 @@ def readidx107(fname, quiet=False):
     data = {}
 
     # Open the binary file :
-    print('open '+fname)
+    if not quiet: print('open '+fname)
     try:
         fid = open(fname, 'rb')
     except IOError:
