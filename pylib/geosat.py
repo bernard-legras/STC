@@ -28,15 +28,13 @@ Look in the test-geosat directory for examples of usages
 
 @author: Bernard Legras
 """
-
-from __future__ import absolute_import, division, print_function
-from __future__ import unicode_literals
-
 from netCDF4 import Dataset
 import numpy as np
 #import tables
 import socket
 import os
+import glob
+import copy
 import pickle,gzip
 from scipy.interpolate import NearestNDInterpolator
 #from mpl_toolkits.basemap import Basemap
@@ -50,14 +48,15 @@ import sza_correc
 # To be replaced by your own environment variables
 # Notice: sats_dir and gridsat not used in the module
 #         alt_root_dir used in the derived module SAFNWCnc for SAFBox
-if socket.gethostname() == 'Graphium':
-    sats_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
-    root_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats'
+if socket.gethostname() == 'Mentat':
+    sats_dir = 'C:\\cygwin64\\home\\berna\\data\\sats'
+    root_dir = 'C:\\cygwin64\\home\\berna\\data\\sats'
     alt_root_dir = root_dir
-    gridsat = 'C:\\cygwin64\\home\\berna\\data\\STC\\sats\\gridsat'
-elif 'ciclad' in socket.gethostname():
+    gridsat = 'C:\\cygwin64\\home\\berna\\data\\sats\\gridsat'
+elif 'spirit' in socket.gethostname():
     sats_dir = '/data/legras/sats'
-    root_dir = '/bdd/STRATOCLIM/data'
+    #root_dir = '/bdd/STRATOCLIM/data'
+    root_dir = '/data/legras/sats'
     alt_root_dir = '/data/legras/flexpart_in/SAFNWC'
     gridsat = '/bdd/FCDR/GridSat-B1'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
@@ -86,12 +85,14 @@ elif 'icare' in socket.gethostname():
     alt_root_dir = root_dir
     gridsat = 'undefined'
 else:
-     print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
+    print ('geosat CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
 
 # This mask is made to palliate the incomplete masking of himawari data
 # and the supposedly moving mask of MSG satellites
 mask_sat={}
 lonlat_sat={}
+
+RGB = ('Ash','Dust')
 
 # Read the masks used for the image read by this package
 # The masks are defined in the STC/sats subdirectories
@@ -100,10 +101,15 @@ def read_mask_himawari():
 def read_mask_MSG():
     # change after 14/05/2017: use the mask based on the data and not that from the lonlat file
     mask_sat['msg'] = pickle.load(gzip.open(os.path.join(root_dir,'msg1','mask.pkl'),'rb'))
+def read_mask_GOES():
+    mask_sat['goes'] = pickle.load(gzip.open(os.path.join(root_dir,'goesw','mask.pkl'),'rb'))
+    print('read goes mask')
 # Read the satellite lonlat file to generate the projection
+# The longitude are in the [-180,180] interval for GOESE, MSG0 & MSG1
+# and in the [0,360] for HIMAWARI and GOESW
 def read_lonlat(sat):
     if sat == 'msg1':
-        satin = 'msg3'
+        satin = 'msg0'
     else:
         satin = sat
     lonlat_sat[sat] = pickle.load(gzip.open(os.path.join(root_dir,satin,'lonlat.pkl'),'rb'))
@@ -179,6 +185,8 @@ class GeoSat(PureSat):
             read_mask_himawari()
         if ('msg' in filename) & ('msg' not in mask_sat.keys()):
             read_mask_MSG()
+        if ('goes' in filename) & ('goes' not in mask_sat.keys()):
+            read_mask_GOES()
         try:
             PureSat.__init__(self,self.sat)
         except:
@@ -202,11 +210,43 @@ class GeoSat(PureSat):
             self._get_IR0()
         return self.var['IR0']
 
+    def _get_IR0(self):
+        '''
+        Reads the infrared windows and stores a masked array in self
+        '''
+        self._get_var('IR0')
+
     def get_var(self,field):
         ''' Reads a general variable if not already stored, so needed, stores and returns it '''
         if field not in self.var.keys():
             self._get_var(field)
         return self.var[field]
+
+    def _get_var(self,field):
+        '''
+        Reads a general variable and stores a masked array in self
+        '''
+        if field in self.channels:
+            self.var[field] = np.ma.array(self.ncid.variables[field][:])
+            fill_value = self.ncid.variables[field][:].fill_value
+        elif field in self.alias_channels:
+            self.var[field] = np.ma.array(self.ncid.variables[self.alias_channels[field]][:])
+            fill_value = self.ncid.variables[self.alias_channels[field]][:].fill_value
+        else:
+            print('No field ',field,' on ',self.sat)
+
+        if 'msg' in self.sat:
+            self.var[field].__setmask__(mask_sat['msg'])
+        elif 'hima' in self.sat:
+            self.var[field].__setmask__(mask_sat['himawari'])
+        else:
+            self.var[field].__setmask__(mask_sat['goes'])
+        self.var[field]._sharedmask=False
+        try:
+            self.fill_value[field] = fill_value
+        except:
+            self.fill_value[field] = None
+        return
 
     def degrad_IR0(self):
         ''' Makes a new geosat image with averaged total radiance from the estimated brightness temperature
@@ -225,36 +265,52 @@ class GeoSat(PureSat):
         target.nlon = target.var['IR0'].shape[1]
         return target
 
+    def _mk_Ash(self,RGBType='Ash'):
+        ''' Generate a variable containing the Eumetsat Ash recipe.
+            It read first the needed channels IR0, IR120, IR85 if they are not available.
+        '''
+        for var in ['IR0','IR120','IR85']:
+            if var in self.var.keys(): pass
+            elif self.alias_channels[var] in self.var.keys():
+                self.var[var] = self.var[self.alias_channels[var]]
+            else: self._get_var(var)
+        if RGBType == 'Ash':
+            clim0 = (243,303)
+            clim1 = (-4,5)
+            clim2 = (-4,2)
+        elif RGBType == 'Dust':
+            clim0 = (261,289)
+            clim1 = (0,15)
+            clim2 = (-4,2)
+
+        DBT1 = self.var['IR0']-self.var['IR85']
+        DBT2 = self.var['IR120']-self.var['IR0']
+
+        # rescaling and clipping
+        B = np.ma.clip((self.var['IR0']-clim0[0])/(clim0[1]-clim0[0]),0,1)
+        G = np.ma.clip((DBT1-clim1[0])/(clim1[1]-clim1[0]),0,1)
+        if RGBType == 'Dust':
+            G = G**0.4
+        R = np.ma.clip((DBT2-clim2[0])/(clim2[1]-clim2[0]),0,1)
+
+        self.var[RGBType] = np.ma.dstack([R,G,B])
+        # in order to set the masjked pixels to white color
+        self.var[RGBType].data[self.var[RGBType].mask] = 1
+        return
+
+
+#%%
 class MSG(GeoSat):
-    ''' Specific code for MSG SEVIRI instruments '''
+    ''' Specific code for MSG SEVIRI instruments.
+        MSG scans from south to north in 715 s.
+        MSG longitudes in (-180,180] range
+    '''
     def __init__(self, filename):
         GeoSat.__init__(self,filename)
-
-    def _get_IR0(self):
-        '''
-        Reads the infrared windows and stores a masked array in self
-        '''
-        self.var['IR0'] = np.ma.array(self.ncid.variables['IR_108'][:])
-        self.var['IR0'].__setmask__(mask_sat['msg'])
-        self.var['IR0']._sharedmask=False
-        try:
-            self.fill_value['IR0'] = self.ncid.variables['IR_108'][:].fill_value
-        except:
-            self.fill_value['IR0'] = None
-        return
-
-    def _get_var(self,field):
-        '''
-        Reads a general variable and stores a masked array in self
-        '''
-        self.var[field] = np.ma.array(self.ncid.variables[field][:])
-        self.var[field].__setmask__(mask_sat['msg'])
-        self.var[field]._sharedmask=False
-        try:
-            self.fill_value[field] = self.ncid.variables[field][:].fill_value
-        except:
-            self.fill_value[field] = None
-        return
+        self.channels = ('IR_016','IR_039','IR_087','IR_097','IR_108','IR_120','IR_134',
+                         'VIS_006','VIS_008','WV_062','WV_073')
+        self.alias_channels= {'IR0':'IR_108','IR120':'IR_120','IR85':'IR_087',
+                                  'WV1':'WV_062','WV2':'WV_073','VIS6':'VIS_006','VIS8':'VIS_008'}
 
 class MSG1(MSG):
     ''' Specific code for MSG1 '''
@@ -266,39 +322,77 @@ class MSG1(MSG):
                 date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
         MSG.__init__(self,fullname)
 
-class MSG3(MSG):
-    ''' Specific code for MSG3 '''
+class MSG0(MSG):
+    ''' Specific code for MSG0 '''
     def __init__(self,date):
-        self.sat='msg3'
+        self.sat='msg0'
         self.date =  date
-        file = 'Mmultic3kmNC4_msg03_' + date.strftime("%Y%m%d%H%M") + '.nc'
-        fullname = os.path.join(root_dir, 'msg3', 'netcdf',
+        # what follows need to be improved with a while or for construction
+        file = 'Mmultic3kmNC4_msg0?_' + date.strftime("%Y%m%d%H%M") + '.nc'
+        temp_fullname = os.path.join(root_dir, 'msg0', 'netcdf',
                 date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
+        try:
+            fullname = glob.glob(temp_fullname)[0]
+        except IndexError:
+            print('NOT FOUND ',temp_fullname)
         MSG.__init__(self,fullname)
 
+#%%
 class Himawari(GeoSat):
-    ''' Specific code for Himawari '''
+    ''' Specific code for Himawari.
+        Himawari scans from north to south in 558 s.
+    '''
     def __init__(self,date):
         self.sat = 'himawari'
         self.date =  date
         self.file = 'Jmultic2kmNC4_hima08_' + date.strftime("%Y%m%d%H%M") + '.nc'
         self.fullname = os.path.join(root_dir, 'himawari', 'netcdf',
                 date.strftime("%Y"), date.strftime("%Y_%m_%d"),self.file)
+        self.channels = ('IR_016','IR_022','IR_038','IR_085','IR_096','IR_104','IR_112','IR_123','IR_132',
+                     'VIS004','VIS005','VIS006','VIS008','WV_062','WV_069','WV_073')
+        self.alias_channels= {'IR0':'IR_104','IR120':'IR_123','IR85':'IR_085',
+                              'WV1':'WV_062','WV2':'WV_073','VIS6':'VIS006','VIS8':'VIS008'}
         GeoSat.__init__(self,self.fullname)
 
-    def _get_IR0(self):
-        self.var['IR0'] = self.ncid.variables['IR_104'][:]
-        self.var['IR0'].__setmask__(mask_sat['himawari'])
-        self.var['IR0']._sharedmask=False
-        self.fill_value['IR0'] = self.var['IR0'].fill_value
-        return
+#%%
+class GOES(GeoSat):
+    ''' Specific code for MSG SEVIRI instruments
+        GOES scans from north to south in 571 s.
+    '''
+    def __init__(self, filename):
+        GeoSat.__init__(self,filename)
+        self.channels = ('IR_039','IR_062','IR_069','IR_073','IR_085','IR_096','IR_103','IR_112','IR_123','IR_133',
+                         'VIS_004','VIS_006','VIS_008','VIS_014','VIS_016','VIS_O22')
+        self.alias_channels= {'IR0':'IR_103','IR120':'IR_123','IR85':'IR_085',
+                                  'WV1':'IR_062','WV2':'IR_073','VIS6':'VIS_006','VIS8':'VIS_008'}
 
-    def _get_var(self,field):
-        self.var[field] = self.ncid.variables[field][:]
-        self.var[field].__setmask__(mask_sat['himawari'])
-        self.var[field]._sharedmask=False
-        self.fill_value[field] = self.var[field].fill_value
-        return
+class GOESW(GOES):
+    ''' Specific code for GOESW '''
+    def __init__(self,date):
+        self.sat = 'goesw'
+        self.date =  date
+        file = 'Wmultic2kmNC4_goes1?_' + date.strftime("%Y%m%d%H%M") + '.nc'
+        temp_fullname = os.path.join(root_dir, 'goesw', 'netcdf',
+                date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
+        try:
+            fullname = glob.glob(temp_fullname)[0]
+        except IndexError:
+            print('NOT FOUND ',temp_fullname)
+        GOES.__init__(self,fullname)
+
+class GOESE(GOES):
+    ''' Specific code for GOESE '''
+    def __init__(self,date):
+        self.sat='goese'
+        self.date =  date
+        file = 'Emultic2kmNC4_goes1?_' + date.strftime("%Y%m%d%H%M") + '.nc'
+        temp_fullname = os.path.join(root_dir, 'goese', 'netcdf',
+                date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
+        try:
+            fullname = glob.glob(temp_fullname)[0]
+        except IndexError:
+            print('NOT FOUND ',temp_fullname)
+        GOES.__init__(self,fullname)
 
 #%%
 class GeoGrid(object):
@@ -324,9 +418,21 @@ class GeoGrid(object):
         elif gridtype == "MSG1Full":
             self.box_range = np.array([[-38.5,121.5],[-80,80]])
             self.box_binx = 4000; self.box_biny = 4000;
-        elif gridtype == "MSG3Full":
+        elif gridtype == "MSG0Full":
             self.box_range = np.array([[-80,80],[-80,80]])
             self.box_binx = 4000; self.box_biny = 4000;
+        elif gridtype == "GOESEFull":
+            self.box_range = np.array([[-155,5],[-80,80]])
+            self.box_binx = 4000; self.box_biny = 4000;
+        elif gridtype == "GOESWFull":
+            self.box_range = np.array([[143,303],[-80,80]])
+            self.box_binx = 4000; self.box_biny = 4000;
+        elif gridtype == "LatBand1":
+            self.box_range = np.array([[-180,180.01],[-35,10]])
+            self.box_binx = 3600; self.box_biny = 450;
+        elif gridtype == "LatBand2":
+            self.box_range = np.array([[-160,200.01],[-35,10]])
+            self.box_binx = 3600; self.box_biny = 450;
         elif gridtype == "NAG":
             self.box_range = np.array([[67.5,91.5],[9.,33.]])
             self.box_binx = 240; self.box_biny = 240;
@@ -386,9 +492,9 @@ class GeoGrid(object):
             print ('Lo1 outside bounds')
         if (Lo2 > self.box_range[0,1]) | (Lo2 < self.box_range[0,0]):
             print ('Lo2 outside bounds')
-        if (La1 > self.box_range[1,1]) | (Lo1 < self.box_range[1,0]):
+        if (La1 > self.box_range[1,1]) | (La1 < self.box_range[1,0]):
             print ('La1 outside bounds')
-        if (La2 > self.box_range[1,1]) | (Lo1 < self.box_range[1,0]):
+        if (La2 > self.box_range[1,1]) | (La2 < self.box_range[1,0]):
             print ('La2 outside bounds')
         # find boundaries as nearest neigbours in the mother grid
         eps=0.0001
@@ -405,7 +511,7 @@ class GeoGrid(object):
         other.corner = [lowlon,lowlat]
         return other
 
-    def _mkandsav_lookup(self,sat,BB=None,BBname=''):
+    def _mkandsav_lookup(self,sat,BB=None,BBname='',dist=False):
         ''' Generates the lookup table for a pair sat and grid.
         Usage: first generate the grid object
                gg = geosat.GeoGrid(gridtype)
@@ -435,7 +541,7 @@ class GeoGrid(object):
         # get the lon lat grid from the satellite
         try:
             if sat == 'msg1':
-                satin = 'msg3'
+                satin = 'msg0'
             else:
                 satin = sat
             print(os.path.join(root_dir,satin,'lonlat.pkl'))
@@ -467,9 +573,14 @@ class GeoGrid(object):
         interp = NearestNDInterpolator(lonlat_c.T,idx)
         print('NearestNDInterpolator done')
         # Building the lookup table for the grid
-        lookup = np.empty(shape=(len(self.ycent),len(self.xcent)), dtype=int)
+        if ('LatBand' in self.gridtype) & (sat in ('himawari','goesw')):
+            xcent = copy.copy(self.xcent)
+            xcent = xcent%360
+        else:
+            xcent = self.xcent
+        lookup = np.empty(shape=(len(self.ycent),len(xcent)), dtype=int)
         for j in range(len(self.ycent)):
-            lookup[j,:] = interp(np.asarray([self.xcent,np.repeat(self.ycent[j],len(self.xcent))]).T)
+            lookup[j,:] = interp(np.asarray([xcent,np.repeat(self.ycent[j],len(xcent))]).T)
         self.lookup_dict={}
         self.lookup_dist={}
         self.lookup_dict['lat_g']=self.ycent
@@ -479,8 +590,8 @@ class GeoGrid(object):
         # closest neighbour on the Himawari grid that can be used to generate a
         # mask to disclose meshes which are too far from their nearest neighbour
         # distance is in a regular lon lat space
-        self.lookup_dist['distx']=abs(np.repeat([self.xcent],len(self.ycent),axis=0).flatten()-(lonlat['lon'].compressed())[self.lookup_dict['lookup_f']])
-        self.lookup_dist['disty']=abs((np.repeat([self.ycent],len(self.xcent),axis=0).T).flatten()-(lonlat['lat'].compressed())[self.lookup_dict['lookup_f']])
+        self.lookup_dist['distx']=abs(np.repeat([xcent],len(self.ycent),axis=0).flatten()-(lonlat['lon'].compressed())[self.lookup_dict['lookup_f']])
+        self.lookup_dist['disty']=abs((np.repeat([self.ycent],len(xcent),axis=0).T).flatten()-(lonlat['lat'].compressed())[self.lookup_dict['lookup_f']])
         # Calculate a mask with distance less than 0.2 in longitude or latitude
         offset=0.2
         self.lookup_dict['mask']=(self.lookup_dist['distx']>offset) | (self.lookup_dist['disty']>offset)
@@ -491,7 +602,7 @@ class GeoGrid(object):
             BBname = '_'+BBname
         pickle.dump(self.lookup_dict,gzip.open(os.path.join(root_dir,sat,
               'lookup_'+sat+'_'+self.gridtype+BBname+'.pkl'),'wb',pickle.HIGHEST_PROTOCOL))
-        pickle.dump(self.lookup_dist,gzip.open(os.path.join(root_dir,sat,
+        if dist: pickle.dump(self.lookup_dist,gzip.open(os.path.join(root_dir,sat,
               'lookup_dist_'+sat+'_'+self.gridtype+BBname+'.pkl'),'wb',pickle.HIGHEST_PROTOCOL))
 
 #%%
@@ -509,45 +620,64 @@ class GridField(object):
         # Initializes var dictionary
         self.var={}
 
-    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True, xlocs=None, figsize= None, show=True):
+    def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True, xlocs=None, figsize= None,
+              axf=None, show=True, cm_lon=None,left=True,bottom=True):
         # test existence of key field
         if field not in self.var.keys():
             print ('undefined field')
             return
+        fs = 15
         if subgrid == None:
             geogrid = self.geogrid
         else:
             geogrid = subgrid
-        if 'FullAMA' in geogrid.gridtype:
-            fig = plt.figure(figsize=[10, 6])
-        elif figsize is not None:
-            fig = plt.figure(figsize=figsize)
+        if axf is None:
+            if 'FullAMA' in geogrid.gridtype:
+                fig = plt.figure(figsize=[10, 6])
+            elif figsize is not None:
+                fig = plt.figure(figsize=figsize)
+            else:
+                fig = plt.figure(figsize=[11,4])
+            fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
+
+            # it is unclear how the trick with cm_lon works in imshow but it does
+            # the web says that it is tricky to plot data accross dateline with cartopy
+            # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
+            if cm_lon is None:
+                cm_lon =0
+                # guess that we want to plot accross dateline
+                if geogrid.box_range[0,1]> 181: cm_lon = 180
+                if 'LatBand2' in geogrid.gridtype: cm_lon = 20
+            proj = ccrs.PlateCarree(central_longitude=cm_lon)
+            ax = plt.axes(projection = proj)
+            if 'LatBand2' in geogrid.gridtype:
+                ax.set_extent([-160,199.9, -35,10], crs=ccrs.PlateCarree())
         else:
-            fig = plt.figure(figsize=[11,4])
-        fig.subplots_adjust(hspace=0,wspace=0.5,top=0.925,left=0.)
-        fs = 15
-        # it is unclear how the trick with cm_lon works in imshow but it does
-        # the web says that it is tricky to plot data accross dateline with cartopy
-        # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
-        cm_lon =0
+            ax = axf
+            if cm_lon == None:
+                print('cm_lon should be defined')
+                return -1
         # guess that we want to plot accross dateline
-        if geogrid.box_range[0,1]> 181: cm_lon = 180
-        proj = ccrs.PlateCarree(central_longitude=cm_lon)
-        ax = plt.axes(projection = proj)
+
         if subgrid == None:
             plotted_field = self.var[field]
         else:
             # extraction in subgrid
             plotted_field = self.var[field][geogrid.corner[1]:geogrid.corner[1]+geogrid.box_biny,
                                             geogrid.corner[0]:geogrid.corner[0]+geogrid.box_binx]
-        iax = ax.imshow(plotted_field, transform=proj, interpolation='nearest',
+        if 'LatBand2' in geogrid.gridtype:
+            iax = ax.imshow(plotted_field, transform=ax.projection, interpolation='nearest',
+                    extent=[-160-cm_lon,199.99-cm_lon, -35,10],
+                    origin='lower', aspect=1.,cmap=cmap,clim=clim)
+        else:
+            iax = ax.imshow(plotted_field, transform=ax.projection, interpolation='nearest',
                     extent=geogrid.box_range.flatten()-np.array([cm_lon,cm_lon,0,0]),
                     origin='lower', aspect=1.,cmap=cmap,clim=clim)
-        ax.add_feature(feature.NaturalEarthFeature(
-            category='cultural',
-            name='admin_1_states_provinces_lines',
-            scale='50m',
-            facecolor='none'))
+        # ax.add_feature(feature.NaturalEarthFeature(
+        #     category='cultural',
+        #     name='admin_1_states_provinces_lines',
+        #     scale='50m',
+        #     facecolor='none'))
         ax.coastlines('50m')
         #ax.add_feature(feature.BORDERS)
         # The grid adjusts automatically with the following lines
@@ -559,18 +689,21 @@ class GridField(object):
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
         gl.top_labels = False
         gl.right_labels = False
+        if not left: gl.left_labels = False
+        if not bottom: gl.bottom_labels = False
         #gl.xformatter = LONGITUDE_FORMATTER
         #gl.yformatter = LATITUDE_FORMATTER
         gl.xlabel_style = {'size': fs}
         gl.ylabel_style = {'size': fs}
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
-        plt.title(txt,fontsize=fs)
+        ax.set_title(txt,fontsize=fs)
         # plot adjusted colorbar and show
-        axpos = ax.get_position()
-        pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
-        pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
-        cbar=fig.colorbar(iax,cax=pos_cax)
-        cbar.ax.tick_params(labelsize=fs)
+        if field not in RGB:
+            axpos = ax.get_position()
+            pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
+            pos_cax = ax.figure.add_axes([pos_x,axpos.y0,0.04,axpos.height])
+            cbar=plt.colorbar(iax,cax=pos_cax)
+            cbar.ax.tick_params(labelsize=fs)
         if show: plt.show(block=block)
         return ax
 
@@ -583,12 +716,16 @@ class GridField(object):
             return -1
         patched = GridField(self.geogrid)
         patching_x = np.where(self.geogrid.xcent > lon)[0][0]
+        # Add here processing of lonmax
         if type(var) == str:
             var1 = [var,]
         else:
             var1 = var
         for vv in var1:
-            patched.var[vv] = np.ma.concatenate([self.var[vv][:,:patching_x],other.var[vv][:,patching_x:]],axis=1)
+            if var in RGB:
+                patched.var[vv] = np.ma.concatenate([self.var[vv][:,:patching_x,:],other.var[vv][:,patching_x:,:]],axis=1)
+            else:
+                patched.var[vv] = np.ma.concatenate([self.var[vv][:,:patching_x],other.var[vv][:,patching_x:]],axis=1)
         return patched
 
     def _filt(self,var,threshold,sign='equal'):
@@ -660,10 +797,10 @@ class SatGrid(GridField):
             # try to load the lookup table
             if 'lookup' not in globals():
                 lookup = {}
-                lookup_dist = {}
+                #lookup_dist = {}
             try:
                 lookup[self.cname]=pickle.load(gzip.open(os.path.join(root_dir,self.sat,'lookup_'+self.cname+'.pkl'),'rb'))
-                lookup_dist[self.cname]=pickle.load(gzip.open(os.path.join(root_dir,self.sat,'lookup_dist_'+self.cname+'.pkl'),'rb'))
+                #lookup_dist[self.cname]=pickle.load(gzip.open(os.path.join(root_dir,self.sat,'lookup_dist_'+self.cname+'.pkl'),'rb'))
                 print('lookup table loaded for ',self.cname)
             except:
                 print ('Lookup table for this grid and sat does not exist yet.')
@@ -679,8 +816,18 @@ class SatGrid(GridField):
             return
         # doing the conversion and setting the mask of the data which cannot be defined in
         # the target grid
-        self.var[field] = np.ma.array(self.geosat.var[field].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx))
-        self.var[field].__setmask__(lookup[self.cname]['mask'].reshape(self.geogrid.shapeyx))
+        if field in RGB:
+            self.var[field] = np.ma.dstack([
+                np.ma.array(self.geosat.var[field][...,0].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx)),
+                np.ma.array(self.geosat.var[field][...,1].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx)),
+                np.ma.array(self.geosat.var[field][...,2].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx)),
+                ])
+            buf = lookup[self.cname]['mask'].reshape(self.geogrid.shapeyx)
+            self.var[field].__setmask__(np.dstack([buf,buf,buf]))
+            self.var[field].data[self.var[field].mask] = 1
+        else:
+            self.var[field] = np.ma.array(self.geosat.var[field].compressed()[lookup[self.cname]['lookup_f']].reshape(self.geogrid.shapeyx))
+            self.var[field].__setmask__(lookup[self.cname]['mask'].reshape(self.geogrid.shapeyx))
         self.var[field]._sharedmask=False
         try:
             self.fill_value = self.geosat.fill_value[field]
