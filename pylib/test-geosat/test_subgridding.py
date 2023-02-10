@@ -13,7 +13,7 @@ import geosat
 from datetime import datetime
 #import matplotlib.pyplot as plt
 #%%
-date=datetime(year=2017,month=3,day=15,hour=19)
+date=datetime(year=2022,month=1,day=27,hour=15)
 # Himawari read and plot
 ah=geosat.Himawari(date)
 gg=geosat.GeoGrid('MesoInd')
@@ -28,3 +28,5 @@ subgg=gg.subgrid([73,97,11,35])
 print(subgg.box_range)
 print(subgg.shapexy)
 ph.chart('IR0',txt='subgrid test',subgrid=subgg)
+
+# 
