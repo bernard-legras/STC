@@ -1201,6 +1201,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'
             elif 'camelot' in socket.gethostname():
                 self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'
+            elif 'spirit' in socket.gethostname():
+                self.rootdir = '/proju/flexpart/flexpart_in/STC/ERA5'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/STC'
             elif socket.gethostname() in ['grapelli','coltrane','zappa','couperin','puccini','lalo']:
@@ -1223,6 +1225,8 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/proju/flexpart/flexpart_in/NIRgrid'
             elif 'camelot' in socket.gethostname():
                 self.rootdir = '/proju/flexpart/flexpart_in/NIRgrid'
+            elif 'spirit' in socket.gethostname():
+                self.rootdir = '/proju/flexpart/flexpart_in/NIRgrid'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/data/NIRgrid'
             else:
@@ -1242,9 +1246,11 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/data/legras/flexpart_in/ERA5'
             elif 'climserv' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/ERA5'
+            elif 'spirit' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/ERA5'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/data/ERA5'
-            elif 'Graphium' == socket.gethostname():
+            elif socket.gethostname() in ['Mentat','Graphium']:
                 self.rootdir = 'C:\\cygwin64\\home\\berna\\data\\ERA5'
             else:
                 print('unknown hostname for this dataset')
@@ -1268,8 +1274,12 @@ class ECMWF(ECMWF_pure):
                 self.rootdir = '/data/legras/flexpart_in/OPZ'
             elif 'climserv' in socket.gethostname():
                 self.rootdir = '/data/legras/flexpart_in/OPZ'
+            elif 'spirit' in socket.gethostname():
+                self.rootdir = '/data/legras/flexpart_in/OPZ'
             elif 'satie' in socket.gethostname():
                 self.rootdir = '/data/OPZ'
+            elif socket.gethostname() in ['Mentat','Graphium']:
+                self.rootdir = 'C:\\cygwin64\\home\\berna\\data\\OPZ'
             else:
                 print('unknown hostname for this dataset')
                 return
@@ -1380,7 +1390,10 @@ class ECMWF(ECMWF_pure):
                      'CSSWR':['mttswrcs','Mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
                      'CSLWR':['mttlwrcs','Mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
                      'PHR':['mttpm','Mean temperature tendency due to parametrerizations','K s**-1'],}
-                self.dname = date.strftime('ERA5DI%Y%m%d')
+                # The name of the file is from the previous day if the time is in the first 6 hours of the day
+                if date.hour < 6: dateDI = date - timedelta(days=1)
+                else: dateDI = date  
+                self.dname = dateDI.strftime('ERA5DI%Y%m%d.grb')
             else:
                 # for ERA5: tendencies over 1-hour intervals following file date
                 self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
@@ -1480,7 +1493,7 @@ class ECMWF(ECMWF_pure):
             try:
                 self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
             except:
-                print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
+                print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
                 # We do not need to open EN if we only want CAMS at 0 and 12 to calculate assimilation increment
                 if (self.project=='OPZ') & (date.hour in [0,12]):
                     pass
@@ -1491,7 +1504,7 @@ class ECMWF(ECMWF_pure):
         validityDate = int(self.date.strftime('%Y%m%d'))
         validityTime = int(self.date.strftime('%H%M'))
         self.EN_open = True
-        step
+ 
         try:
             sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
             logp = True
@@ -1588,14 +1601,14 @@ class ECMWF(ECMWF_pure):
         self.CF12_open = False
         if self.DI_expected & ~self.DI_open:
             try:
-                self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
+                self.drb = pygrib.open(os.path.join(self.rootdir,dateDI.strftime('DI-true/grib/%Y/%m'),self.dname))
                 self.DI_open = True
             except:
                 try:
-                    self.drb = pygrib.open(os.path.join(self.rootdir,date.strftime('DI-true/%Y'),self.dname))
+                    self.drb = pygrib.open(os.path.join(self.rootdir,dateDI.strftime('DI-true/%Y'),self.dname))
                     self.DI_open = True
                 except:
-                    print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
+                    print('cannot open '+os.path.join(self.rootdir,dateDI.strftime('DI-true/grib/%Y/%m'),self.dname))
         if self.CAMS_expected & ~self.CAMS_open:
             try:
                 self.crb = pygrib.open(os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
@@ -1893,14 +1906,16 @@ class ECMWF(ECMWF_pure):
             print('T or P undefined')
             return
         try:
-            with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'.pkl')) as f:
+            with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'_MM.pkl')) as f:
                 Z0 = pickle.load(f)
-        except:
-            print('Cannot read ground geopotential altitude')
-        try:
             self.var['Z0'] = Z0.var['Z0']
         except:
-            self.var['Z0'] = Z0
+            print('Cannot read ground geopotential from MM, try as a single field')
+            try: 
+                with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'.pkl')) as f:
+                    self.var['Z0'] = pickle.load(f)
+            except:
+                print('Cannot even read Z0 as a single field, please fix')
         # processing special cases
         if self.hemis == 'SH':
             print('truncate and rotate Z0')
