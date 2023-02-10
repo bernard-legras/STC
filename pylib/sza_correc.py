@@ -17,9 +17,6 @@ To be included in a next version.
 @author: Bernard Legras
 """
 
-from __future__ import absolute_import, division, print_function
-from __future__ import unicode_literals
-
 from struct import unpack
 import numpy as np
 import os
@@ -28,10 +25,10 @@ from datetime import datetime, timedelta
 
 # input dir where the Joyce coefficients are stored
 # todo : repliace by environment variables
-if socket.gethostname() == 'Graphium':
+if socket.gethostname() == 'Mentat':
     INPUT_dir = 'C:\\cygwin64\\home\\berna\\data\\STC\\pylib\\INPUT'
-elif 'ciclad' in socket.gethostname():
-    INPUT_dir = '/home/legras/TRAJ/pylib'
+elif 'spirit' in socket.gethostname():
+    INPUT_dir = '/home/legras/STC/pylib'
 elif ('climserv' in socket.gethostname()) | ('polytechnique' in socket.gethostname()):
     INPUT_dir = '/home/stratocl/TRAJ/pylib/INPUT'
 elif socket.gethostname() == 'satie':
@@ -43,7 +40,7 @@ elif socket.gethostname() == 'gort':
 elif 'icare' in socket.gethostname():
     INPUT_dir = '/home/b.legras/pylib/INPUT'
 else:
-     print ('CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
+     print ('sza_correct CANNOT RECOGNIZE HOST - DO NOT RUN ON NON DEFINED HOSTS')
 
 za_bin = 64
 bt_bin = 170
