@@ -40,6 +40,7 @@ class SAFNWC(geosat.PureSat):
             safnwc = 'safnwc-SAFBox'
             root_dir = geosat.alt_root_dir
             region = 'FULLAMA'
+            # Meaning of the following lines
             if ('hima' in sat) & (version is None):
                 nam='HIMAWARI08'
         if version is not None:
@@ -54,7 +55,9 @@ class SAFNWC(geosat.PureSat):
                 # AAA, ZZZ not found in the original string
             self.time = '' # apply your error handling
                          
-        fullname = os.path.join(root_dir,sat,safnwc,'netcdf',date.strftime("%Y"),
+        #fullname = os.path.join(root_dir,sat,safnwc,'netcdf',date.strftime("%Y"),
+        #                    date.strftime("%Y_%m_%d"),filename)
+        fullname = os.path.join(root_dir,sat,safnwc,date.strftime("%Y"),
                             date.strftime("%Y_%m_%d"),filename)
         #print (fullname)
         try: 
@@ -383,4 +386,3 @@ class SAFNWC_CTTH(SAFNWC):
         self.attr['CTTH_EFFECT']['intercept'] = self.ncid.variables['ctth_effectiv'].add_offset
         self.attr['CTTH_EFFECT']['FillValue'] = self.ncid.variables['ctth_effectiv']._Fillvalue
         return
-        
