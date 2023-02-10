@@ -14,7 +14,7 @@ from os.path import basename, join
 import numpy as np
 import socket
 
-if socket.gethostname() == 'Graphium':
+if socket.gethostname() == 'Mentat':
     STC_database = 'C:\\cygwin64\\home\\berna\\data\\STC\\STC-M55\\database'
 elif 'spirit' in socket.gethostname():
     STC_database ='/home/legras/STC/STC-M55/database'
