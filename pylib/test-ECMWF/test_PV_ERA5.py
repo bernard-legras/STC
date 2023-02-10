@@ -38,3 +38,4 @@ dat._mkpv()
 #%%
 #dats = dat.interpolPT([350,370,395,430],varList=['PV'],lonRange=(50,120),latRange=(0,50))
 dats = dat.extract(varss='All',lonRange=(240,330),latRange=(-80,-30))
+dats.show('PV',30)
