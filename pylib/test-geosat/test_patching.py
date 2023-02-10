@@ -3,7 +3,7 @@
 """
 Created on Mon 29 May 2017
 
-This script tests and demonstrates the patching features of geosat.py. 
+This script tests and demonstrates the patching features of geosat.py.
 
 @author: Bernard Legras
 """
@@ -13,7 +13,7 @@ import geosat
 from datetime import datetime
 #import matplotlib.pyplot as plt
 #%%
-date=datetime(year=2017,month=3,day=15,hour=19)
+date=datetime(year=2022,month=1,day=27,hour=15)
 # Himawari read
 hima=geosat.Himawari(date)
 # read IR0
@@ -41,7 +41,7 @@ for grid in ['KTM','MesoInd','FullAMA']:
     # angular correction for 'IR0'
     phima._sza_correc()
     pmsg1._sza_correc()
-   
+
     # patching
     ppt = pmsg1.patch(phima,90.75,['IR0','WV_062','WV_073'])
     ppt.chart('IR0',txt='brightness temperature infrared 10.8')
