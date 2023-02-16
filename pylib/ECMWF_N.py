@@ -117,7 +117,7 @@ class ECMWF_pure(object):
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),figsize=(11,4),
              axf=None,cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,
              sat_H=35785831,xylim=False,polar=False,horizontal=False,xaxis_touch=True,cm_lon=0,
-             xlocs=None,interx=30):
+             xlocs=None,interx=30,mkcbar=True,imreturn=False):
         """ Chart for data fields """
         # test existence of key field
         if var in self.var.keys():
@@ -234,21 +234,24 @@ class ECMWF_pure(object):
         #axpos = ax.get_position()
         #pos_x = axpos.x0 + axpos.width + 0.01
         #pos_cax = fig.add_axes([pos_x,axpos.y0,0.04,axpos.height])
-        if horizontal:
-            cbar=plt.colorbar(iax,location='bottom')
-        else:
-            pos_cax = ax.inset_axes([1.02,0,0.06,1])
-            cbar=plt.colorbar(iax,cax=pos_cax)
-        cbar.ax.tick_params(labelsize=fs)
+        if mkcbar:
+            if horizontal:
+                cbar=plt.colorbar(iax,location='bottom')
+            else:
+                pos_cax = ax.inset_axes([1.02,0,0.06,1])
+                cbar=plt.colorbar(iax,cax=pos_cax)
+            cbar.ax.tick_params(labelsize=fs)
 
         if savfile is not None:
             plt.savefig(savfile,dpi=300,bbox_inches='tight')
         if show: plt.show()
         ax.cm_lon = cm_lon
-        return ax
+        if imreturn: return ax,iax
+        else: return ax
 
     def chartlonz(self,var,lat,levs=(None,None),txt=None,log=False,clim=(None,None),
-             cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4),axf=None,ylabel=True):
+             cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4),axf=None,
+             ylabel=True,mkcbar=True,imreturn=False):
         """ Plot a lon x alt section for a given latitude
         """
         if var not in self.var.keys():
@@ -299,12 +302,14 @@ class ECMWF_pure(object):
             plt.title(txt,fontsize=fs)
         #cax = fig.add_axes([0.91, 0.21, 0.03, 0.6])
         #cbar = fig.colorbar(iax,cax=cax)
-        cbar = plt.colorbar(iax,ax=ax,orientation='vertical')
-        cbar.ax.tick_params(labelsize=fs)
+        if mkcbar:
+            cbar = plt.colorbar(iax,ax=ax,orientation='vertical')
+            cbar.ax.tick_params(labelsize=fs)
         if savfile is not None:
             plt.savefig(savfile,bbox_inches='tight',dpi=300)
         if show: plt.show()
-        return ax
+        if imreturn: return ax,iax
+        else: return ax
 
     def chartlatz(self,var,lon,levs=(None,None),txt=None,log=False,clim=(None,None),
              cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4),axf=None,ylabel=True):
@@ -1392,7 +1397,7 @@ class ECMWF(ECMWF_pure):
                      'PHR':['mttpm','Mean temperature tendency due to parametrerizations','K s**-1'],}
                 # The name of the file is from the previous day if the time is in the first 6 hours of the day
                 if date.hour < 6: dateDI = date - timedelta(days=1)
-                else: dateDI = date  
+                else: dateDI = date
                 self.dname = dateDI.strftime('ERA5DI%Y%m%d.grb')
             else:
                 # for ERA5: tendencies over 1-hour intervals following file date
@@ -1504,7 +1509,7 @@ class ECMWF(ECMWF_pure):
         validityDate = int(self.date.strftime('%Y%m%d'))
         validityTime = int(self.date.strftime('%H%M'))
         self.EN_open = True
- 
+
         try:
             sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
             logp = True
@@ -1911,7 +1916,7 @@ class ECMWF(ECMWF_pure):
             self.var['Z0'] = Z0.var['Z0']
         except:
             print('Cannot read ground geopotential from MM, try as a single field')
-            try: 
+            try:
                 with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'.pkl')) as f:
                     self.var['Z0'] = pickle.load(f)
             except:
