@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+    #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Thu Apr  6 15:08:05 2017
@@ -30,6 +30,7 @@ Look in the test-geosat directory for examples of usages
 """
 from netCDF4 import Dataset
 import numpy as np
+from datetime import datetime
 #import tables
 import socket
 import os
@@ -38,7 +39,7 @@ import copy
 import pickle,gzip
 from scipy.interpolate import NearestNDInterpolator
 #from mpl_toolkits.basemap import Basemap
-from cartopy import feature
+#from cartopy import feature
 #from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
@@ -124,16 +125,17 @@ class PureSat(object):
     '''
     def __init__(self,sat):
         self.var={}
+        self.attr={}
         self.fill_value={}
         self.sat = sat
 
-    def show(self,field,clim=[190.,300.],txt=''):
+    def show(self,field,clim=[190.,300.],txt='',cmap=None):
         ''' Shows the field in the satellite geometry '''
         if field not in self.var:
             print('undefined field')
             return
         fig = plt.figure()
-        iax=plt.imshow(self.var[field],clim=clim)
+        iax=plt.imshow(self.var[field],clim=clim,cmap=cmap)
         cax = fig.add_axes([0.91, 0.15, 0.03, 0.7])
         fig.colorbar(iax, cax=cax)
         fig.suptitle(txt)
@@ -165,6 +167,12 @@ class PureSat(object):
                     self.sublon,self.sublat)
         self.var['IR0'] += sza.reshape([self.nlat,self.nlon])
         return
+
+    def _merge(self,other):
+       for var in other.var.keys():
+           self.var[var] = other.var[var]
+       for atr in other.attr.keys():
+           self.attr[atr] = other.attr[atr]
 
 class GeoSat(PureSat):
     '''
@@ -321,6 +329,16 @@ class MSG1(MSG):
         fullname = os.path.join(root_dir, 'msg1', 'netcdf',
                 date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
         MSG.__init__(self,fullname)
+        
+class MSG2(MSG):
+    ''' Specific code for MSG2 '''
+    def __init__(self,date):
+        self.sat = 'msg2'
+        self.date =  date
+        file = 'Imultic3kmNC4_msg02_' + date.strftime("%Y%m%d%H%M") + '.nc'
+        fullname = os.path.join(root_dir, 'msg2', 'netcdf',
+                date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
+        MSG.__init__(self,fullname)
 
 class MSG0(MSG):
     ''' Specific code for MSG0 '''
@@ -345,9 +363,16 @@ class Himawari(GeoSat):
     def __init__(self,date):
         self.sat = 'himawari'
         self.date =  date
-        self.file = 'Jmultic2kmNC4_hima08_' + date.strftime("%Y%m%d%H%M") + '.nc'
-        self.fullname = os.path.join(root_dir, 'himawari', 'netcdf',
-                date.strftime("%Y"), date.strftime("%Y_%m_%d"),self.file)
+        #self.file = 'Jmultic2kmNC4_hima0?_' + date.strftime("%Y%m%d%H%M") + '.nc'
+        file = 'Jmultic2kmNC4_hima0?_' + date.strftime("%Y%m%d%H%M") + '.nc'
+        #self.fullname = os.path.join(root_dir, 'himawari', 'netcdf',
+        #        date.strftime("%Y"), date.strftime("%Y_%m_%d"),self.file)
+        temp_fullname = os.path.join(root_dir, 'himawari', 'netcdf',
+                   date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
+        try:
+            self.fullname = glob.glob(temp_fullname)[0]
+        except IndexError:
+            print('NOT FOUND ',temp_fullname)        
         self.channels = ('IR_016','IR_022','IR_038','IR_085','IR_096','IR_104','IR_112','IR_123','IR_132',
                      'VIS004','VIS005','VIS006','VIS008','WV_062','WV_069','WV_073')
         self.alias_channels= {'IR0':'IR_104','IR120':'IR_123','IR85':'IR_085',
@@ -371,6 +396,7 @@ class GOESW(GOES):
     def __init__(self,date):
         self.sat = 'goesw'
         self.date =  date
+        
         file = 'Wmultic2kmNC4_goes1?_' + date.strftime("%Y%m%d%H%M") + '.nc'
         temp_fullname = os.path.join(root_dir, 'goesw', 'netcdf',
                 date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
@@ -385,8 +411,14 @@ class GOESE(GOES):
     def __init__(self,date):
         self.sat='goese'
         self.date =  date
-        file = 'Emultic2kmNC4_goes1?_' + date.strftime("%Y%m%d%H%M") + '.nc'
-        temp_fullname = os.path.join(root_dir, 'goese', 'netcdf',
+        if date > datetime(2017,12,14,16):
+            file = 'Emultic2kmNC4_goes1?_' + date.strftime("%Y%m%d%H%M") + '.nc'
+            temp_fullname = os.path.join(root_dir, 'goese', 'netcdf',
+                date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
+        else:
+            self.sat='goesefg'
+            file = 'Emultic4kmNC4_goes1?_' + date.strftime("%Y%m%d%H%M") + '.nc'
+            temp_fullname = os.path.join(root_dir, 'goesefg', 'netcdf',
                 date.strftime("%Y"), date.strftime("%Y_%m_%d"),file)
         try:
             fullname = glob.glob(temp_fullname)[0]
@@ -412,11 +444,17 @@ class GeoGrid(object):
         elif gridtype == "FullAMA_SAFBox":
             self.box_range = np.array([[-10.,160.], [0.,50.]])
             self.box_binx = 1700; self.box_biny = 500
+        elif gridtype == "ACCLIP":
+            self.box_range = np.array([[-10.,240.], [0.,60.]])
+            self.box_binx = 2500; self.box_biny = 600
         elif gridtype == "HimFull":
             self.box_range = np.array([[60.,220.],[-80.,80.]])
             self.box_binx = 4000; self.box_biny = 4000;
         elif gridtype == "MSG1Full":
             self.box_range = np.array([[-38.5,121.5],[-80,80]])
+            self.box_binx = 4000; self.box_biny = 4000;
+        elif gridtype == "MSG2Full":
+            self.box_range = np.array([[-34.5,117.5],[-80,80]])
             self.box_binx = 4000; self.box_biny = 4000;
         elif gridtype == "MSG0Full":
             self.box_range = np.array([[-80,80],[-80,80]])
@@ -448,6 +486,15 @@ class GeoGrid(object):
         elif gridtype == "MesoInd":
             self.box_range = np.array([[65.,130.],[5.,40.]])
             self.box_binx = 650; self.box_biny = 350;
+        elif gridtype == "Canada":
+            self.box_range = np.array([[-130.,-50.],[40,70]])
+            self.box_binx = 800; self.box_biny = 300;
+        elif gridtype == "Australia":
+            self.box_range = np.array([[105.,160.],[-40,-10]])
+            self.box_binx = 550; self.box_biny = 300;
+        elif gridtype == "Bolivar":
+            self.box_range = np.array([[-80.,-40.],[-30,0]])
+            self.box_binx = 400; self.box_biny = 300;
         elif gridtype == "GridSat":
             """ pixels of 0.07 degree slightly overmatch at the
                 last longitude since 0.07 is not a divider of 360.
@@ -542,6 +589,8 @@ class GeoGrid(object):
         try:
             if sat == 'msg1':
                 satin = 'msg0'
+            elif sat == 'msg2':
+                satin = 'msg0'
             else:
                 satin = sat
             print(os.path.join(root_dir,satin,'lonlat.pkl'))
@@ -552,13 +601,16 @@ class GeoGrid(object):
             # add 41.5 degree to msg3 lon to get msg1 lon
             if sat == 'msg1':
                 lonlat['lon'] += 41.5
+            elif sat == 'msg2':
+                lonlat['lon'] += 45.5 
             # extract the bounding box if required
             #
             if BB is not None:
                 try:
+                    print ('reduction of lonlat')
                     lonlat['lon'] = lonlat['lon'][BB[0]:BB[1]+1,BB[2]:BB[3]+1]
                     lonlat['lat'] = lonlat['lat'][BB[0]:BB[1]+1,BB[2]:BB[3]+1]
-                    lonlat['BB'] = BB
+                    lonlat['BB'] = BB        
                 except:
                     print('ERROR WHILE BOUNDING THE LATITUDE AND LONGITUDE GRIDS, CHECK BB')
                     return
@@ -621,7 +673,7 @@ class GridField(object):
         self.var={}
 
     def chart(self,field,cmap='jet',clim=[190.,300.],txt='',subgrid=None, block=True, xlocs=None, figsize= None,
-              axf=None, show=True, cm_lon=None,left=True,bottom=True):
+              axf=None, show=True, cm_lon=None,left=True,bottom=True, xlim=None, pos_cax=None):
         # test existence of key field
         if field not in self.var.keys():
             print ('undefined field')
@@ -646,17 +698,20 @@ class GridField(object):
             if cm_lon is None:
                 cm_lon =0
                 # guess that we want to plot accross dateline
-                if geogrid.box_range[0,1]> 181: cm_lon = 180
+                if geogrid.box_range[0,1]> 181: cm_lon = 0.5*(geogrid.box_range[0,0]+geogrid.box_range[0,1])
                 if 'LatBand2' in geogrid.gridtype: cm_lon = 20
             proj = ccrs.PlateCarree(central_longitude=cm_lon)
             ax = plt.axes(projection = proj)
             if 'LatBand2' in geogrid.gridtype:
                 ax.set_extent([-160,199.9, -35,10], crs=ccrs.PlateCarree())
+            else:
+                ax.set_extent(geogrid.box_range.flatten()-np.array([cm_lon,cm_lon,0,0]), crs=ccrs.PlateCarree())
         else:
             ax = axf
             if cm_lon == None:
                 print('cm_lon should be defined')
                 return -1
+            show = False
         # guess that we want to plot accross dateline
 
         if subgrid == None:
@@ -685,6 +740,7 @@ class GridField(object):
         # can be suppressed by specifying xlocs
 
         if (cm_lon == 180) & (xlocs == None): xlocs = [0,30,60,90,120,150,180,-150,-120,-90,-60,-30]
+        xlocs = None
         gl = ax.gridlines(draw_labels=True, xlocs=xlocs,
                       linewidth=2, color='gray', alpha=0.5, linestyle='--')
         gl.top_labels = False
@@ -697,12 +753,16 @@ class GridField(object):
         gl.ylabel_style = {'size': fs}
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
         ax.set_title(txt,fontsize=fs)
+        if xlim is not None: ax.set_xlim(xlim[0], xlim[1])
+        else: ax.set_xlim(geogrid.box_range[0,0]-cm_lon, geogrid.box_range[0,1]-cm_lon)
+        
         # plot adjusted colorbar and show
         if field not in RGB:
             axpos = ax.get_position()
             pos_x = axpos.x0 + axpos.x0 + axpos.width + 0.01
-            pos_cax = ax.figure.add_axes([pos_x,axpos.y0,0.04,axpos.height])
-            cbar=plt.colorbar(iax,cax=pos_cax)
+            if pos_cax == None:
+                pos_cax = ax.figure.add_axes([pos_x,axpos.y0,0.04,axpos.height])          
+            cbar = plt.colorbar(iax,cax=pos_cax)           
             cbar.ax.tick_params(labelsize=fs)
         if show: plt.show(block=block)
         return ax
