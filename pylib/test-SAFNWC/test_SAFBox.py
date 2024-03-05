@@ -12,8 +12,9 @@ import geosat
 from SAFNWCnc import SAFNWC_CTTH
 from datetime import datetime
 
-date = datetime(2017,7,22,3,45)
-dat = SAFNWC_CTTH(date,'msg1',BBname='SAFBox')
+#date = datetime(2017,7,22,3,45)
+date = datetime(2017,8,8,9,00)
+dat = SAFNWC_CTTH(date,'msg1',BBname='SAFBox',version='v2018.1-HVR')
 gg = geosat.GeoGrid('FullAMA_SAFBox')
 dat._CTTH_PRESS()
 p1 = geosat.SatGrid(dat,gg)
