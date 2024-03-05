@@ -413,7 +413,7 @@ class ECMWF_pure(object):
         # of longitude shifted to lon0
         # It is assumed that the first longitude is presently 0
         if self.attr['lons'][0] != 0:
-            print('This operation can only be made on a grid strating at 0 longitude')
+            print('This operation can only be made on a grid starting at 0 longitude')
             return None
         new = ECMWF_pure()
         # find the location of lon0 in the initial grid
@@ -457,6 +457,7 @@ class ECMWF_pure(object):
         """
         # first determine the boundaries of the domain
         new = ECMWF_pure()
+        epsilon = 0.001
         new.date = self.date
         if (latRange == []) | (latRange == None):
             new.attr['lats'] = self.attr['lats']
@@ -464,7 +465,7 @@ class ECMWF_pure(object):
             nlatmax = len(self.attr['lats'])
         else:
             nlatmin = np.argmax(self.attr['lats']>latRange[0])-1
-            nlatmax = np.argmax(self.attr['lats']>=latRange[1])
+            nlatmax = np.argmax(self.attr['lats']>=latRange[1])+1
         if (lonRange == []) | (lonRange == None):
             new.attr['lons'] = self.attr['lons']
             nlonmin = 0
