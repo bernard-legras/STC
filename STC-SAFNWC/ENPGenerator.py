@@ -107,19 +107,41 @@ RALPS = .3262117981e+02
 RGETS = .6295421339e+04
 RGAMS = .5631331575e+00
 
+# box: domain over which the run is made
+box = "ACCLIP"
+
 def main():
 
     # Setting the paths according to where it runs (gort or ciclad)
     if 'gort' == socket.gethostname():
         data_dir = '/dkol/data'
-    elif 'ciclad' in socket.gethostname():
-        data_dir = '/data/legras/flexpart_in/STC/ERA5'
+        FullERA5Dir = '/dsk2/ERA5'
+    elif 'spirit' in socket.gethostname():
+        FullERA5Dir = '/home/legras/ERA5'
+        if box == 'FullAMA': data_dir = '/data/legras/flexpart_in/STC/ERA5'
+        elif box == 'ACCLIP': data_dir = '/data/legras/flexpart_in/ACCLIP/ERA5'
     else:
         print('unknown hostname for this program')
 
+    # Setting the dimensions
+    if box == 'FullAMA':
+        NX = 171
+        NY = 51
+        lonmin = -10
+        lonmax = 160
+        latmin = 0
+        latmax = 50
+    elif box == 'ACCLIP':
+        NX = 251
+        NY = 61
+        lonmin = -10
+        lonmax = 240
+        latmin = 0
+        latmax = 60
+
     SAFNWP_dir = join(data_dir,'SAFNWP')
     MAINOUT_dir = join(SAFNWP_dir,'HVR-LHR')
-    SurfData_dir = join(SAFNWP_dir,'LNSP-LHR')
+    SurfData_dir = join(FullERA5Dir,'SURF')
 
     # Parsing the arguments
     parser = argparse.ArgumentParser()
@@ -161,9 +183,9 @@ def main():
 
     # Time loop
     date  = date1
-    while date < date2:
+    while date <= date2:
         # Building the interpolated data
-        dat4 = Pinterpol(date)
+        dat4 = Pinterpol(date,box=box)
         # Transform the geopotential into geopotential altitude
         try: dat4.var['Z'] *= cst.g
         except: pass
@@ -175,10 +197,12 @@ def main():
         file_out = join(MAINOUT_dir,date.strftime('%Y/%m'),date.strftime('ENP%y%m%d%H'))
         # Defining file hosting the surface data
         file_surf = join(SurfData_dir,date.strftime('%Y'),date.strftime('LNSP%y%m%d'))
+        file_surf2 = join(SurfData_dir,date.strftime('%Y'),date.strftime('LNSP%Y%m%d.grb'))
 
         # Copying surface data to the output file
-        try: call(['grib_copy','-w','hour='+str(date.hour),file_surf,file_out])
-        except: call(['grib_copy','-w','hour='+str(date.hour),file_surf+'.grb',file_out])
+        call(['grib_copy','-w','hour='+str(date.hour),file_surf,file_out])
+        #try: call(['grib_copy','-w','hour='+str(date.hour),file_surf,file_out])
+        #except: call(['grib_copy','-w','hour='+str(date.hour),file_surf2,file_out])
 
         # Open the output file in append mode
         fout = open(file_out,'ab')
@@ -191,12 +215,15 @@ def main():
         dat4.d2d['zwmo'] *= cst.g
         for var in ['Twmo','pwmo','zwmo']:
             clone_id = ec.codes_clone(gid['surf'])
-            nx = ec.codes_get(gid['surf'], 'Ni')
-            ny = ec.codes_get(gid['surf'], 'Nj')
+            #nx = ec.codes_get(gid['surf'], 'Ni')
+            #ny = ec.codes_get(gid['surf'], 'Nj')
+            ec.codes_set(clone_id,'Ni',NX)
+            ec.codes_set(clone_id,'Nj',NY)
             ec.codes_set(clone_id,'paramId',dicwmo[var][0])
             ec.codes_set(clone_id,'dataDate',10000*date.year+100*date.month+date.day)
             ec.codes_set(clone_id,'hour',date.hour)
-            ec.codes_set_values(clone_id,np.reshape(dat4.d2d[var][::-1,:],nx*ny))
+            ec.codes_set(clone_id,'packingType','grid_second_order')
+            ec.codes_set_values(clone_id,np.reshape(dat4.d2d[var][::-1,:],NX*NY))
             ec.codes_write(clone_id,fout)
             ec.codes_release(clone_id)
 
@@ -204,12 +231,15 @@ def main():
         for ll in range(len(pressures)):
             for var in ['Z','T','RH','O3']:
                 clone_id = ec.codes_clone(gid[var])
-                nx = ec.codes_get(gid[var], 'Ni')
-                ny = ec.codes_get(gid[var], 'Nj')
+                #nx = ec.codes_get(gid[var], 'Ni')
+                #ny = ec.codes_get(gid[var], 'Nj')
+                ec.codes_set(clone_id,'Ni',NX)
+                ec.codes_set(clone_id,'Nj',NY)
                 ec.codes_set(clone_id,'lev',pressures[ll])
                 ec.codes_set(clone_id,'dataDate',10000*date.year+100*date.month+date.day)
                 ec.codes_set(clone_id,'hour',date.hour)
-                ec.codes_set_values(clone_id,np.reshape(dat4.var[var][ll,::-1,:],nx*ny))
+                ec.codes_set(clone_id,'packingType','grid_second_order')
+                ec.codes_set_values(clone_id,np.reshape(dat4.var[var][ll,::-1,:],NX*NY))
                 ec.codes_write(clone_id,fout)
                 ec.codes_release(clone_id)
 
@@ -218,8 +248,18 @@ def main():
         print('processed ',date)
         date += timedelta(hours=3)
 
-def Pinterpol(date):
+def Pinterpol(date,box='FullAMA'):
     """ Read the ERA5 data and interpolate to the pressure levels. """
+    if box == 'FullAMA':
+        lonmin = -10
+        lonmax = 160
+        latmin = 0
+        latmax = 50
+    elif box == 'ACCLIP':
+        lonmin = -10
+        lonmax = 240
+        latmin = 0
+        latmax = 60
     dat = ECMWF('FULL-EA',date,exp=['VOZ','QN'])
     dat._get_T()
     dat._get_var('O3')
@@ -228,7 +268,7 @@ def Pinterpol(date):
     dat._mkp()
     dat._mkz()
     dat2 = dat.shift2west(-20)
-    dat3 = dat2.extract(lonRange=[-10,160],latRange=[0,50],varss='All')
+    dat3 = dat2.extract(lonRange=[lonmin,lonmax],latRange=[latmin,latmax],varss='All')
     dat3._WMO()
     dat4 = dat3.interpolP(pressPa,varList=['Z','T','Q','O3'])
     dat4.d2d = dat3.d2d
