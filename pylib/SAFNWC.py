@@ -54,7 +54,7 @@ class SAFNWC(geosat.GeoSat):
         except AttributeError:
                 # AAA, ZZZ not found in the original string
             self.time = '' # apply your error handling
-        fullname = os.path.join(geosat.root_dir,sat,'safnwc',date.strftime("%Y"),
+        fullname = os.path.join(geosat.root_dir,sat,'safnwc2011',date.strftime("%Y"),
                             date.strftime("%Y_%m_%d"),filename)
         print (fullname)
         try: 
