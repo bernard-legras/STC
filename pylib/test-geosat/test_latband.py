@@ -41,7 +41,8 @@ patch1 = pgw.patch(pge,-106,'IR0')
 patch2 = patch1.patch(pm0,-38,'IR0')
 patch3 = patch2.patch(pm1,21,'IR0')
 patch4 = patch3.patch(ph,90,'IR0')
-#patchf = patch4.patch(pgw,181,'IR0')
+patchf = patch4.patch(pgw,181,'IR0')
+#patchf = patch4
 #%%
 patchf.chart('IR0',txt='Full band IR0 composit')
 plt.imshow(patchf.var['IR0'],extent=(-160,199.99,-35,10),origin='lower',cmap='jet',clim=(200,300))
