@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Test of SAFNWCnc for 2019 and the v2018.1-HVR version
+Test of SAFNWCnc for 2021 2022 and the v2018.1-HVR version
 
 Created on 25/01/2023
 
@@ -12,7 +12,8 @@ import SAFNWCnc
 import geosat
 import matplotlib.pyplot as plt
 
-date = datetime(2017,8,8,12)
+#date = datetime(2022,8,31,15)
+date = datetime(2021,8,31,15)
 version = 'v2018.1-HVR'
 
 sat1 = SAFNWCnc.SAFNWC_CTTH(date,'msg1',BBname='SAFBox',version=version)
