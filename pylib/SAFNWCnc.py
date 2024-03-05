@@ -2,6 +2,7 @@ import numpy as np
 import geosat
 import os
 import re
+import glob
 from netCDF4 import Dataset
 
 class SAFNWC(geosat.PureSat):
@@ -19,13 +20,13 @@ class SAFNWC(geosat.PureSat):
             
         if 'hima' in sat :
             sat = 'himawari'
-            nam='HIMA08'
+            nam='HIMA0?'
             region='globeJ'
             geosat.read_mask_himawari()
             masksat=geosat.mask_sat['himawari']
             VISIR = 'NR'
-        elif sat=='msg3':
-            nam='MSG3'
+        elif sat=='msg0':
+            nam='MSG0'
             region='globeM'
             geosat.read_mask_MSG()        
             masksat=geosat.mask_sat['msg']
@@ -36,6 +37,24 @@ class SAFNWC(geosat.PureSat):
             VISIR = 'VISIR'
             geosat.read_mask_MSG()        
             masksat=geosat.mask_sat['msg']
+        elif sat=='msg2':
+            nam='MSG2'
+            region='globeI'
+            VISIR = 'VISIR'
+            geosat.read_mask_MSG()
+            masksat=geosat.mask_sat['msg']
+        elif sat=='goesw':
+            nam='GOES17'
+            region='globeW'
+            VISIR = 'NR'
+            geosat.read_mask_GOES()
+            masksat=geosat.mask_sat['goes']
+        elif sat=='goese':
+            nam='GOES16'
+            region='globeE'
+            VISIR = 'NR'
+            geosat.read_mask_GOES()
+            masksat=geosat.mask_sat['goes']
         if BBname == 'SAFBox':
             safnwc = 'safnwc-SAFBox'
             root_dir = geosat.alt_root_dir
@@ -57,8 +76,12 @@ class SAFNWC(geosat.PureSat):
                          
         #fullname = os.path.join(root_dir,sat,safnwc,'netcdf',date.strftime("%Y"),
         #                    date.strftime("%Y_%m_%d"),filename)
-        fullname = os.path.join(root_dir,sat,safnwc,date.strftime("%Y"),
+        temp_fullname = os.path.join(root_dir,sat,safnwc,date.strftime("%Y"),
                             date.strftime("%Y_%m_%d"),filename)
+        try:
+            fullname = glob.glob(temp_fullname)[0]
+        except IndexError:
+            print('NOT FOUND ',temp_fullname)
         #print (fullname)
         try: 
             self.ncid = Dataset(fullname, mode='r')
