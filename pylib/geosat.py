@@ -447,6 +447,9 @@ class GeoGrid(object):
         elif gridtype == "ACCLIP":
             self.box_range = np.array([[-10.,240.], [0.,60.]])
             self.box_binx = 2500; self.box_biny = 600
+        elif gridtype == "ACCLIP-Houston":
+            self.box_range = np.array([[160.,350.], [0.,60.]])
+            self.box_binx = 1900; self.box_biny = 600
         elif gridtype == "HimFull":
             self.box_range = np.array([[60.,220.],[-80.,80.]])
             self.box_binx = 4000; self.box_biny = 4000;
@@ -602,7 +605,8 @@ class GeoGrid(object):
             if sat == 'msg1':
                 lonlat['lon'] += 41.5
             elif sat == 'msg2':
-                lonlat['lon'] += 45.5 
+                lonlat['lon'] += 45.5
+            
             # extract the bounding box if required
             #
             if BB is not None:
@@ -625,9 +629,16 @@ class GeoGrid(object):
         interp = NearestNDInterpolator(lonlat_c.T,idx)
         print('NearestNDInterpolator done')
         # Building the lookup table for the grid
+        # self.xcent must not be modified, hence the modification on a copy
         if ('LatBand' in self.gridtype) & (sat in ('himawari','goesw')):
             xcent = copy.copy(self.xcent)
             xcent = xcent%360
+        elif (self.gridtype == 'ACCLIP-Houston') & (sat == 'goese'):
+            xcent = copy.copy(self.xcent)
+            xcent -= 360
+        #elif (self.gridtype == 'ACCLIP_Houston') & (sat == 'goesw'):
+        #    xcent = copy.copy(self.xcent)
+        #    xcent[xcent>=180] -= 360
         else:
             xcent = self.xcent
         lookup = np.empty(shape=(len(self.ycent),len(xcent)), dtype=int)
