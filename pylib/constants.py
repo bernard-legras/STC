@@ -29,3 +29,10 @@ Li = lambda T: 1000*(2834.1 - 0.29 * (T-273.15) - 0.004 *(T-273.15)**2)
 Cl = 4190
 Ci = 2106
 L0 = Ll(Zero_Celsius)
+
+# Speed of light (m/s)
+c = 299792458
+# Boltzmann constant (J/K)
+k = 1.38065e-23 
+# Planck constant (J s)
+h = 6.62607e-34
