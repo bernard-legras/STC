@@ -31,6 +31,18 @@ class SAFNWC(geosat.PureSat):
             geosat.read_mask_MSG()        
             masksat=geosat.mask_sat['msg']
             VISIR = 'VISIR'
+        elif sat=='msg3':
+            nam='MSG3'
+            region='globeM'
+            geosat.read_mask_MSG()        
+            masksat=geosat.mask_sat['msg']
+            VISIR = 'VISIR'    
+        elif sat=='msg4':
+            nam='MSG4'
+            region='globeM'
+            geosat.read_mask_MSG()        
+            masksat=geosat.mask_sat['msg']
+            VISIR = 'VISIR'    
         elif sat=='msg1':
             nam='MSG1'
             region='globeI'
@@ -80,13 +92,18 @@ class SAFNWC(geosat.PureSat):
                             date.strftime("%Y_%m_%d"),filename)
         try:
             fullname = glob.glob(temp_fullname)[0]
+            self.ncid = Dataset(fullname, mode='r')
         except IndexError:
             print('NOT FOUND ',temp_fullname)
-        #print (fullname)
-        try: 
-            self.ncid = Dataset(fullname, mode='r')
+            self.ncid = None
+            return
         except AttributeError:
-            print('No file ',filename)
+            print('Cannot open',filename)
+            self.ncid = None
+            return
+        except:
+            print('Other error',filename)
+            self.ncid = None
             return
         # The mask must be truncated when BB is not None
         self.mask=masksat
@@ -156,87 +173,66 @@ class SAFNWC_CMa(SAFNWC):
         self.var['CMa'] = np.ma.array(self.ncid.variables['cma'][:])
         self.var['CMa'].__setmask__(self.mask)
         self.var['CMa']._sharedmask=False
-        self.attr['CMa']['units']=('0: Non processed','1: Cloud free','2: Cloud contaminated','3: Cloud filled','4: Snow/Ice contaminated','5: Undefined')
-        self.attr['CMa']['PALETTE'] = self.ncid.variables['cma_pal'][:]      
-        return #self.var['CMa']
+        self.attr['CMa']['flag_values'] = (0, 1)
+        self.attr['CMa']['flag_meaning'] = ('Cloud_free', 'Cloudy')      
+        return
         
     def _CMa_QUALITY(self):
         '''
-        returns numpy array containing the quality information on the product from SAF NWC file
+        returns numpy array containing the quality information on the CMa product from SAF NWC file
         '''
         self.attr['CMa_QUALITY']={}
-        var = self.ncid.variables['cma_quality'][:]
-        q=np.zeros((6,self.ny,self.nx))
-        q[0,:,:]=var&0x7
-        q[1,:,:]=var&0x18 >>3 
-        q[2,:,:]=var&0x60 >>5
-        q[3,:,:]=var&0x180>>7
-        q[4,:,:]=var&0x200>>9
-        q[5,:,:]=var&0x400>>10
-        m=[self.mask,self.mask,self.mask,self.mask,self.mask,self.mask]
-        self.var['CMa_QUALITY']=np.ma.array(q,mask=m)
+        self.var['CMa_QUALITY']=np.ma.array(self.ncid.variables['cma_quality'][:])
+        self.var['CMa_QUALITY'].__setmask__(self.mask)
         self.var['CMa_QUALITY']._sharedmask=False
-        self.attr['CMa_QUALITY']['units']=('0: illumination and viewing conditions','1: NWP input data status','2: SEVIRI input data status',\
-        '3: Quality of the processing','4: Temporal processing indicator','5: HRV processing indicator')
-        self.attr['CMa_QUALITY']['flags']=(('0: Undefined (Space)','1: Night','2: Twilight','3: Day','4: Sunglint'),\
-                   ('0: Undefined (Space)','1: All NWP parameters available (no low level inversion)',\
-                    '2: All NWP parameters available (low level inversion)','3: At least one NWP parameter missing'),\
-                    ('0: Undefined (Space)','1: All useful SEVIRI channels available','2: At least one useful SEVIRI channel missing',\
-                    '3: At least one mandatory SAVIRI channel missing'),\
-                     ('0: Non processed','1: Good quality','2: Poor quality','3: Reclassified after spatial smoothing'),\
-                     ('0: Not performed','1: Performed'),\
-                     ('0: Not performed','1: Performed'))
+        self.attr['CMa_QUALITY']['flag_mask']   = (1, 2, 4, 56, 56, 56, 56)
+        self.attr['CMa_QUALITY']['flag_values'] = (1, 2, 4,  8, 16, 24, 32)
+        self.attr['CMa_QUALITY']['flag_meanings']=('nodata', 'internal_consistency', 'temporal_consistency',\
+                                 'good', 'questionable',' bad',' interpolated')
         return
         
-    def _CMa_TEST(self):
-        self.attr['CMa_TEST']={}
-        var = self.ncid.variables['cma_test'][:]
-        t=np.zeros((16,self.ny,self.nx))
-        t[0,:,:]=var&0x1
-        t[1,:,:]=var&(0x2)>>1
-        t[2,:,:]=var&(0x4)>>2
-        t[3,:,:]=var&(0x8)>>3
-        t[4,:,:]=var&(0x10)>>4
-        t[5,:,:]=var&(0x20)>>5
-        t[6,:,:]=var&(0x40)>>6
-        t[7,:,:]=var&(0x80)>>7
-        t[8,:,:]=var&(0x100)>>8
-        t[9,:,:]=var&(0x200)>>9
-        t[10,:,:]=var&(0x400)>>10
-        t[11,:,:]=var&(0x800)>>11
-        t[12,:,:]=var&(0x1000)>>12
-        t[13,:,:]=var&(0x2000)>>13
-        t[14,:,:]=var&(0x4000)>>14
-        t[15,:,:]=var&(0x8000)>>15
-        m=[self.mask,self.mask,self.mask,self.mask,self.mask,\
-           self.mask,self.mask,self.mask,self.mask,self.mask,\
-           self.mask,self.mask,self.mask,self.mask,self.mask]
-        self.var['CMa_TEST']=np.ma.array(t,mask=m)
-        self.var['CMa_TEST']._sharedmask=False
-        self.attr['CMa_TEST']['units']=('0: T10.8um or SST','1: R0.6um (land) or R0.8um (sea)','2: Sunglint test using 3.9 um',\
-        '3: Local Spatial Texture','4: T10.8um-T12.0um','5: T10.8um-T3.9um or T12.0um-T3.9 um','6: T3.9um-T10.8um',\
-        '7: Spatial smoothing (reclassify isolated cloud-free pixels)','8: T8.7um-T3.9um','9: R1.6um (sea)',\
-        '10: T8.7um-T10.8um or T10.8um-T8.7um','11: Snow using R1.6um or T3.9um','12: HRV-based test','13: Stationary cloud in twilight',\
-        '14: Spatial expansion of stationary cloud in twilight','15: Temporal-differencing')
+    def _CMa_STATUS(self):
+        '''
+        returns numpy array containing the status information on the CMa product from SAF NWC file
+        '''
+        self.attr['CMa_STATUS']={}
+        self.var['CMa_STATUS']=np.ma.array(self.ncid.variables['cma_status_flag'][:])
+        self.var['CMa_STATUS'].__setmask__(self.mask)
+        self.var['CMa_STATUS']._sharedmask=False
+        self.attr['CMa_STATUS']['flag_values'] = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
+        self.attr['CMa_STATUS']['flag_meanings'] = ('Low_level_thermal_inversion_in_NWP_field',\
+                                                  'Cold_snowy_ground_suspected',\
+                                                  'Temporal_algorithm_passed',\
+                                                  'High_resolution_satellite_data_used',\
+                                                  'RTTOV_on-line_used', 'SST_analysis_available',\
+                                                  'Snow_map_available', 'Sea_ice_map_available',\
+                                                  'No_method_for_dust',\
+                                                  ' No_method_for_volcanic_plume', 'No_method_for_smoke')
         return
                 
     def _CMa_DUST(self):
         self.attr['CMa_DUST']={}
-        data = self.ncid.variables['cma_dust'][:]
-        self.var['CMa_DUST']=np.ma.array(data.read())
+        self.var['CMa_DUST']=np.ma.array(self.ncid.variables['cma_dust'][:])
         self.var['CMa_DUST'].__setmask__(self.mask)
         self.var['CMa_DUST']._sharedmask=False
-        self.attr['CMa_DUST']['units']=('0: Non processed','1: Dust','2: Non dust','3: Undefined (separability problems)')
-        self.attr['CMa_DUST']['PALETTE'] = self.ncid.variables['cma_dust-pal'][:]
-        
+        self.attr['CMa_DUST']['flag_values'] = (0,1,2)
+        self.attr['CMa_DUST']['flag_meanings'] = ('No_dust', 'Dust', 'Undefined_separability_problems')
         return 
     def _CMa_VOLCANIC(self):
         self.attr['CMa_VOLCANIC']={}
         self.var['CMa_VOLCANIC'] = np.ma.array(self.ncid.variables['cma_volcanic'][:])
         self.var['CMa_VOLCANIC'].__setmask__(self.mask)
         self.var['CMa_VOLCANIC']._sharedmask=False
-        self.attr['CMa_VOLCANIC']['units']=('0: Non processed','1: Volcanic plume','2: Non volcanic plume','3: Undefined (separability problems)')
-        self.attr['CMa_VOLCANIC']['PALETTE'] = self.ncid.variables['cma_volcanic_pal'][:]
+        self.attr['CMa_VOLCANIC']['flag_values'] = (0, 1, 2)
+        self.attr['CMa_VOLCANIC']['flag_meanings'] = ('No_volcanic_plume', 'Volcanic_plume', 'Undefined_separability_problems')
+        return 
+    def _CMa_SMOKE(self):
+        self.attr['CMa_SMOKE']={}
+        self.var['CMa_SMOKE']=np.ma.array(self.ncid.variables['cma_smoke'][:])
+        self.var['CMa_SMOKE'].__setmask__(self.mask)
+        self.var['CMa_SMOKE']._sharedmask=False
+        self.attr['CMa_SMOKE']['flag_values'] = (0, 1, 2)
+        self.attr['CMa_SMOKE']['flag_meanings'] = ('No_smoke', 'Smoke', 'Undefined_separability_problems')
         return 
         
 
@@ -262,45 +258,88 @@ class SAFNWC_CT(SAFNWC):
         data = self.ncid.variables['ct'][:]
         self.var['CT']=np.ma.array(data)
         self.var['CT'].__setmask__(self.mask)
-        self.attr['CT']['units']=('1: Cloud free land','2: Cloud free sea','3: Snow over land','4: Snow over sea','5: Very low clouds',\
-        '6: Low Clouds','7: Mid-level clouds','8: High opaque clouds','9: Very high opaque clouds',\
-        '10: Fractional clouds','11: High semitransparent thin clouds','12: High semitransparent meanly thick clouds','13: High semitransparent thick clouds',\
-        '14: High semitransparent above low or medium clouds','15: High semitransparent above snow/ice ')
-    
-        data = self.ncid.variables['ct_pal'][:]
-        self.attr['CT']['PALETTE']=data
+        self.attr['CT']['units']=('1: Cloud free land','2: Cloud free sea','3: Snow over land','4: Snow over sea',\
+                                  '5: Very low clouds','6: Low Clouds','7: Mid-level clouds','8: High opaque clouds',\
+                                  '9: Very high opaque clouds','10: Fractional clouds','11: High semitransparent thin clouds',\
+                                  '12: High semitransparent meanly thick clouds','13: High semitransparent thick clouds',\
+                                  '14: High semitransparent above low or medium clouds','15: High semitransparent above snow/ice')
+        self.attr['flag_values'] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+        self.attr['flag_meanings'] = ('Cloud-free_land', 'Cloud-free_sea', 'Snow_over_land', 'Sea_ice',\
+                                      'Very_low_clouds', 'Low_clouds', 'Mid-level_clouds', 'High_opaque_clouds',\
+                                      'Very_high_opaque_clouds', 'Fractional_clouds',\
+                                      'High_semitransparent_thin_clouds', 'High_semitransparent_moderately_thick_clouds',\
+                                      'High_semitransparent_thick_clouds',  'High_semitransparent_above_low_or_medium_clouds',\
+                                      'High_semitransparent_above_snow_ice')
+        self.attr['CT']['PALETTE'] = self.ncid.variables['ct_pal'][:]
         return
 
     def _CT_QUALITY(self):
+        '''
+        returns numpy array containing the quality information on the CT product from SAF NWC file
+        '''
         self.attr['CT_QUALITY']={}
-        var = self.ncid.variables['CT_QUALITY']
-        q=np.zeros((5,self.ny,self.nx))
-        q[0,:,:]=var&0x7
-        q[1,:,:]=(var&0x18)>>3
-        q[2,:,:]=(var&0x60)>>5
-        q[3,:,:]=(var&0x180)>>7
-        q[4,:,:]=(var&0x200)>>9
-        m=[self.mask,self.mask,self.mask,self.mask,self.mask]
-        self.var['CT_QUALITY']=np.ma.array(q,mask=m)
+        self.var['CT_QUALITY']=np.ma.array(self.ncid.variables['ct_quality'][:])
+        self.var['CT_QUALITY'].__setmask__(self.mask)
         self.var['CT_QUALITY']._sharedmask=False
-        self.attr['CT_QUALITY']['units']=('0: Illumination and viewing conditions','1: NWP input data status','2: SEVIRI input data status',\
-        '3: Quality of the processing','4: Existence of separation between stratiform and cumuliform')
-        self.attr['CT_QUALITY']['flags']=(('0: Undefined (Space)','1: Night','2: Twilight','3: Day','4: Sunglint'),\
-                   ('0: Undefined (Space)','1: All NWP parameters available (no low level inversion)',\
-                    '2: All NWP parameters available (low level inversion)','3: At least one NWP parameter missing'),\
-                    ('0: Undefined (Space)','1: All useful SEVIRI channels available','2: At least one useful SEVIRI channel missing',\
-                    '3: At least one mandatory SAVIRI channel missing'),\
-                     ('0: Non processed','1: Good quality','2: Poor quality','3: Reclassified after spatial smoothing'),\
-                     ('0: Not performed','1: Performed'))
+        self.attr['CT_QUALITY']['flag_mask']   = (1, 2, 4, 56, 56, 56, 56)
+        self.attr['CT_QUALITY']['flag_values'] = (1, 2, 4,  8, 16, 24, 32)
+        self.attr['CT_QUALITY']['flag_meanings']=('nodata','internal_consistency','temporal_consistency',\
+                                 'good','questionable','bad','interpolated')
+        return
+        
+    def _CT_STATUS(self):
+        '''
+        returns numpy array containing the status information on the CT product from SAF NWC file
+        '''
+        self.attr['CT_STATUS']={}
+        self.var['CT_STATUS']=np.ma.array(self.ncid.variables['ct_status_flag'][:])
+        self.var['CT_STATUS'].__setmask__(self.mask)
+        self.var['CT_STATUS']._sharedmask=False
+        self.attr['CT_STATUS']['flag_values']=(1, 2, 4, 8, 16, 32)
+        self.attr['CT_STATUS']['flag_meanings']=('Low_level_thermal_inversion_in_NWP_field',\
+                                                 'Tropopause_temperature_available_from_NWP',\
+                                                 '138um_used_for_cirrus_identification',\
+                                                 'High_resolution_satellite_data_used',\
+                                                 'No_method_for_stratiform_cumuliform_separation',\
+                                                 'No_method_for_multilayer')
         return
      
-    def _CT_PHASE(self):
-        self.attr['CT_PHASE']={}
-        self.var['CT_PHASE']=np.ma.array(self.ncid.variables['ct_phase'][:])
-        self.var['CT_PHASE'].__setmask__(self.mask)
-        self.var['CT_PHASE']._sharedmask=False
-        self.attr['CT_PHASE']['units']=('0: Non processed or no cloud','1: water cloud','2: ice cloud','3: undefined')
-        self.attr['CT_PHASE']['PALETTE'] = self.ncid.variables['ct_phase_pal']        
+    def _CT_CONDITIONS(self):
+        self.attr['CT_CONDITIONS']={}
+        self.var['CT_CONDITIONS']=np.ma.array(self.ncid.variables['ct_conditions'][:])
+        self.var['CT_CONDITIONS'].__setmask__(self.mask)
+        self.var['CT_CONDITIONS']._sharedmask=False
+        self.attr['CT_CONDITIONS']['flag_mask']  = (1, 6, 6, 6, 8, 48, 48, 48, 64, 128, 768, 768, 768, 3072, 3072, 3072, 
+                                               12288, 12288, 12288, 49152, 49152, 49152)
+        self.attr['CT_CONDITIONS']['flag_values']= (1, 2, 4, 6, 8, 16, 32, 48, 64, 128, 256, 512, 768, 1024, 2048, 3072,
+                                                4096,  8192, 12288, 16384, 32768, 49152)
+        self.attr['CT_CONDITIONS']['flag_meanings'] = ('space', 'night', 'day', 'twilight', 'sunglint', 'land', 'sea', 'coast',\
+                                   'not_used', 'not_used',\
+                                   'all_satellite_channels_available', 'useful_satellite_channels_missing', 'mandatory_satellite_channels_missing',\
+                                   'all_NWP_fields_available', 'useful_NWP_fields_missing', 'mandatory_NWP_fields_missing',\
+                                   'all_product_data_available', 'useful_product_data_missing', 'mandatory_product_data_missing',\
+                                   'all_auxiliary_data_available', 'useful_auxiliary_data_missing', 'mandatory_auxiliary_data_missing')
+        return
+        
+    def _CT_CUMULIFORM(self):
+        self.attr['CT_CUMULIFORM']={}
+        self.var['CT_CUMULIFORM']=np.ma.array(self.ncid.variables['ct_cumuliform'][:])
+        self.var['CT_CUMULIFORM'].__setmask__(self.mask)
+        self.var['CT_CUMULIFORM']._sharedmask=False
+        self.attr['CT_CUMULIFORM']['flag_values']= (1, 2, 3, 4, 5)
+        self.attr['CT_CUMULIFORM']['flag_meanings'] = ('Stratiform_status', 'Cumuliform_status', 'Mixed_status', 'Cloud-free',\
+                                   'Undefined_separability_problems')
+        return
+        
+    def _CT_MULTILAYER(self):
+        self.attr['CT_MULTILAYER']={}
+        self.var['CT_MULTILAYER']=np.ma.array(self.ncid.variables['ct_multilayer'][:])
+        self.var['CT_MULTILAYER'].__setmask__(self.mask)
+        self.var['CT_MULTILAYER']._sharedmask=False
+        self.attr['CT_MULTILAYER']['flag_values']= (0, 1, 2, 3)
+        self.attr['CT_MULTILAYER']['flag_meanings'] = ('No_multilayer_detected', 'Multilayer_detected',\
+                                                       'Cloud_free', 'Undefined_separability_problems')
+        return
 
 class SAFNWC_CTTH(SAFNWC):
     '''
