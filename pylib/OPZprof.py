@@ -5,7 +5,7 @@ This script is meant to manage the data from narrow extractions around stations
 (for the moment, OHP, OPAR and ACARR)
 It uses data in netcdf format
 Data are read on hybrid levels. These levels are not provided in the file and hence
-must be et in the program.
+must be defined in the program.
 Interpolation is provided onto geopotential or pressure levels.
 
 Functions: Open files, read the data, extract subgrids, make charts, interpolate in time,
@@ -99,14 +99,17 @@ dvar = {'U':['u','U component of wind','m s**-1'],
          'LNSP':['lnsp','Logarithm of surface pressure','Log(Pa)'],
          'VO':['vo','Vorticity','s**-1'],
          'Q':['q','Specific humidity','kg kg**-1'],
-         'O3':['o3','Ozone mixing ratio','kg kg**-1']
+         'O3':['o3','Ozone mixing ratio','kg kg**-1'],
+         'GO3' : ['go3','Ozone mixing ratio (full chemistry)','kg kg**-1'],
+         'H2O' : ['h2o','Water mixing ratio (chemistry)','kg kg**-1'],
          }
 
 ((am,bm),(al,bl)) = hyb(137)
 
 stations ={'ACARR':[76.332,10.04265],
            'OHP':[5.7133,43.9308],
-           'OPAR':[55.3831,-21.0797]}
+           'OPAR':[55.3831,-21.0797],
+           'Methoni':[21.704417,36.8254417]}
 
 # template object produced by extraction and interpolation
 class ECMWF_pure(object):
@@ -185,7 +188,7 @@ class ECMWF_pure(object):
 
     def interpolP(self,p,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to a pressure level or a set of pressure levels
-            vars must be a list of variables or a single varibale
+            vars must be a list of variables or a single variable
             p must be a pressure or a list of pressures in Pascal
         """
         if 'P' not in self.var.keys():
@@ -780,7 +783,7 @@ class ECMWF(ECMWF_pure):
 # to do, raise a specific exception in case of error 
 # instead of ending with a return
     
-    def __init__(self,project,date,exp=[None]):
+    def __init__(self,project,date,klass='OPZ',exp=[None]):
         ECMWF_pure.__init__(self)
         self.project = project
         self.date = date
@@ -788,8 +791,14 @@ class ECMWF(ECMWF_pure):
         #provision for surface data to be added as a separate file
         self.sfc = False
         
-        if project not in ['OHP','OPAR', 'ACARR']:
-            print('Unknown project')
+        if klass not in ['OPZ','CAMS']:
+            print('unknown klass')
+            return
+        if (klass == 'OPZ') & (project not in ['OHP','OPAR', 'ACARR']):
+            print('Unknown project for OPZ')
+            return
+        if (klass == 'CAMS') & (project not in ['Methoni',]):
+            print('Unknown project for CAMS')
             return
         if date.hour not in [0,6,12,18]:
             print('This hour is not available, only 0, 6, 12 and 18')
@@ -798,27 +807,31 @@ class ECMWF(ECMWF_pure):
         self.ih = int(0.001+date.hour/6)
         
         if 'gort' == socket.gethostname():
-            self.rootdir = '/dkol/data/OPZ/'+project
+            self.rootdir = '/dkol/data/'+klass+'/'+project
         elif 'spirit' in socket.gethostname():
-            self.rootdir = '/proju/flexpart/flexpart_in/OPZ/'+project
-        elif 'spirit' in socket.gethostname():
-            self.rootdir = '/STC/ERA5'
+            self.rootdir = '/proju/flexpart/flexpart_in/'+klass+'/'+project
         elif 'satie' in socket.gethostname():
-            self.rootdir = '/dsk2/OPZ/'+project
+            self.rootdir = '/dsk2/'+klass+'/'+project
         elif 'Mentat' == socket.gethostname():
-            self.rootdir = 'C:\\cygwin64\\home\\berna\\data\\OPZ\\'+project
+            self.rootdir = 'C:\\cygwin64\\home\\berna\\data\\'+klass+'\\'+project
 
-        
         if project == 'ACARR':
             self.expected_vars = ['U','V','W','T','VO','O3','Q','LNSP']
+        elif project == 'Methoni':
+            self.expected_vars = ['T','Q','O3','GO3','H2O']
         else:
             self.expected_vars = ['U','V','T','VO','O3','LNSP']
 
         # opening the main file (the only one for the moment)
         try:
-            self.ncid = Dataset(os.path.join(self.rootdir,date.strftime('%Y/OPZLWDA%Y%m%d.nc')))
+            if klass == 'OPZ':
+                fname = date.strftime('%Y/OPZLWDA%Y%m%d.nc')
+            elif klass == 'CAMS':
+                fname = date.strftime('%Y/OPZCAMS-%Y%m%d_')+project+'.nc'
+            print(os.path.join(self.rootdir,fname))
+            self.ncid = Dataset(os.path.join(self.rootdir,fname))
         except:
-            print(date.strftime('cannot find OPZLWDA%Y%m%d.nc'),' for ',project)
+            print(klass,' for ',project,' not found')
             return
             
         try:
