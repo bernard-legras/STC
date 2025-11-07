@@ -104,6 +104,7 @@ class curtain(object):
     def __init__(self):
         self.var={}
         self.attr={}
+        self.type = 'curtain'
 
 # template object produced by extraction and interpolation
 class ECMWF_pure(object):
@@ -116,7 +117,7 @@ class ECMWF_pure(object):
 
     def show(self,var,lev=0,cardinal_level=True,txt=None,log=False,clim=(None,None),figsize=(11,4),
              axf=None,cmap=mymap,savfile=None,cLines=None,show=True,scale=1,aspect=1,projec=None,
-             sat_H=35785831,xylim=False,polar=False,horizontal=False,xaxis_touch=True,cm_lon=0,
+             sat_H=35785831,xylim=False,polar=False,horizontal=False,xaxis_touch=False,cm_lon=0,
              xlocs=None,interx=30,mkcbar=True,imreturn=False):
         """ Chart for data fields """
         # test existence of key field
@@ -141,6 +142,7 @@ class ECMWF_pure(object):
         # it is unclear how the trick with cm_lon works in imshow but it does
         # the web says that it is tricky to plot data accross dateline with cartopy
         # check https://stackoverflow.com/questions/47335851/issue-w-image-crossing-dateline-in-imshow-cartopy
+        # This is now obsolete
         #cm_lon = cm_lon
         ctrl_lon=(self.attr['lons'][0]+self.attr['lons'][-1])/2
         ctrl_lat=(self.attr['lats'][0]+self.attr['lats'][-1])/2
@@ -169,6 +171,7 @@ class ECMWF_pure(object):
                         origin='lower', aspect=aspect,cmap=cmap,clim=clim)
         if xylim:
             # if cm_lon = 180, the shift must be 360, do not seek why
+            # This is probably wrong now and needs to be corrected
             x1a,y1a = proj.transform_point(self.attr['lons'][0]-2*cm_lon,self.attr['lats'][0],ccrs.Geodetic())
             x1b,y1b = proj.transform_point(self.attr['lons'][0]-2*cm_lon,self.attr['lats'][-1],ccrs.Geodetic())
             x1c,y1c = proj.transform_point(ctrl_lon-2*cm_lon,self.attr['lats'][0],ccrs.Geodetic())
@@ -191,11 +194,15 @@ class ECMWF_pure(object):
             ax.set_xlim(np.min(x1),np.max(x1))
             ax.set_ylim(np.min(y1),np.max(y1))
         #xlocs = None
-        if (cm_lon == 180) & xaxis_touch:
-                #interx = 30
-                # next multiple of interx on the east of the western longitude boundary
-                minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
-                xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
+        # This feature is obsolete since cartopy now handles correctly the axis label whatever is
+        # the value of cm_lon
+        # Therefore the parameter x_touch is now deprecated and should not be used anymore
+        if xaxis_touch: print('xaxis_touch is now deprecated')
+        #if (cm_lon == 180) & xaxis_touch:
+        #        #interx = 30
+        #        # next multiple of interx on the east of the western longitude boundary
+        #        minx = self.attr['lons'][0] + interx - self.attr['lons'][0]%interx
+        #        xlocs = list(np.arange(minx,181,interx))+list(np.arange(interx-180,self.attr['lons'][-1]-360,interx))
         if projec in ['ortho','azimuthalequi','nearside','lambert']:
             gl = ax.gridlines(draw_labels=True)
         elif projec in [None,'mercator','plate']:
@@ -227,9 +234,9 @@ class ECMWF_pure(object):
         #gl.xlabel_style = {'color': 'red', 'weight': 'bold'}
 
         if txt is None:
-            plt.title(var+' lev'+str(lev),fontsize=fs)
+            ax.set_title(var+' lev'+str(lev),fontsize=fs)
         else:
-            plt.title(txt,fontsize=fs)
+            ax.set_title(txt,fontsize=fs)
         # plot adjusted colorbar
         #axpos = ax.get_position()
         #pos_x = axpos.x0 + axpos.width + 0.01
@@ -278,7 +285,7 @@ class ECMWF_pure(object):
         lons = np.arange(self.attr['lons'][0]-0.5*dlo,self.attr['lons'][-1]+dlo,dlo)
         #if Z variable is available, lets use it, if not use zscale
         try:
-            zz1 = 0.5*(self.var['Z'][l1-1:l2+1,pos, :] + self.var['Z'][l1:l2+2,pos,:])/1000
+            zz1 = 0.5*(self.var['ZU'][l1-1:l2+1,pos, :] + self.var['ZU'][l1:l2+2,pos,:])/1000
             zz = np.empty((zz1.shape[0],zz1.shape[1]+1))
             zz[:,1:-1] = 0.5*(zz1[:,1:]+zz1[:,:-1])
             zz[:,0] = zz1[:,0]
@@ -313,7 +320,7 @@ class ECMWF_pure(object):
 
     def chartlatz(self,var,lon,levs=(None,None),txt=None,log=False,clim=(None,None),
              cmap=mymap,savfile=None,show=True,scale=1,figsize=(11,4),axf=None,ylabel=True):
-        """ Plot a lon x alt section for a given latitude
+        """ Plot a lat x alt section for a given longitude
         """
         if var not in self.var.keys():
             print("UNKNOWN VAR ", var)
@@ -339,7 +346,7 @@ class ECMWF_pure(object):
         lats = np.arange(self.attr['lats'][0]-0.5*dla,self.attr['lats'][-1]+dla,dla)
         #if Z variable is available, lets use it, if not use zscale
         try:
-            zz1 = 0.5*(self.var['Z'][l1-1:l2+1,:,pos] + self.var['Z'][l1:l2+2,:,pos])/1000
+            zz1 = 0.5*(self.var['ZU'][l1-1:l2+1,:,pos] + self.var['ZU'][l1:l2+2,:,pos])/1000
             zz = np.empty((zz1.shape[0],zz1.shape[1]+1))
             zz[:,1:-1] = 0.5*(zz1[:,1:]+zz1[:,:-1])
             zz[:,0] = zz1[:,0]
@@ -589,7 +596,7 @@ class ECMWF_pure(object):
         #print ('cf ',cf1,cf2)
         data = ECMWF_pure()
         data.date = date
-        for names in ['lons','lats']:
+        for names in ['lons','lats','Lo1','Lo2','La1','La2','dlo','dla','levs','levtype']:
             data.attr[names] = self.attr[names]
         data.nlon = self.nlon
         data.nlat = self.nlat
@@ -650,6 +657,12 @@ class ECMWF_pure(object):
         new.attr['levtype'] = 'pressure'
         new.attr['plev'] = p
         new.attr['levs'] = p
+        new.attr['Lo1'] = new.attr['lons'][0]
+        new.attr['Lo2'] = new.attr['lons'][-1]
+        new.attr['La1'] = new.attr['lats'][0]
+        new.attr['La2'] = new.attr['lats'][-1]
+        for var in ['dlo','dla']:
+            new.attr[var] = self.attr[var]
         pmin = np.min(p)
         pmax = np.max(p)
         for var in varList:
@@ -675,10 +688,10 @@ class ECMWF_pure(object):
 
     def interpolZ(self,z,varList='All',latRange=None,lonRange=None):
         """ interpolate the variables to an altitude level or a set of altitude levels
-            vars must be a list of variables or a single varibale
+            vars must be a list of variables or a single variable
             z must be an altitude or a list of altitudes in m
         """
-        if 'Z' not in self.var.keys():
+        if 'ZU' not in self.var.keys():
             self._mkz()
         new = ECMWF_pure()
         if varList == 'All':
@@ -695,8 +708,8 @@ class ECMWF_pure(object):
                 return
         if type(z) in [float,int]:
             z = [z,]
-        if 'Z' not in self.var.keys():
-            print('Z not defined')
+        if 'ZU' not in self.var.keys():
+            print('ZU not defined')
             return
         # first determine the boundaries of the domain
         if (latRange == []) | (latRange == None):
@@ -719,6 +732,12 @@ class ECMWF_pure(object):
         new.nlev = len(z)
         new.attr['levtype'] = 'altitude'
         new.attr['levs'] = z
+        new.attr['Lo1'] = new.attr['lons'][0]
+        new.attr['Lo2'] = new.attr['lons'][-1]
+        new.attr['La1'] = new.attr['lats'][0]
+        new.attr['La2'] = new.attr['lats'][-1]
+        for var in ['dlo','dla']:
+            new.attr[var] = self.attr[var]
         zmin = np.min(z)
         zmax = np.max(z)
         for var in varList:
@@ -729,15 +748,15 @@ class ECMWF_pure(object):
                 ixt = 0
                 for ixs in range(nlonmin,nlonmax):
                     # find the range of z in the column
-                    nzmin = np.abs(self.var['Z'][:,jys,ixs]-zmin).argmin()
-                    nzmax = np.abs(self.var['Z'][:,jys,ixs]-zmax).argmin()+1
+                    nzmin = np.abs(self.var['ZU'][:,jys,ixs]-zmin).argmin()
+                    nzmax = np.abs(self.var['ZU'][:,jys,ixs]-zmax).argmin()+1
                     nzmin = max(nzmin + 3,self.nlev-1)
                     nzmax = min(nzmax - 3,0)
                     # Better version than the linear interpolation but much too slow
                     #fint = PchipInterpolator(np.log(self.var['P'][npmin:npmax,jys,ixs]),
                     #                     self.var[var][npmin:npmax,jys,ixs])
                     #new.var[var][:,jyt,ixt] = fint(np.log(p))
-                    fint = interp1d(-self.var['Z'][nzmax:nzmin,jys,ixs],self.var[var][nzmax:nzmin,jys,ixs])
+                    fint = interp1d(-self.var['ZU'][nzmax:nzmin,jys,ixs],self.var[var][nzmax:nzmin,jys,ixs])
                     new.var[var][:,jyt,ixt] =  [fint(-zz) for zz in z]
                     ixt += 1
                 jyt += 1
@@ -794,6 +813,12 @@ class ECMWF_pure(object):
         new.attr['levtype'] = 'potential temperature'
         new.attr['levs'] = pt
         new.attr['plev'] = MISSING
+        new.attr['Lo1'] = new.attr['lons'][0]
+        new.attr['Lo2'] = new.attr['lons'][-1]
+        new.attr['La1'] = new.attr['lats'][0]
+        new.attr['La2'] = new.attr['lats'][-1]
+        for var in ['dlo','dla']:
+            new.attr[var] = self.attr[var]
         thetmin = np.min(pt)
         thetmax = np.max(pt)
         for var in varList:
@@ -884,7 +909,7 @@ class ECMWF_pure(object):
         # TODO: find a way to avoid the big loop
         self.d2d['pcold'] = np.empty(shape=(self.nlat,self.nlon))
         self.d2d['Tcold'] = np.empty(shape=(self.nlat,self.nlon))
-        if 'Z' in self.var.keys():
+        if 'ZU' in self.var.keys():
             self.d2d['zcold'] = np.empty(shape=(self.nlat,self.nlon))
         # Calculate the cold point in the discrete profile
         # TO DO: make a smoother version with vertical interpolation
@@ -894,10 +919,10 @@ class ECMWF_pure(object):
             for ix in range(self.nlon):
                 self.d2d['pcold'][jy,ix] = self.var['P'][nc[jy,ix],jy,ix]
                 self.d2d['Tcold'][jy,ix] = self.var['T'][nc[jy,ix],jy,ix]
-        if  'Z' in self.var.keys():
+        if  'ZU' in self.var.keys():
             for jy in range(self.nlat):
                 for ix in range(self.nlon):
-                    self.d2d['zcold'][jy,ix] = self.var['Z'][nc[jy,ix],jy,ix]
+                    self.d2d['zcold'][jy,ix] = self.var['ZU'][nc[jy,ix],jy,ix]
         return
 
     def _lzrh(self):
@@ -1001,34 +1026,34 @@ class ECMWF_pure(object):
         """ Calculate the WMO tropopause
         When highlatoffset is true the 2K/km criterion is replaced by a 3K/km
         at high latitudes latitudes above 60S or 60N """
-        if not set(['T','P']).issubset(self.var.keys()):
-            print('T or P undefined')
+        if not set(['T','P','ZU']).issubset(self.var.keys()):
+            print('T, ZU or P undefined')
             return
         self.d2d['pwmo'] = np.ma.empty(shape=(self.nlat,self.nlon))
         self.d2d['Twmo'] = np.ma.empty(shape=(self.nlat,self.nlon))
-        if 'Z' in self.var.keys():
-            self.d2d['zwmo'] = np.empty(shape=(self.nlat,self.nlon))
-            zwmo = True
-        else:
-            zwmo = False
-        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43],'STC':[10,85]}
+        self.d2d['zwmo'] = np.empty(shape=(self.nlat,self.nlon))
+        levbnd = {'FULL-EA':[30,110],'FULL-EI':[15,43],'STC':[10,85]}
         highbnd = levbnd[self.project][0]
         lowbnd =  levbnd[self.project][1]
         logp = np.log(self.var['P'])
         # dz from the hydrostatic formula dp/dz = - rho g = - p/T g /R
         # dz = dz/dp p dlogp = - 1/T R/g dlogp (units m)
-        # dz is shifted b one index position / T, p
+        # dz is shifted by one index position / T, p
         # dz[i] is the positive logp thickness for the layer between levels i and i+1, that is
         # above level i+1
-        dz = cst.R/cst.g * self.var['T'][1:,:,:] * (logp[1:,:,:]-logp[:-1,:,:])
+        dz = cst.R/cst.g * 0.5 * (self.var['T'][1:,:,:] + self.var['T'][:-1,:,:]) \
+                               * (logp[1:,:,:]-logp[:-1,:,:])
         # calculate dT/dz = - 1/p dT/dlogp rho g = - g/R 1/T dT/dlogp
-        # dTdz[i] is the vertical derivative at level [i+1]
+        # dTdz[i] is the vertical derivative between level [i] and level [i+1]
         #lapse = - cst.g/cst.R * (1/self.var['T'][highbnd+1:lowbnd-1,...]) * \
         #               (self.var['T'][highbnd:lowbnd-2,...] - self.var['T'][highbnd+2:lowbnd,...]) / \
         #               (logp[highbnd:lowbnd-2,...]-logp[highbnd+2:lowbnd,...])
-        lapse = - cst.g/cst.R * (1/self.var['T'][highbnd+1:lowbnd,...]) * \
-                       (self.var['T'][highbnd:lowbnd-1,...] - self.var['T'][highbnd+1:lowbnd,...]) / \
-                       (logp[highbnd:lowbnd-1,...]-logp[highbnd+1:lowbnd,...])
+        # As defined, the tropospheric lapse rate is a negative quantity
+        l1 = highbnd
+        l2 = lowbnd
+        lapse = - cst.g/cst.R * (2/(self.var['T'][l1+1:l2,...]+self.var['T'][l1:l2-1,...])) * \
+                       (self.var['T'][l1:l2-1,...] - self.var['T'][l1+1:l2,...]) / \
+                       (logp[l1:l2-1,...]-logp[l1+1:l2,...])
 
         for jy in range(self.nlat):
             # standard wmo criterion
@@ -1039,42 +1064,255 @@ class ECMWF_pure(object):
             for ix in range(self.nlon):
                 # location of lapse rate exceeding the threshod
                 slope = list(np.where(lapse[:,jy,ix] > offset)[0])
-                Deltaz = 0.
                 found = False
                 # explore slope to find the first case where the slope is maintained
                 # over two km
                 # This is required to avoid shallow inversion layers to be confused with
                 # the tropopause
+                # Test to see how the algo works
+                ###if (ix == 59) & (jy in [53,54]):
+                ###    ppp = True
+                ###    print('ix',ix,'  jy',jy)
+                ###else: ppp = False
                 while not found:
                     if len(slope)>0: # should be done with try but forbidden with numba
                         # candidate tropopause
                         test = slope.pop()
+                        # Cumulative height of the layer is set to zero for a new exploration
+                        Deltaz = 0.
+                        ###if ppp: print(test,Deltaz)
                     else:
                         # if all slopes have been processed without finding a suitable tropopause, mask loc
                         self.d2d['pwmo'][jy,ix] = np.ma.masked
                         self.d2d['Twmo'][jy,ix] = np.ma.masked
-                        if zwmo: self.d2d['zwmo'][jy,ix] = np.ma.masked
+                        self.d2d['zwmo'][jy,ix] = np.ma.masked
                         found = True
                         break
                     # location of the basis of the interval
                     # +1 to account for the shift of the finite difference
+                    # location of the basis of the layer of lapse rate above threshhold
                     lev0 = test+1+highbnd
                     lev = lev0-1
+                    # Thickness of the first layer with lapse rate above threshold
                     Deltaz = dz[lev,jy,ix]
-                    # performs search above the candidate tropopause
-                    search = True
+                    #if ppp: print(test,lev0,lev,Deltaz)
+                    # Performs search above the candidate tropopause
+                    # layer is set when the exploration of the layer is to be done
+                    # or when it has terminated with success
+                    # if the exploration is broken due to a lapse rate too small between two levels
+                    # it is set to false
+                    layer = True
                     while Deltaz < thicktrop:
+                        # See whether the layer of lapse rate above threshold extends upward
                         lev -= 1
+                        #test -= 1
                         Deltaz += dz[lev,jy,ix]
-                        # mean slope over the considered layer
+                        ###if ppp: print(test,lev,Deltaz,
+                        ###              (self.var['T'][lev,jy,ix]-self.var['T'][lev0,jy,ix])/Deltaz>offset,
+                        ###              lapse[test,jy,ix] > offset)
+                        # Average lapse rate stays above threshold or give up
+                        # deactivated test of the local lapse rate replaced by the
+                        # mean lapse rate to comply with WMO definition
+                        #if lapse[test,jy,ix] < offset:
                         if (self.var['T'][lev,jy,ix]-self.var['T'][lev0,jy,ix])/Deltaz < offset:
-                            search = False
+                            layer = False
                             break
-                    if search:
+                        # skip the layer successfully tested as it should be the next in list
+                        # and does not need to be tested again in case the layer is not thick enough
+                        # and the next one is to be sought
+                        try:
+                            dumb = slope.pop()
+                        except:
+                            # break if nothing else to do, hope this is correct for this exception
+                            # which occurs rarely
+                            layer = False
+                            break
+                    # If layer is true means that the exit of the while loop has occurred
+                    # for a layer of thicktrop at least where the lapse rate threshold is
+                    # satisfied.
+                    # Otherwise, found stays false the loop on slope is continued
+                    # First, do not accept a tropopause lower than 4000 m
+                    if layer:
+                        # The tropopause is defined as the basis of the layer in which the lapse
+                        # rate is above threshold for 2 km at least
+                        if self.var['ZU'][lev0,jy,ix] < 4000.:
+                            continue
                         found = True
                         self.d2d['pwmo'][jy,ix] = self.var['P'][lev0,jy,ix]
                         self.d2d['Twmo'][jy,ix] = self.var['T'][lev0,jy,ix]
-                        if zwmo: self.d2d['zwmo'][jy,ix] = self.var['Z'][lev0,jy,ix]
+                        self.d2d['zwmo'][jy,ix] = self.var['ZU'][lev0,jy,ix]
+        return
+
+    def _ThetaAlt(self,theta = 380):
+        """ Calculate the altitude of a given theta level presumably all contained
+        in the overworld. The altitude is that of the last level with PT = theta counted
+        from the top."""
+        if not set(['PT',]).issubset(self.var.keys()):
+            print('potential temperature undefined')
+            return
+        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43],'STC':[10,90]}
+        self.d2d['p380'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['T380'] = np.empty(shape=(self.nlat,self.nlon))
+        if 'ZU' in self.var.keys():
+            self.d2d['z380'] = np.empty(shape=(self.nlat,self.nlon))
+            z380 = True
+        else: z380 = False
+        for jy in range(self.nlat):
+            for ix in range(self.nlon):
+                nc = np.where(self.var['PT'][levbnd[self.project][0]:levbnd[self.project][1],jy,ix]>theta)[0][-1]\
+                   + levbnd[self.project][0]
+                PT1 = self.var['PT'][nc,jy,ix]
+                PT2 = self.var['PT'][nc+1,jy,ix]
+                c2 = (PT1-theta)/(PT1-PT2)
+                c1 = (theta-PT2)/(PT1-PT2)
+                self.d2d['p380'][jy,ix] = c1*self.var['P'][nc,jy,ix] + c2*self.var['P'][nc+1,jy,ix]
+                self.d2d['T380'][jy,ix] = c1*self.var['T'][nc,jy,ix] + c2*self.var['T'][nc+1,jy,ix]
+                if z380:
+                    self.d2d['z380'][jy,ix] = c1*self.var['ZU'][nc,jy,ix] + c2*self.var['ZU'][nc+1,jy,ix]
+        return
+
+    def _SST(self,threshold=0.012):
+        """ Calculate the static stability tropopause as the first layer from the top where the
+        gradient of potential temperature is less than a threshold and the last layer where it is
+        above the threshold."""
+        if not set(['PT','ZU']).issubset(self.var.keys()):
+            print('potential temperature or Z undefined')
+            return
+        levbnd = {'FULL-EA':[30,90],'FULL-EI':[15,43],'STC':[10,90]}
+        l1 = levbnd[self.project][0]
+        l2 = levbnd[self.project][1]
+        self.d2d['pSST1'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['TSST1'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['zSST1'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['pSST2'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['TSST2'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['zSST2'] = np.empty(shape=(self.nlat,self.nlon))
+        # Calculate the gradient of theta and the mean Z
+        dThetadz = (self.var['PT'][l1+1:l2,...] - self.var['PT'][l1:l2-1,...]) \
+                 / (self.var['ZU'][l1+1:l2,...] - self.var['ZU'][l1:l2-1,...])
+        for jy in range(self.nlat):
+            for ix in range(self.nlon):
+                nc = np.where(dThetadz[:,jy,ix] > threshold)[0][-1]
+                self.d2d['pSST1'][jy,ix] = 0.5*(self.var['P'][nc+l1+1,jy,ix] + self.var['P'][nc+l1,jy,ix])
+                self.d2d['TSST1'][jy,ix] = 0.5*(self.var['T'][nc+l1+1,jy,ix] + self.var['T'][nc+l1,jy,ix])
+                self.d2d['zSST1'][jy,ix] = 0.5*(self.var['ZU'][nc+l1+1,jy,ix] + self.var['ZU'][nc+l1,jy,ix])
+                try:
+                    nc = np.where(dThetadz[:,jy,ix] < threshold)[0][0]
+                    self.d2d['pSST2'][jy,ix] = 0.5*(self.var['P'][nc+l1-1,jy,ix] + self.var['P'][nc+l1,jy,ix])
+                    self.d2d['TSST2'][jy,ix] = 0.5*(self.var['T'][nc+l1-1,jy,ix] + self.var['T'][nc+l1,jy,ix])
+                    self.d2d['zSST2'][jy,ix] = 0.5*(self.var['ZU'][nc+l1-1,jy,ix] + self.var['ZU'][nc+l1,jy,ix])
+                except:
+                    # It mays happen that the stratification is high to the ground at very high latitude
+                    # typically over Antarctica, or over high mountains.
+                    #print('high statification ix jy ',ix,jy)
+                    self.d2d['pSST2'][jy,ix] = None
+                    self.d2d['TSST2'][jy,ix] = None
+                    self.d2d['zSST2'][jy,ix] = None
+        return
+
+    def _O3Tropo(self,suffix=''):
+        """ Calculate the altitude of the ozone tropopause based on the criteria of Bethan et al., 1996
+        That is a layer with [03] > 80 ppbv, with d[O3]/dz > 60 ppbv/km and such that the layer above has
+        [O3] > 110 ppbv (here two layers). If the slope scheme is centered between n-1 and n+1, the criterion on the 110 pppv
+        threshold must be applied at the level n-2 and we add n-3.
+        We first search from above the last level where [O3] > 80 ppbv and we test that the gradient at this level
+        and the level above (n-2) satisfy the criterion. Otherwise we test the next level where [O3]>80 ppbv backward in the
+        list, that is above the previous one.
+        The suffix is present to allow processing ozone data from CAMS.
+        """
+        if not set(['O3'+suffix,'ZU'+suffix]).issubset(self.var.keys()):
+            print('Ozone or geopotential data is missing')
+            return
+        levbnd = {'FULL-EA':[30,110],'FULL-EI':[15,43],'STC':[10,90]}
+        self.d2d['pO3T'+suffix] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['TO3T'+suffix] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['zO3T'+suffix] = np.empty(shape=(self.nlat,self.nlon))
+        O3ppbv = self.var['O3'+suffix]*29/48*1.e9
+        # Loop on latitudes and longitudes
+        for jy in range(self.nlat):
+            for ix in range(self.nlon):
+                try:
+                    aa = np.where(O3ppbv[levbnd[self.project][0]:levbnd[self.project][1],jy,ix] > 80)[0]
+                    k = -1
+                    # test the slope to be less than 60 ppbv / km (6 e-8) and the value of any of the
+                    # two levels above to be less than 110 ppbv
+                    # if so the next value in the aa list of index is explored
+                    while ((O3ppbv[levbnd[self.project][0]+aa[k]-1,jy,ix] - O3ppbv[levbnd[self.project][0]+aa[k]+1,jy,ix])/\
+                          (self.var['ZU'][levbnd[self.project][0]+aa[k]-1,jy,ix] - self.var['Z'][levbnd[self.project][0]+aa[k]+1,jy,ix]) < 0.06 ) |\
+                          (O3ppbv[levbnd[self.project][0]+aa[k]-2,jy,ix] < 110) |\
+                          (O3ppbv[levbnd[self.project][0]+aa[k]-3,jy,ix] < 110) :
+                        k -=1
+                    self.d2d['zO3T'+suffix][jy,ix] = self.var['ZU'][levbnd[self.project][0]+aa[k],jy,ix]
+                    self.d2d['pO3T'+suffix][jy,ix] = self.var['P'][levbnd[self.project][0]+aa[k],jy,ix]
+                    self.d2d['TO3T'+suffix][jy,ix] = self.var['T'][levbnd[self.project][0]+aa[k],jy,ix]
+                except:
+                    self.d2d['zO3T'+suffix][jy,ix] = None
+                    self.d2d['pO3T'+suffix][jy,ix] = None
+                    self.d2d['TO3T'+suffix][jy,ix] = None
+        return
+
+    def _PVAlt(self,PV = 2):
+        """ Calculate the altitude of a given PV level presumably all contained
+        in the overworld. The value is given in PVU. The altitude is that of the first layer in
+        which the value is reached conted from the top."""
+        if not set(['PV',]).issubset(self.var.keys()):
+            print('potential vorticty undefined')
+            return
+        PVo = 1.e-6 * PV
+        levbnd = {'FULL-EA':[30,110],'FULL-EI':[15,43],'STC':[10,90]}
+        self.d2d['pPVT'] = np.empty(shape=(self.nlat,self.nlon))
+        self.d2d['TPVT'] = np.empty(shape=(self.nlat,self.nlon))
+        if 'ZU' in self.var.keys():
+            self.d2d['zPVT'] = np.empty(shape=(self.nlat,self.nlon))
+            zPVT = True
+        else: zPVT = False
+
+        for jy in range(self.nlat):
+            nc = []
+            # Examine northern latitudes
+            if self.attr['lats'][jy] > 0:
+               for ix in range(self.nlon):
+                   try:
+                       # Determines the occurrences from above where the PV is less than the threshold
+                       aa = np.where(self.var['PV'][levbnd[self.project][0]:levbnd[self.project][1],jy,ix]<PVo)[0]
+                       #bb = np.where(self.var['PV'][levbnd[self.project][0]:levbnd[self.project][1],jy,ix]<(PVo*0.90))[0]
+                       # This eliminates spurious isolated patches with low PV that happen sometimes
+                       # in the lowest stratosphere of the subtropics due to tropical intrusions.
+                       # As the vertical step is about 300 m, this implies that the threshold is satisfied
+                       # over 2100 m below the tropopause.
+                       k = 0
+                       while aa[k+7] != aa[k]+7: k+= 1
+                       nc.append(aa[k]+ levbnd[self.project][0])
+                   except:nc.append(None)
+            # Examine southern latitudes
+            else:
+               for ix in range(self.nlon):
+                   try:
+                       aa = np.where(self.var['PV'][levbnd[self.project][0]:levbnd[self.project][1],jy,ix]>-PVo)[0]
+                       k = 0
+                       while aa[k+5] != aa[k]+5: k+= 1
+                       nc.append(aa[k]+ levbnd[self.project][0])
+                   except:nc.append(None)
+            # Process the list of pixel in longitude to fill the output fields
+            # using an interpolation to determine more precisely the vertical level
+            for ix in range(self.nlon):
+                if nc[ix] is None:
+                    self.d2d['pPVT'][jy,ix] = None
+                    self.d2d['TPVT'][jy,ix] = None
+                    if zPVT: self.d2d['zPVT'][jy,ix] = None
+                else:
+                    PV1 = self.var['PV'][nc[ix]-1,jy,ix]
+                    PV2 = self.var['PV'][nc[ix],jy,ix]
+                    if self.attr['lats'][jy] > 0:
+                        c2 = (PV1-PVo)/(PV1-PV2)
+                        c1 = (PVo-PV2)/(PV1-PV2)
+                    else:
+                        c2 = (PV1+PVo)/(PV1-PV2)
+                        c1 = (-PVo-PV2)/(PV1-PV2)
+                    self.d2d['pPVT'][jy,ix] = c1*self.var['P'][nc[ix]-1,jy,ix] + c2*self.var['P'][nc[ix],jy,ix]
+                    self.d2d['TPVT'][jy,ix] = c1*self.var['T'][nc[ix]-1,jy,ix] + c2*self.var['T'][nc[ix],jy,ix]
+                    if zPVT:
+                        self.d2d['zPVT'][jy,ix] = c1*self.var['ZU'][nc[ix],jy,ix] + c2*self.var['ZU'][nc[ix]+1,jy,ix]
         return
 
     def interpol_track(self,p,x,y,varList='All'):
@@ -1127,38 +1365,74 @@ class ECMWF_pure(object):
             del hc; del vhigh; del vlow
         return result
 
-    def interpol_orbit(self,x,y,varList='All',var2='All'):
-        """ Generate an interpolation to an orbit curtain in 2d.
-        Quick n' dirty method  using floor. Should be improved for better accuracy"""
+    def interpol_orbit(self,x,y,varList='All',var2='All',intZ=False,z=None,
+                       bounds_error=True,fill_value=np.nan):
+        """ Generate an interpolation to an orbit curtain in 2d. Interpolate horizontally. """
         if varList == 'All':
             varList = list(self.var.keys())
         if var2=='All':
             var2 = list(self.d2d.keys())
+        varListPlus = varList
+        # If vertical interpolation to Z levels is required, 'Z' is added to the list
+        if intZ & ('ZU' not in varList):
+            varListPlus = varList + ['ZU']
         sect = curtain()
         sect.attr['lons'] = x
         sect.attr['lats'] = y
+        sect.attr['levtype'] = self.attr['levtype']
+        sect.attr['levs'] = self.attr['levs']
         sect.n = len(x)
         # extract within a bounding box
         #bb = self.extract(latRange=(y.min(),y.max()),lonRange=(x.min(),x.max()),vard=['SP',],varss=varList)
         # Horizontal interpolation
-        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(np.int)
+        ix = np.floor((x-self.attr['Lo1'])/self.attr['dlo']).astype(int)
         # trick to handle periodicity in longitude and profiles in the cutting strip
+        # does it work?
         ix1 = (ix+1) % self.nlon
-        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(np.int)
+        jy = np.floor((y-self.attr['La1'])/self.attr['dla']).astype(int)
         px = ((x - self.attr['Lo1']) %  self.attr['dlo'])/self.attr['dlo']
         py = ((y - self.attr['La1']) %  self.attr['dla'])/self.attr['dla']
+        var_curt_nat = {}
+        # Horizontal interpolation for 2D variables in d2d
         for var in var2:
             sect.var[var] = (1-px)*(1-py)*self.d2d[var][jy,ix] + (1-px)*py*self.d2d[var][jy+1,ix] \
                   + px*(1-py)*self.d2d[var][jy,ix1] + px*py*self.d2d[var][jy+1,ix1]
-        for var in varList:
+        # Horizontal interpolation for 2D & 3D variables
+        for var in varListPlus:
             if len(self.var[var].shape)==2:
+                # For 2D variables, the result is directly assigned
                 sect.var[var] = (1-px)*(1-py)*self.var[var][jy,ix] + (1-px)*py*self.var[var][jy+1,ix] \
                     + px*(1-py)*self.var[var][jy,ix1] + px*py*self.var[var][jy+1,ix1]
             else:
-                sect.var[var] = np.empty(shape=(self.nlev,len(x)))
+                # For 3D variables, the curtain is first assigned in a temporary dictionary
+                var_curt_nat[var] = np.empty(shape=(self.nlev,len(x)))
                 for lev in range(self.nlev):
-                    sect.var[var][lev,:] = (1-px)*(1-py)*self.var[var][lev,jy,ix] + (1-px)*py*self.var[var][lev,jy+1,ix] \
+                    var_curt_nat[var][lev,:] = (1-px)*(1-py)*self.var[var][lev,jy,ix] + (1-px)*py*self.var[var][lev,jy+1,ix] \
                         + px*(1-py)*self.var[var][lev,jy,ix1] + px*py*self.var[var][lev,jy+1,ix1]
+
+        if intZ:
+            # Vertical interpolation if the curtain was generated in native vertical coordinates
+            sect.attr['levtype'] = 'altitude'
+            sect.attr['levs'] = z
+            zmin = np.min(z)
+            zmax = np.max(z)
+            for var in varList:
+                sect.var[var] = np.empty(shape=(len(z),len(x)))
+            for i in range(len(x)):
+                nzmin = np.abs(var_curt_nat['ZU'][:,i]-zmin).argmin()
+                nzmax = np.abs(var_curt_nat['ZU'][:,i]-zmax).argmin()+1
+                nzmin = max(nzmin + 3,self.nlev-1)
+                nzmax = min(nzmax - 3,0)
+                # interpolation reverting the sign of Z as it is ranked in decreasing order
+                # linear interpolation is used for speed
+                for var in varList:
+                    fint = interp1d(-var_curt_nat['ZU'][nzmax:nzmin,i],var_curt_nat[var][nzmax:nzmin,i],
+                                    bounds_error=bounds_error,fill_value=fill_value)
+                    sect.var[var][:,i] =  [fint(-zz) for zz in z]
+        else:
+            # If the data do not require vertical interpolation, the buffer is copied in the output
+            for var in varList:
+                sect.var[var] = var_curt_nat[var]
         return sect
 
 # standard class to read data
@@ -1170,6 +1444,7 @@ class ECMWF(ECMWF_pure):
         self.project = project
         self.date = date
         self.exp = exp
+        self.type = 'grid'
         #SP_expected = False
         self.EN_expected = False
         self.DI_expected = False
@@ -1186,6 +1461,7 @@ class ECMWF(ECMWF_pure):
         self.hemis = None
         self.offd = 100 # offset to be set for ERA-I below, 100 for ERA5
         if self.project=='VOLC':
+            self.headfile = 'ToBeSeen'
             if 'satie' in socket.gethostname():
                 self.rootdir = '/dsk2/ERA5/VOLC'
             elif 'ens' in socket.gethostname():
@@ -1199,6 +1475,7 @@ class ECMWF(ECMWF_pure):
             self.WT_expected = True
 
         elif project=='STC':
+            self.headfile = 'ERA5'
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/dc6/samba/STC/ERA5/STC'
             elif 'ciclad' in socket.gethostname():
@@ -1223,6 +1500,7 @@ class ECMWF(ECMWF_pure):
             self.VD_expected = True
 
         elif project=='FULL-EI':
+            self.headfile = 'EI'
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/NIRgrid'
             elif 'ciclad' in socket.gethostname():
@@ -1246,6 +1524,7 @@ class ECMWF(ECMWF_pure):
             self.offd = 300
 
         elif project=='FULL-EA':
+            self.headfile = 'ERA5'
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/ERA5'
             elif 'ciclad' in socket.gethostname():
@@ -1274,6 +1553,7 @@ class ECMWF(ECMWF_pure):
                 self.F12_expected = True
 
         elif project=='OPZ':
+            self.headfile = 'OPZLWDA'
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/OPZ'
             elif 'ciclad' in socket.gethostname():
@@ -1291,6 +1571,7 @@ class ECMWF(ECMWF_pure):
                 return
             self.globalGrid = True
             self.EN_expected = True
+            if (self.exp == 'No-EN') | ('No-EN' in self.exp): self.EN_expected = False
             if (self.exp == 'x4I') | ('x4I' in self.exp): self.x4I_expected = True
             if (self.exp == 'CAMS') | ('CAMS' in self.exp): self.CAMS_expected = True
             if (self.exp == 'F12') | ('F12' in self.exp):
@@ -1305,6 +1586,7 @@ class ECMWF(ECMWF_pure):
                 self.CF12_expected = True
 
         elif project=='OPZFCST':
+            self.headfile ='ToBeSeen'
             if 'gort' == socket.gethostname():
                 self.rootdir = '/dkol/data/OPZ'
             elif 'ciclad' in socket.gethostname():
@@ -1391,11 +1673,18 @@ class ECMWF(ECMWF_pure):
             elif project == 'FULL-EA':
                 # for ERA5: tendencies over 1-hour intervals following file date, provided as temperature increments
                 # notice that native names differ from that of ERA-I
-                self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
-                     'ASLWR':['mttlwr','Mean temperature tendency due to long-wave radiation','K s**-1'],
-                     'CSSWR':['mttswrcs','Mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
-                     'CSLWR':['mttlwrcs','Mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
-                     'PHR':['mttpm','Mean temperature tendency due to parametrerizations','K s**-1'],}
+                # WARNING: these names have changed in some unspecified version of eccode prior to v2.44
+                # errors may appear if this code is used with an older version of eccode
+                #self.DIvar = {'ASSWR':['mttswr','Mean temperature tendency due to short-wave radiation','K s**-1'],
+                #     'ASLWR':['mttlwr','Mean temperature tendency due to long-wave radiation','K s**-1'],
+                #     'CSSWR':['mttswrcs','Mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
+                #     'CSLWR':['mttlwrcs','Mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
+                #     'PHR':['mttpm','Mean temperature tendency due to parametrerizations','K s**-1'],}
+                self.DIvar = {'ASSWR':['avg_ttswr','Time-mean temperature tendency due to short-wave radiation','K s**-1'],
+                     'ASLWR':['avg_ttlwr','Time-mean temperature tendency due to long-wave radiation','K s**-1'],
+                     'CSSWR':['avg_ttswrcs','Time-mean temperature tendency due to short-wave radiation, clear sky','K s**-1'],
+                     'CSLWR':['avg_ttlwrcs','Time-mean temperature tendency due to long-wave radiation, clear sky','K s**-1'],
+                     'PHR':['avg_ttpm','Time-mean temperature tendency due to parametrerisations','K s**-1'],}
                 # The name of the file is from the previous day if the time is in the first 6 hours of the day
                 if date.hour < 6: dateDI = date - timedelta(days=1)
                 else: dateDI = date
@@ -1464,7 +1753,8 @@ class ECMWF(ECMWF_pure):
                 'O3G':['go3','GEMS Ozone','kg kg**-1'],
                 'O3S':['o3s','Stratospheric ozone:kg kg**-1'],
                 'O3C':['o3','Ozone mass mixing ratio','kg kg**-1']}
-            self.camsname = date.strftime('OPZCAMS-%Y%m%d_SH.grb')
+            self.camsname = date.strftime('OPZCAMS-%Y%m%d.grb')
+            self.camsname_SH = date.strftime('OPZCAMS-%Y%m%d_SH.grb')
         if self.CF12_expected:
             self.CF12var = {'COF':['co','12h forecast carbon monoxide','kg kg**-1'],
                 'O3GF':['go3','12h forecast GEMS Ozone','kg kg**-1'],
@@ -1484,32 +1774,40 @@ class ECMWF(ECMWF_pure):
                 except:
                     print('cannot open '+os.path.join(self.rootdir,date.strftime('DI-true/grib/%Y/%m'),self.dname))
         # opening first the CAMS file as it might be needed to read pressure at 0 or 12
+        # The file is searched first ad global and if not found the SH version is searched
         self.CAMS_open = False
         if self.CAMS_expected:
             try:
                 self.crb = pygrib.open(os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
                 self.CAMS_open = True
-                self.hemis = 'SH' # future: to be dynamically determined
             except:
-                print('cannot open '+os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
+                try:
+                    self.crb = pygrib.open(os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname_SH))
+                    self.CAMS_open = True
+                    self.hemis = 'SH' # future: to be dynamically determined
+                except:
+                    print('cannot open '+os.path.join(self.rootdir,date.strftime('MC-true/%Y'),self.camsname))
         # opening the main EN file
-        try:
-            self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
-        except:
+        self.EN_open = False
+        if self.EN_expected:
             try:
-                self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
+                self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y/%m'),self.fname))
+                self.EN_open = True
             except:
-                print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
-                # We do not need to open EN if we only want CAMS at 0 and 12 to calculate assimilation increment
-                if (self.project=='OPZ') & (date.hour in [0,12]):
-                    pass
-                else:
-                    return
+                try:
+                    self.grb = pygrib.open(os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
+                    self.EN_open = True
+                except:
+                    print('cannot open '+os.path.join(self.rootdir,path1,date.strftime('%Y'),self.fname))
+                    # We do not need to open EN if we only want CAMS at 0 and 12 to calculate assimilation increment
+                    if (self.project=='OPZ') & (date.hour in [0,12]):
+                        pass
+                    else:
+                        return
 
         # Define searched valid date and time, and step
         validityDate = int(self.date.strftime('%Y%m%d'))
         validityTime = int(self.date.strftime('%H%M'))
-        self.EN_open = True
 
         try:
             sp = self.grb.select(name='Logarithm of surface pressure',validityTime=validityTime)[0]
@@ -1605,6 +1903,9 @@ class ECMWF(ECMWF_pure):
         self.QN_open = False
         self.F12_open = False
         self.CF12_open = False
+        # The DI and CAMS files are opened if this is not yet done
+        # May it happen or should it be removed from this location
+        # In the CAMS case, modification is required as above if the SH files are needed
         if self.DI_expected & ~self.DI_open:
             try:
                 self.drb = pygrib.open(os.path.join(self.rootdir,dateDI.strftime('DI-true/grib/%Y/%m'),self.dname))
@@ -1692,7 +1993,8 @@ class ECMWF(ECMWF_pure):
                 print('cannot open '+os.path.join(self.rootdir,date.strftime('FCST12-true/%Y'),self.f12name))
 
     def close(self):
-        self.grb.close()
+        try: self.grb.close()
+        except: pass
         try: self.drb.close()
         except: pass
         try: self.wrb.close()
@@ -1720,7 +2022,7 @@ class ECMWF(ECMWF_pure):
             return
         get = False
         try:
-            if self.EN_open:
+            if ~get & self.EN_open:
                 if var in self.ENvar.keys():
                     if self.project=='OPZFCST':
                         if step is not None:
@@ -1782,6 +2084,8 @@ class ECMWF(ECMWF_pure):
                     return
         except:
             print(var+' not found or read error')
+            if var in DIvar:
+                print('Check version of eccode to be >=44')
             return
         # Process each message corresponding to a level
         # Special case of the 4D var increment first
@@ -1907,11 +2211,15 @@ class ECMWF(ECMWF_pure):
                 return lev
 
     def _mkz(self,suffix=''):
-        """ Calculate the geopotential altitude (m) without taking moisture into account """
+        """ WARNING: this procedure generates a noisy geopotential and should not be used 
+        with the ground geopotential from surface data. Use mkZU instead.
+        
+        Calculate the geopotential altitude (m) without taking moisture into account """
         if not set(['T','P']).issubset(self.var.keys()):
             print('T or P undefined')
             return
         try:
+            print('WARNING: Do not use the noisy geopotential from surface data')
             with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'_MM.pkl')) as f:
                 Z0 = pickle.load(f)
             self.var['Z0'] = Z0.var['Z0']
@@ -1943,6 +2251,160 @@ class ECMWF(ECMWF_pure):
                     * (self.var['T'+suffix][i,:,:] + self.var['T'+suffix][i+1,:,:])\
                     * (uu[i,:,:]-uu[i+1,:,:])
 
+    def _mkzN(self,moist=False,suffix=''):
+        """ WARNING This procedure generates a noisy geopotential and should not be used with the 
+        ground geopotential taken from the surface data in ERA5 and probably too
+        with operational data. Use mkZU instead.
+        
+        Calculate the geopotential altitude (m) without taking moisture into account .
+        Use a better calculation in agreement with the IFS documentation.
+        See method in manus/Methods/ECMWF_geopotential.pdf (extract from IFS doc).
+        Notice that in the present model, a vertical representation is made in
+        finite element which is too involved to be replicated here."""
+        if moist:
+            if not set(['T','Q','Ql','QI']).issubset(self.var.keys()):
+                print('T or Q undefined')
+                return
+            varZ = 'ZQ'+suffix
+            T = self.var['T'+suffix]*(1 + (1/cst.epsilon -1)*self.var['Q'+suffix] \
+                                      - self.var['Ql'+suffix] - self.var['QI'+suffix])
+        else:
+            if 'T' not in self.var.keys():
+                print('T or P undefined')
+                return
+            varZ = 'ZN'+suffix
+            T = self.var['T'+suffix]
+        try:
+            print('WARNING: Do not use the noisy geopotential from surface data') 
+            with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'_MM.pkl')) as f:
+                Z0 = pickle.load(f)
+            self.var['Z0'] = Z0.var['Z0']
+        except:
+            print('Cannot read ground geopotential from MM, try as a single field')
+            try:
+                with gzip.open(os.path.join(self.rootdir,'EN-true','Z0_'+self.project+'.pkl')) as f:
+                    self.var['Z0'] = pickle.load(f)
+            except:
+                print('Cannot even read Z0 as a single field, please fix')
+        # processing special cases
+        if self.hemis == 'SH':
+            print('truncate and rotate Z0')
+            ll0 = 181
+            self.var['Z0'] = np.concatenate((self.var['Z0'][:self.nlat,ll0:],\
+                                             self.var['Z0'][:self.nlat,:ll0]),axis=1)
+        if self.hemis == 'NH':
+            # we assume here the ground geopotential needs to be rotated and truncated
+            # works here for the OPZ case (Californian fire)
+            ll0 = 181
+            self.var['Z0'] = np.concatenate((self.var['Z0'][self.nlat-1:,ll0:],\
+                                             self.var['Z0'][self.nlat-1:,:ll0]),axis=1)
+
+        self.var[varZ] =  np.empty(shape=T.shape)
+        # Calculation of the half level pressure and potential
+        Phalf = np.empty(shape=(self.nlev+1,self.nlat,self.nlon))
+        Zhalf = np.empty(shape=(self.nlev+1,self.nlat,self.nlon))
+        # first half level at the surface
+        # Notice that Phalf[0,...] = 0 and Phalf[nlev,...] = Ps
+        for k in range(self.nlev+1):
+            Phalf[k,...] = self.attr['ai'][k] + self.attr['bi'][k] * self.var['SP'+suffix]
+        # The lowest half level is surface orography
+        Zhalf[self.nlev,...] = self.var['Z0']
+        # Calculation of other half levels
+        # Iteration stops at 1 (not 0) because the first 1/2 level has pressure=0
+        for k in range(self.nlev-1,0,-1):
+            Zhalf[k,...] = Zhalf[k+1,...] + (cst.R/cst.g) * T[k,...] \
+                * np.log(Phalf[k+1,...]/Phalf[k,...])
+        # Calculation of Z on the full levels since Phalf[0,...] = 0
+        # Top has a special formula since  Phalf[0,...] = 0
+        self.var[varZ][0,...] = Zhalf[1,...] + np.log(2.) \
+                                    * (cst.R/cst.g) * T[0,...]
+        for k in range(1,self.nlev):
+            alpha = 1 - Phalf[k,...]/(Phalf[k+1,...]-Phalf[k,...])*np.log(Phalf[k+1,...]/Phalf[k,...])
+            self.var[varZ][k,...] = Zhalf[k+1,...] + alpha \
+                                        * (cst.R/cst.g) * T[k,...]
+        del Zhalf, Phalf, alpha, T
+
+    def _mkzU(self,reflev=52,moist=False,suffix=''):
+        if moist:
+            if not set(['P'+suffix,'T'+suffix,'Q'+suffix,'Ql'+suffix,'QI'+suffix]).issubset(self.var.keys()):
+                print('P, T or Q undefined')
+                return
+        else:
+            if not set(['P'+suffix,'T'+suffix]).issubset(self.var.keys()):
+                print('T or P undefined')
+                return
+        if reflev > 52:
+            print('WARNING: geopotential calculated from a non pure pressure level')
+            print('result is likely to be meaningless')
+        if 'Zref' not in self.var.keys():
+            # Get the reference geopotential
+            if reflev == 52:
+                # Standard procedure
+                sdate = self.date
+                file = os.path.join(self.rootdir,'PHI-true',sdate.strftime('%Y'),\
+                                    sdate.strftime(self.headfile+'PHIred%Y%m%d.grb'))
+                try:
+                    fid = pygrib.open(file)
+                except OSError:
+                    print('Cannot open geopotentiel file')
+                    print(file)
+                    return
+                p1 = 70
+                p2 = 50
+                pref = 67.1940869140625
+                try:
+                    phi1 = fid.select(validityDate = 10000*sdate.year + 100*sdate.month +\
+                                  sdate.day, validityTime = 100*sdate.hour, level = p1)[0]
+                    phi2 = fid.select(validityDate = 10000*sdate.year + 100*sdate.month +\
+                                  sdate.day, validityTime = 100*sdate.hour, level = p2)[0]
+                except ValueError:
+                    print('No matches found in')
+                    print(file)
+                    return
+                c1 = np.log(pref/p2) / np.log(p1/p2)
+                c2 = np.log(p1/pref) / np.log(p1/p2)
+                # Interpolating to the level plast
+                self.var['Zref'] = (c1*phi1.values + c2*phi2.values)[::-1,:] / cst.g
+            else:
+                # non standard procedure from the full archive
+                # to be implemented when needed
+                print('reflev ', reflev, 'procedure non implemented')
+                return
+            # Truncating the array which has been already reverted in lat if data are hemispherical
+            # Not needed if the geopotential data are downloaded in the sama horizontal format as
+            # the other fields
+            #if self.hemis == 'NH':
+            #    self.var['Zref'] = self.var['Zref'][self.nlat-1:,:]
+            #if self.hemis == 'SH':
+            #    self.var['Zref'] = self.var['Zref'][:self.nlat,:]
+        # If moist replace T by Tv (with condensates)
+        if moist:
+            Tv = self.var['T'+suffix]*(1 + (1/cst.epsilon -1)*self.var['Q'+suffix] \
+                                          - self.var['Ql'+suffix] - self.var['QI'+suffix])
+            varZ = 'ZUQ'+suffix
+        else:
+            Tv = self.var['T'+suffix]
+            varZ = 'ZU'+suffix
+        self.var[varZ] =  np.empty(shape=self.var['T'+suffix].shape)
+        self.var[varZ][reflev,...] = self.var['Zref']
+        uu = np.log(self.var['P'+suffix])
+        # downward integration
+        for i in range(reflev+1,self.nlev):
+            self.var[varZ][i,...] = self.var[varZ][i-1,...] \
+                - 0.5 * (cst.R/cst.g) * (Tv[i,...]+Tv[i-1,...])\
+                      * (uu[i,...]-uu[i-1,...])
+        # upward integration
+        for i in range(reflev-1,-1,-1):
+            self.var[varZ][i,...] = self.var[varZ][i+1,...] \
+                + 0.5 * (cst.R/cst.g) * (Tv[i,...]+Tv[i+1,...])\
+                      * (uu[i+1,...]-uu[i,...])
+        # surface reconstructed geopotential
+        if moist: varZS = 'ZUQS'+suffix
+        else:     varZS = 'ZUS'+suffix
+        self.var[varZS] = self.var[varZ][self.nlev-1,...] \
+                - (cst.R/cst.g) * Tv[self.nlev-1,...] * (np.log(self.var['SP'])-uu[self.nlev-1,...])
+        return
+    
     def _mkpv(self,suffix=''):
         """ Calculate the potential vorticity using the isentropic formula """
         if not set(['PT'+suffix,'P'+suffix,'U'+suffix,'V'+suffix,'VO'+suffix]).issubset(self.var.keys()):
